@@ -425,13 +425,15 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.admin_panel_settings,
         "title": "Masters",
-        "roles": ["Railway Master", "Railway Admin"],
+        "roles": ["Company Master", "Railway Master", "Railway Admin"],
         "children": [
           {"title": "User Management", "route": "users"},
           {"title": "Entity Management", "route": "entities"},
           {"title": "Contract Management", "route": "contracts"},
           {"title": "Station Management", "route": "station_management_master"},
           {"title": "Train Management", "route": "trains"},
+          {"title": "Division Management", "route": "divisions"},
+          {"title": "Billing Rules", "route": "billing_rules"},
         ]
       },
       {
@@ -478,10 +480,13 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
-        "icon": Icons.report_problem_outlined,
-        "title": "Complaints",
-        "route": "complaints",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "icon": Icons.security,
+        "title": "Audit & Compliance",
+        "roles": ["Company Master", "Railway Master", "Railway Admin"],
+        "children": [
+          {"title": "Compliance & Security Tracking", "route": "audit_logs"},
+          {"title": "Business Activities", "route": "activity_logs"},
+        ]
       },
     ].where((item) => (item['roles'] as List<String>).contains(userRole)).toList();
   }
@@ -540,6 +545,9 @@ class _CommonDashboardState extends State<CommonDashboard> {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRatingsScreen()));
         break;
       case "complaints":
+      case "audit_logs":
+      case "activity_logs":
+        // Defaulting these to Complaints screen for now to preserve functionality
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
         break;
       default:
