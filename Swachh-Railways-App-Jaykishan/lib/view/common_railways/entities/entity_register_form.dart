@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../model/user_entity_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/api_services.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../services/draft_storage_service.dart';
 import '../../../utills/app_colors.dart';
 
@@ -787,23 +788,47 @@ class _EntityRegisterFormState extends State<EntityRegisterForm> {
             OutlinedButton.icon(
               icon: const Icon(Icons.attach_file, size: 18),
               label: const Text("Choose File", style: TextStyle(fontSize: 12)),
-              onPressed: (){},
-              // onPressed: () async {
-              //   FilePickerResult? result = await FilePicker.platform.pickFiles(
-              //     type: FileType.custom,
-              //     allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-              //   );
-              //   if (result != null) {
-              //     onPicked(result.files.single.name);
-              //     setState(() {});
-              //     ScaffoldMessenger.of(context).showSnackBar(
-              //       SnackBar(
-              //         content: Text('${result.files.single.name} selected'),
-              //         duration: const Duration(seconds: 1),
-              //       ),
-              //     );
-              //   }
-              // },
+              onPressed: () async {
+                try {
+                  FilePickerResult? result = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+                    allowMultiple: false,
+                  );
+
+                  if (result != null && result.files.isNotEmpty) {
+                    final pickedFile = result.files.first;
+                    final fileName = pickedFile.name;
+
+                    onPicked(fileName);
+                    setState(() {});
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$label selected: $fileName'),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No file selected'),
+                        backgroundColor: Colors.orange,
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error picking file: $e'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
             ),
           ],
         ),

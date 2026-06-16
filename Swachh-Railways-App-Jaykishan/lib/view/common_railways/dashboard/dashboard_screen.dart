@@ -22,6 +22,7 @@ import '../complaints/admin_complaints_screen.dart';
 import '../billing/billing_dashboard_screen.dart';
 import '../cleaning_forms/cleaning_form_dashboard.dart';
 import '../station_management/station_dashboard_screen.dart';
+import '../report/common_report_screen.dart';
 import '../ratings/admin_ratings_screen.dart';
 import '../widgets/DonutChart.dart';
 import '../widgets/QuickActionCard.dart';
@@ -414,36 +415,55 @@ class _CommonDashboardState extends State<CommonDashboard> {
   }
 
   List<Map<String, dynamic>> _getSidebarMenuItems(String? userRole) {
-    final allMenuItems = [
+    return [
       {
         "icon": Icons.dashboard_rounded,
         "title": "Dashboard",
-        "route": null, // null means current screen
+        "route": null,
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
-        "icon": Icons.directions_train,
-        "title": "OBHS Management",
-        "route": "obhs",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "icon": Icons.admin_panel_settings,
+        "title": "Masters",
+        "roles": ["Railway Master", "Railway Admin"],
+        "children": [
+          {"title": "User Management", "route": "users"},
+          {"title": "Entity Management", "route": "entities"},
+          {"title": "Contract Management", "route": "contracts"},
+          {"title": "Station Management", "route": "station_management_master"},
+          {"title": "Train Management", "route": "trains"},
+        ]
       },
       {
         "icon": Icons.cleaning_services,
-        "title": "Cleaning Forms",
-        "route": "cleaning_forms",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "title": "Operations",
+        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "children": [
+          {"title": "Coach Cleaning", "route": "coach_cleaning"},
+          {"title": "Premise Cleaning", "route": "premise_cleaning"},
+          {"title": "Station Cleaning", "route": "station_cleaning"},
+        ]
       },
       {
-        "icon": Icons.train,
-        "title": "Station Management",
-        "route": "station_management",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "icon": Icons.directions_run,
+        "title": "OBHS",
+        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "children": [
+          {"title": "Attendance", "route": "obhs_attendance"},
+          {"title": "Tasks", "route": "obhs_tasks"},
+          {"title": "Complaints", "route": "complaints"},
+        ]
       },
       {
-        "icon": Icons.location_city_outlined,
-        "title": "Entities Management",
-        "route": "entities",
-        "roles": ["Company Master", "Railway Master"]
+        "icon": Icons.analytics,
+        "title": "Reports",
+        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "children": [
+          {"title": "Coach Reports", "route": "coach_reports"},
+          {"title": "Premise Reports", "route": "premise_reports"},
+          {"title": "Station Reports", "route": "station_reports"},
+          {"title": "OBHS Reports", "route": "obhs_reports"},
+        ]
       },
       {
         "icon": Icons.receipt_long,
@@ -452,9 +472,9 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
-        "icon": Icons.description,
-        "title": "Manage Contracts",
-        "route": "contracts",
+        "icon": Icons.star_outline,
+        "title": "Ratings",
+        "route": "ratings",
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
@@ -463,91 +483,66 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "route": "complaints",
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
-      {
-        "icon": Icons.star_outline,
-        "title": "Ratings",
-        "route": "ratings",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
-      },
-    ];
-
-    return allMenuItems
-        .where((item) => (item['roles'] as List<String>).contains(userRole))
-        .toList();
+    ].where((item) => (item['roles'] as List<String>).contains(userRole)).toList();
   }
 
   void _handleSidebarNavigation(String? route, BuildContext context, String? userRole) {
     if (route == null) {
-      // Dashboard - already on this screen
       Navigator.pop(context); // Close drawer
       return;
     }
 
+    Navigator.pop(context); // Always close drawer on selection
+
     switch (route) {
-      case "obhs":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const OBHSRunsListScreen()),
-        );
-        break;
-      case "cleaning_forms":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-            MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()),
-        );
-        break;
-      case "station_management":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-            MaterialPageRoute(builder: (context) => const StationDashboardScreen()),
-        );
+      case "users":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CommonUserManagementScreen()));
         break;
       case "entities":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => CommonEntityManagmentScreen()),
-        );
-        break;
-      case "billing":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const BillingDashboardScreen()),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CommonEntityManagmentScreen()));
         break;
       case "contracts":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CommonContractsScreen(userRole: userRole ?? ''),
-          ),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CommonContractsScreen(userRole: userRole ?? '')));
         break;
-      case "complaints":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AdminComplaintsScreen(),
-          ),
-        );
+      case "station_management_master":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "trains":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonTrainScreen()));
+        break;
+      case "coach_cleaning":
+      case "premise_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()));
+        break;
+      case "station_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "obhs_attendance":
+      case "obhs_tasks":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSRunsListScreen()));
+        break;
+      case "coach_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 1)));
+        break;
+      case "premise_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 0)));
+        break;
+      case "station_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 2)));
+        break;
+      case "obhs_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 3)));
+        break;
+      case "billing":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const BillingDashboardScreen()));
         break;
       case "ratings":
-        Navigator.pop(context); // Close drawer
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AdminRatingsScreen(),
-          ),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRatingsScreen()));
+        break;
+      case "complaints":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
         break;
       default:
-        Navigator.pop(context); // Close drawer
         break;
     }
   }
@@ -651,7 +646,41 @@ class _CommonDashboardState extends State<CommonDashboard> {
                 itemCount: sidebarMenuItems.length,
                 itemBuilder: (context, index) {
                   final item = sidebarMenuItems[index];
-                  final isCurrentScreen = item['route'] == null;
+                  final isCurrentScreen = item['route'] == null && !item.containsKey('children');
+
+                  if (item.containsKey('children')) {
+                    final children = item['children'] as List<Map<String, dynamic>>;
+                    return ExpansionTile(
+                      leading: Icon(
+                        item['icon'] as IconData,
+                        color: Colors.grey[700],
+                      ),
+                      title: Text(
+                        item['title'] as String,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      children: children.map((child) {
+                        return ListTile(
+                          contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                          title: Text(
+                            child['title'] as String,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          onTap: () => _handleSidebarNavigation(
+                            child['route'] as String?,
+                            context,
+                            user?.role,
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }
 
                   return ListTile(
                     leading: Icon(

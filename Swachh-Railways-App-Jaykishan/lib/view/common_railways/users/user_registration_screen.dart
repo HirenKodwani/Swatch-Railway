@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 import '../../../utills/app_colors.dart';
 import '../widgets/approve_entity_dropdown.dart';
+import 'package:file_picker/file_picker.dart';
 
 
 class UserRegistrationScreen extends StatefulWidget {
@@ -617,49 +618,48 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            onPressed: (){},
-            // onPressed: () async {
-            //   try {
-            //     FilePickerResult? result = await FilePicker.platform.pickFiles(
-            //       type: FileType.custom,
-            //       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-            //       allowMultiple: false,
-            //     );
-            //
-            //     if (result != null && result.files.isNotEmpty) {
-            //       final pickedFile = result.files.first;
-            //       final fileName = pickedFile.name;
-            //
-            //       setState(() {
-            //         pickedDocs[docName] = fileName;
-            //       });
-            //
-            //       ScaffoldMessenger.of(context).showSnackBar(
-            //         SnackBar(
-            //           content: Text('$docName selected: $fileName'),
-            //           backgroundColor: Colors.green,
-            //           duration: const Duration(seconds: 2),
-            //         ),
-            //       );
-            //     } else {
-            //       ScaffoldMessenger.of(context).showSnackBar(
-            //         const SnackBar(
-            //           content: Text('No file selected'),
-            //           backgroundColor: Colors.orange,
-            //           duration: Duration(seconds: 1),
-            //         ),
-            //       );
-            //     }
-            //   } catch (e) {
-            //     ScaffoldMessenger.of(context).showSnackBar(
-            //       SnackBar(
-            //         content: Text('Error picking file: $e'),
-            //         backgroundColor: Colors.red,
-            //         duration: const Duration(seconds: 2),
-            //       ),
-            //     );
-            //   }
-            // },
+            onPressed: () async {
+              try {
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+                  allowMultiple: false,
+                );
+
+                if (result != null && result.files.isNotEmpty) {
+                  final pickedFile = result.files.first;
+                  final fileName = pickedFile.name;
+
+                  setState(() {
+                    pickedDocs[docName] = fileName;
+                  });
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$docName selected: $fileName'),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No file selected'),
+                      backgroundColor: Colors.orange,
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error picking file: $e'),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
           ),
         ],
       ),

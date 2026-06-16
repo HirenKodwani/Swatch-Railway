@@ -315,7 +315,9 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
               isThreeLine: true,
               trailing: const Icon(Icons.chevron_right, color: Colors.grey),
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Station: ${s.stationName} (${s.stationCode})')));
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (context) => StationMasterScreen(existingStation: s)
+                )).then((_) => _loadStations());
               },
             ),
           );

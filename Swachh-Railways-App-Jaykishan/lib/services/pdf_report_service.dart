@@ -259,27 +259,61 @@ class PDFReportService {
               ),
             ),
 
-            _buildSectionHeader('2. RESOLUTION TRACKING'),
-            pw.TableHelper.fromTextArray(
-              context: context,
-              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9),
-              headerDecoration: const pw.BoxDecoration(color: primaryColor),
-              cellStyle: const pw.TextStyle(fontSize: 8),
-              cellAlignment: pw.Alignment.center,
-              data: <List<String>>[
-                ['Complaint ID', 'Train', 'Coach', 'Category', 'Description', 'Status'],
-                ...complaints.map((c) {
-                  return [
-                    c['complaintId']?.toString().substring(0, 8) ?? 'N/A',
-                    c['trainNo']?.toString() ?? 'N/A',
-                    c['coachNo']?.toString() ?? 'N/A',
-                    c['category']?.toString() ?? 'N/A',
-                    c['description']?.toString() ?? 'N/A',
-                    c['status']?.toString() ?? 'N/A',
-                  ];
-                }),
-              ],
-            ),
+            ...complaints.expand((c) {
+              final runId = c['runInstanceId'] ?? 'N/A';
+              final run = runs.firstWhere((r) => r['runInstanceId'] == runId || r['instanceId'] == runId, orElse: () => {});
+              
+              return [
+                pw.SizedBox(height: 20),
+                _buildSectionHeader('COMPLAINT ID: ${c['complaintId']?.toString().substring(0, 8) ?? 'N/A'}', color: accentColor),
+                
+                // 1. Train & Run Info
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                  child: pw.Column(
+                    children: [
+                      _buildInfoRow('Train Name', run['trainName']?.toString() ?? 'N/A', 'Train Number', run['trainNo']?.toString() ?? 'N/A'),
+                      _buildInfoRow('Run ID', runId, 'Run Date', run['departureDate']?.toString() ?? 'N/A'),
+                      _buildInfoRow('Direction', run['direction']?.toString() ?? 'Outbound', 'Division', run['division']?.toString() ?? 'N/A'),
+                      _buildInfoRow('Supervisor', run['supervisorName']?.toString() ?? 'N/A', 'Base Station', run['baseStation']?.toString() ?? 'N/A'),
+                    ],
+                  ),
+                ),
+
+                // 2. Worker Complaint Info
+                pw.SizedBox(height: 10),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                  child: pw.Column(
+                    children: [
+                      _buildInfoRow('Complaint Category', c['category']?.toString() ?? 'N/A', 'Assigned Coach', c['coachNo']?.toString() ?? 'N/A'),
+                      _buildInfoRow('Complaint Type', c['type']?.toString() ?? 'N/A', 'Priority Level', c['priority']?.toString() ?? 'Normal'),
+                      _buildInfoRow('Status', c['status']?.toString() ?? 'IN PROGRESS', 'Complaint Date', c['createdAt'] != null ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(c['createdAt'])) : 'N/A'),
+                      _buildInfoRow('Raised By', c['workerName']?.toString() ?? 'N/A', 'GPS Location', c['gpsLocation']?.toString() ?? 'N/A'),
+                    ],
+                  ),
+                ),
+
+                // 3. Description & Evidence
+                pw.SizedBox(height: 10),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Description:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: primaryColor)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(c['description']?.toString() ?? 'No description provided.', style: const pw.TextStyle(fontSize: 10)),
+                      pw.SizedBox(height: 10),
+                      _buildInfoRow('Evidence Status', c['photoUrl'] != null ? 'Uploaded' : 'Pending', 'Evidence Link', c['photoUrl']?.toString() ?? 'N/A'),
+                    ],
+                  ),
+                ),
+              ];
+            }),
             
             _buildSignatures(),
           ];

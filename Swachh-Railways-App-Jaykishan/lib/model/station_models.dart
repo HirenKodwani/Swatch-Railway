@@ -88,6 +88,17 @@ class Station {
     updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
     createdBy: json['createdBy'] ?? '',
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Station &&
+          runtimeType == other.runtimeType &&
+          uid == other.uid &&
+          stationCode == other.stationCode;
+
+  @override
+  int get hashCode => uid.hashCode ^ stationCode.hashCode;
 }
 
 class StationArea {
@@ -124,6 +135,16 @@ class StationArea {
     description: json['description'] ?? '',
     active: json['active'] ?? true,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StationArea &&
+          runtimeType == other.runtimeType &&
+          uid == other.uid;
+
+  @override
+  int get hashCode => uid.hashCode;
 }
 
 class StationZone {
@@ -164,6 +185,16 @@ class StationZone {
     description: json['description'] ?? '',
     active: json['active'] ?? true,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StationZone &&
+          runtimeType == other.runtimeType &&
+          uid == other.uid;
+
+  @override
+  int get hashCode => uid.hashCode;
 }
 
 class StationContractorMapping {

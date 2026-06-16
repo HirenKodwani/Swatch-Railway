@@ -18,7 +18,8 @@ import '../report_excel_format/obhs_report_excel.dart';
 import '../../../services/pdf_report_service.dart';
 import 'package:printing/printing.dart';
 class CommonReportScreen extends StatefulWidget {
-  const CommonReportScreen({super.key});
+  final int initialIndex;
+  const CommonReportScreen({super.key, this.initialIndex = 0});
 
   @override
   State<CommonReportScreen> createState() => _CommonReportScreenState();
@@ -86,7 +87,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 4, vsync: this, initialIndex: widget.initialIndex);
     _loadStatistics();
   }
 

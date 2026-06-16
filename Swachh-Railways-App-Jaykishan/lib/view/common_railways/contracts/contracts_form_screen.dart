@@ -1,7 +1,9 @@
 import 'package:crm_train/services/api_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../model/contracts_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -313,16 +315,15 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                                   idProofFile ?? "Choose File",
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                                onPressed: (){},
-                                // onPressed: () async {
-                                //   FilePickerResult? result =
-                                //   await FilePicker.platform.pickFiles(type: FileType.any);
-                                 //   if (result != null) {
-                                //     setState(() {
-                                //       idProofFile = result.files.single.name;
-                                //     });
-                                //   }
-                                // },
+                                onPressed: () async {
+                                  FilePickerResult? result =
+                                  await FilePicker.platform.pickFiles(type: FileType.any);
+                                   if (result != null) {
+                                     setState(() {
+                                       idProofFile = result.files.single.name;
+                                     });
+                                   }
+                                },
                               ),
                             ],
                           ),
@@ -720,13 +721,12 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
             style: const TextStyle(fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
-          onPressed: (){},
-          // onPressed: () async {
-          //   FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
-          //   if (result != null) {
-          //     onPicked(result.files.single.name);
-          //   }
-          // },
+          onPressed: () async {
+            FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
+            if (result != null) {
+              onPicked(result.files.single.name);
+            }
+          },
         ),
       ],
     );

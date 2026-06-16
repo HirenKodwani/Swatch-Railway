@@ -15,6 +15,7 @@ class WorkerTaskModel {
   final String category;
   final String coachId;
   final String frequencyIndex;
+  final String originalTaskType;
   final DateTime? dueTime;
   final String status;
   final bool requiresPhoto;
@@ -26,6 +27,7 @@ class WorkerTaskModel {
     required this.category,
     required this.coachId,
     required this.frequencyIndex,
+    required this.originalTaskType,
     this.dueTime,
     required this.status,
     required this.requiresPhoto,
@@ -53,6 +55,7 @@ class WorkerTaskModel {
       category: _categoryFromTaskType(taskType),
       coachId: coachNo,
       frequencyIndex: frequency,
+      originalTaskType: taskType,
       dueTime: _parseDueTime(json['dueTime'] ?? json['dueAt'] ?? json['scheduledStartTime'] ?? json['scheduledTime'] ?? json['startTime'] ?? json['createdAt'] ?? json['timestamp']),
       status: _normalizeStatus(json),
       requiresPhoto: json['requiresPhoto'] as bool? ?? true,
@@ -1190,7 +1193,8 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
 
       final response = await WorkerRepository.submitObhsTask(
         runInstanceId: runInstanceId,
-        taskType: widget.task.taskName.split(' - ').first,
+        taskId: widget.task.taskId,
+        taskType: widget.task.originalTaskType,
         coachNo: widget.task.coachId,
         frequencyIndex: widget.task.frequencyIndex,
         beforePhoto: beforeUrl,

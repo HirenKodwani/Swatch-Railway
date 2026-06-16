@@ -4,6 +4,7 @@ import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 class StationCleaningFormScreen extends StatefulWidget {
   const StationCleaningFormScreen({super.key});
@@ -47,6 +48,20 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
   final Map<String, bool> _activities = {};
   String? _beforePhotoUrl;
   String? _afterPhotoUrl;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickPhoto(bool isBefore) async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+    if (image != null) {
+      setState(() {
+        if (isBefore) {
+          _beforePhotoUrl = image.path; // In a real app, upload this to a server and get URL
+        } else {
+          _afterPhotoUrl = image.path;
+        }
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -497,9 +512,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
                             const Text('Before', style: TextStyle(fontWeight: FontWeight.w600)),
                             const SizedBox(height: 8),
                             GestureDetector(
-                              onTap: () {
-                                setState(() { _beforePhotoUrl = 'https://via.placeholder.com/150?text=Before'; });
-                              },
+                              onTap: () => _pickPhoto(true),
                               child: Container(
                                 height: 80,
                                 decoration: BoxDecoration(
@@ -530,9 +543,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
                             const Text('After', style: TextStyle(fontWeight: FontWeight.w600)),
                             const SizedBox(height: 8),
                             GestureDetector(
-                              onTap: () {
-                                setState(() { _afterPhotoUrl = 'https://via.placeholder.com/150?text=After'; });
-                              },
+                              onTap: () => _pickPhoto(false),
                               child: Container(
                                 height: 80,
                                 decoration: BoxDecoration(

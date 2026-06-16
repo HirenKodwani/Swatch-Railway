@@ -420,6 +420,7 @@ class WorkerRepository {
 
   static Future<Map<String, dynamic>> submitObhsTask({
     required String runInstanceId,
+    required String taskId,
     required String taskType,
     required String coachNo,
     required String frequencyIndex,
@@ -441,6 +442,7 @@ class WorkerRepository {
             'Authorization': 'Bearer $token',
           },
           body: jsonEncode({
+            'taskId': taskId,
             'runInstanceId': runInstanceId,
             'taskType': taskType,
             'coachNo': coachNo,

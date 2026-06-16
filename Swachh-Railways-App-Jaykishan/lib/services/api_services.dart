@@ -31,7 +31,7 @@ class ApiService {
     }
   }
 
-  static const String baseUrl = 'http://localhost:5000';
+  static const String baseUrl = 'https://swatch-railway.onrender.com';
 
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();

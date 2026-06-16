@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
+import 'package:flutter/services.dart' show rootBundle;
+import 'dart:typed_data';
 
 /// Generates Excel reports for the OBHS module.
 /// Four report types matching the reference PDF formats:
@@ -119,6 +121,26 @@ class OBHSReportExcelGenerator {
     }
   }
 
+  static Future<int> _addLogoAndTitle(xlsio.Worksheet s, int row, String title, String subtitle, xlsio.Style style) async {
+    s.getRangeByIndex(row, 1, row, 8).merge();
+    s.getRangeByIndex(row, 1).cellStyle = style;
+    s.getRangeByIndex(row, 1).rowHeight = 40;
+    
+    try {
+      final ByteData bytes = await rootBundle.load('assets/images/image.png');
+      final Uint8List byteList = bytes.buffer.asUint8List();
+      final xlsio.Picture picture = s.pictures.addStream(row, 1, byteList);
+      picture.height = 36;
+      picture.width = 36;
+      // Offset slightly from top left
+    } catch (e) {
+      // Ignore if logo not found
+    }
+
+    s.getRangeByIndex(row, 1).setText('          $title\n          $subtitle');
+    return row + 1;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // 1. TRAIN RUN & OPERATIONAL AUDIT REPORT
   // ─────────────────────────────────────────────────────────────────────────
@@ -142,17 +164,7 @@ class OBHSReportExcelGenerator {
     int row = 1;
 
     // === Title ===
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1)
-        .setText('OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT');
-    s.getRangeByIndex(row, 1).cellStyle = gs;
-    s.getRangeByIndex(row, 1).rowHeight = 28;
-    row++;
-
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1).setText(
-        'Generated On: ${_nowFmt.format(DateTime.now())}   |   Indian Railways – OBHS Enterprise Monitoring System');
-    s.getRangeByIndex(row, 1).cellStyle = vs;
+    row = await _addLogoAndTitle(s, row, 'OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT', 'Generated On: ${_nowFmt.format(DateTime.now())}', gs);
     row += 2;
 
     for (int idx = 0; idx < runInstances.length; idx++) {
@@ -293,17 +305,7 @@ class OBHSReportExcelGenerator {
     int row = 1;
 
     // Title
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1)
-        .setText('OBHS ATTENDANCE & EVIDENCE AUDIT REPORT');
-    s.getRangeByIndex(row, 1).cellStyle = gs;
-    s.getRangeByIndex(row, 1).rowHeight = 28;
-    row++;
-
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1).setText(
-        'Attendance Verification  |  GPS Validation  |  Evidence Compliance  |  Operational Audit');
-    s.getRangeByIndex(row, 1).cellStyle = vs;
+    row = await _addLogoAndTitle(s, row, 'OBHS ATTENDANCE & EVIDENCE AUDIT REPORT', 'Attendance Verification  |  GPS Validation  |  Evidence Compliance', gs);
     row += 2;
 
     for (final run in runInstances) {
@@ -452,17 +454,7 @@ class OBHSReportExcelGenerator {
 
     int row = 1;
 
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1)
-        .setText('OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT');
-    s.getRangeByIndex(row, 1).cellStyle = gs;
-    s.getRangeByIndex(row, 1).rowHeight = 28;
-    row++;
-
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1).setText(
-        'Operational Audit  |  Task Execution  |  Evidence Verification  |  Compliance Review');
-    s.getRangeByIndex(row, 1).cellStyle = vs;
+    row = await _addLogoAndTitle(s, row, 'OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT', 'Operational Audit  |  Task Execution  |  Evidence Verification', gs);
     row += 2;
 
     for (final run in runInstances) {
@@ -622,17 +614,7 @@ class OBHSReportExcelGenerator {
 
     int row = 1;
 
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1)
-        .setText('OBHS WORKER COMPLAINT & ISSUE TRACKING REPORT');
-    s.getRangeByIndex(row, 1).cellStyle = gs;
-    s.getRangeByIndex(row, 1).rowHeight = 28;
-    row++;
-
-    s.getRangeByIndex(row, 1, row, 8).merge();
-    s.getRangeByIndex(row, 1).setText(
-        'Worker Complaint Registration  |  Issue Tracking  |  Resolution Monitoring');
-    s.getRangeByIndex(row, 1).cellStyle = vs;
+    row = await _addLogoAndTitle(s, row, 'OBHS WORKER COMPLAINT & ISSUE TRACKING REPORT', 'Worker Complaint Registration  |  Issue Tracking  |  Resolution Monitoring', gs);
     row += 2;
 
     for (final run in runInstances) {
