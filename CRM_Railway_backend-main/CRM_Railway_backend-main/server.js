@@ -8761,6 +8761,1559 @@ app.get('/api/obhs/feedback/worker-summary', verifyToken, async (req, res) => {
 });
 
 
+// =======================================================
+// == 10. BILLING MANAGEMENT APIs
+// =======================================================
+
+const billingEngine = {
+  calculatePerformanceDeductionPct(overallScore, rule) {
+    if (overallScore >= 90) return rule.penaltyScore90Plus || 0;
+    if (overallScore >= 80) return rule.penaltyScore80To89 || 2;
+    if (overallScore >= 70) return rule.penaltyScore70To79 || 5;
+    return rule.penaltyScoreBelow70 || 10;
+  },
+
+  calculateGrade(score) {
+    if (score >= 90) return 'A';
+    if (score >= 80) return 'B';
+    if (score >= 70) return 'C';
+    return 'D';
+  },
+
+  generateBill(rule, month, year, overallScore, generatedBy, scoreBreakdown, machineShortageCount, manpowerShortageCount, missedObhsCount, otherPenalties) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const period = `${months[month - 1]} ${year}`;
+    const grade = billingEngine.calculateGrade(overallScore);
+    const perfDedPct = billingEngine.calculatePerformanceDeductionPct(overallScore, rule);
+    const perfDedAmount = rule.contractValue * perfDedPct / 100;
+    const machineDed = (machineShortageCount || 0) * (rule.machineShortagePenalty || 1000);
+    const manpowerDed = (manpowerShortageCount || 0) * (rule.manpowerShortagePenalty || 500);
+    const obhsDed = (missedObhsCount || 0) * (rule.missedObhsComplaintPenalty || 2000);
+    const otherDed = otherPenalties || 0;
+    const totalDed = perfDedAmount + machineDed + manpowerDed + obhsDed + otherDed;
+    const finalPayable = Math.max(0, rule.contractValue - totalDed);
+
+    const deductions = [];
+    if (perfDedAmount > 0) deductions.push({ type: 'Performance', description: `Performance deduction at ${perfDedPct}% (Score: ${overallScore}%)`, count: 1, rate: perfDedPct, amount: perfDedAmount });
+    if (machineDed > 0) deductions.push({ type: 'Machine Shortage', description: 'Machine shortage penalty', count: machineShortageCount, rate: rule.machineShortagePenalty, amount: machineDed });
+    if (manpowerDed > 0) deductions.push({ type: 'Manpower Shortage', description: 'Manpower shortage penalty', count: manpowerShortageCount, rate: rule.manpowerShortagePenalty, amount: manpowerDed });
+    if (obhsDed > 0) deductions.push({ type: 'Missed OBHS Complaint', description: 'Missed OBHS complaint penalty', count: missedObhsCount, rate: rule.missedObhsComplaintPenalty, amount: obhsDed });
+    if (otherDed > 0) deductions.push({ type: 'Other Penalties', description: 'Other applicable penalties', count: 1, rate: otherDed, amount: otherDed });
+
+    return {
+      billingRuleId: rule.uid,
+      contractId: rule.contractId,
+      contractNumber: rule.contractNumber,
+      entityId: rule.entityId,
+      entityName: rule.entityName,
+      division: rule.division,
+      zone: rule.zone,
+      period, month, year,
+      contractValue: rule.contractValue,
+      overallScore, grade,
+      performanceDeductionPct: perfDedPct,
+      performanceDeductionAmount: perfDedAmount,
+      machineShortageCount: machineShortageCount || 0,
+      machineDeduction: machineDed,
+      manpowerShortageCount: manpowerShortageCount || 0,
+      manpowerDeduction: manpowerDed,
+      missedObhsCount: missedObhsCount || 0,
+      obhsDeduction: obhsDed,
+      otherPenalties: otherDed,
+      totalDeduction: totalDed,
+      finalPayable,
+      status: 'PENDING',
+      scoreBreakdown: scoreBreakdown || null,
+      deductions,
+      auditLog: [{
+        action: 'GENERATED',
+        performedBy: generatedBy,
+        performedByName: 'System',
+        timestamp: new Date().toISOString(),
+        details: `Bill generated for ${period} - Score: ${overallScore}%, Grade: ${grade}`
+      }],
+      createdAt: new Date().toISOString(),
+      generatedBy
+    };
+  }
+};
+
+// 10.1: Save/Update Billing Config
+app.post('/api/billing/config', verifyToken, async (req, res) => {
+  try {
+    const configData = req.body;
+    const { uid, fullName } = req.user;
+
+    const existingQuery = await db.collection('billingRules')
+      .where('contractId', '==', configData.contractId)
+      .limit(1)
+      .get();
+
+    let ref;
+    if (!existingQuery.empty) {
+      ref = db.collection('billingRules').doc(existingQuery.docs[0].id);
+      configData.updatedAt = new Date().toISOString();
+      configData.updatedBy = uid;
+      delete configData.uid;
+      await ref.update(configData);
+    } else {
+      ref = db.collection('billingRules').doc();
+      configData.uid = ref.id;
+      configData.createdAt = new Date().toISOString();
+      configData.createdBy = uid;
+      configData.status = 'Active';
+      await ref.set(configData);
+    }
+
+    console.log(`(Billing) Config saved for contract ${configData.contractId}`);
+    res.status(200).send({ message: 'Billing config saved successfully', uid: ref.id });
+  } catch (error) {
+    console.error('(Billing) Error saving config:', error);
+    res.status(500).send({ error: 'Failed to save billing config', details: error.message });
+  }
+});
+
+// 10.2: Get Billing Config for a Contract
+app.get('/api/billing/config/:contractId', verifyToken, async (req, res) => {
+  try {
+    const { contractId } = req.params;
+    const snapshot = await db.collection('billingRules')
+      .where('contractId', '==', contractId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(404).send({ message: 'No billing config found for this contract' });
+    }
+
+    res.status(200).send({ config: snapshot.docs[0].data() });
+  } catch (error) {
+    console.error('(Billing) Error fetching config:', error);
+    res.status(500).send({ error: 'Failed to fetch billing config', details: error.message });
+  }
+});
+
+// 10.3: Get All Billing Configs
+app.get('/api/billing/config', verifyToken, async (req, res) => {
+  try {
+    const { role, zone, division, entityId, userType } = req.user;
+    let query = db.collection('billingRules');
+    const userRole = (role || '').toLowerCase();
+
+    if (userType === 'contractor') {
+      if (!entityId) return res.status(403).send({ error: 'Entity ID missing.' });
+      query = query.where('entityId', '==', entityId);
+    } else if (userRole === 'railway master') {
+      query = query.where('zone', '==', zone);
+    } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
+      query = query.where('division', '==', division);
+    }
+
+    const snapshot = await query.get();
+    const configs = [];
+    snapshot.forEach(doc => configs.push(doc.data()));
+
+    res.status(200).json({ count: configs.length, configs });
+  } catch (error) {
+    console.error('(Billing) Error fetching configs:', error);
+    res.status(500).send({ error: 'Failed to fetch billing configs', details: error.message });
+  }
+});
+
+// 10.4: Generate Bill
+app.post('/api/billing/generate', verifyToken, async (req, res) => {
+  try {
+    const { contractId, month, year, overallScore, scoreBreakdown, machineShortageCount, manpowerShortageCount, missedObhsCount, otherPenalties } = req.body;
+    const { uid, fullName } = req.user;
+
+    const ruleSnapshot = await db.collection('billingRules')
+      .where('contractId', '==', contractId)
+      .limit(1)
+      .get();
+
+    if (ruleSnapshot.empty) {
+      return res.status(400).send({ error: 'No billing config found for this contract. Please configure billing rules first.' });
+    }
+
+    const rule = ruleSnapshot.docs[0].data();
+    rule.uid = ruleSnapshot.docs[0].id;
+
+    const billData = billingEngine.generateBill(rule, month, year, overallScore, uid, scoreBreakdown, machineShortageCount, manpowerShortageCount, missedObhsCount, otherPenalties);
+
+    const ref = db.collection('billingReports').doc();
+    billData.uid = ref.id;
+    await ref.set(billData);
+
+    console.log(`(Billing) Bill ${ref.id} generated for contract ${contractId} - ${billData.period}`);
+
+    // Notification: Bill generated
+    notifyContractAdmins(contractId, 'Bill Generated', `Bill for ${billData.period} (₹${(billData.finalPayable || 0).toLocaleString()}) is ready for review.`, 'bill_generated', { billId: ref.id, contractId, period: billData.period, amount: billData.finalPayable });
+
+    res.status(201).send({ message: 'Bill generated successfully', uid: ref.id, report: billData });
+  } catch (error) {
+    console.error('(Billing) Error generating bill:', error);
+    res.status(500).send({ error: 'Failed to generate bill' });
+  }
+});
+
+// 10.5: Get Billing Reports
+app.get('/api/billing/reports', verifyToken, async (req, res) => {
+  try {
+    const { status, contractId, entityId: filterEntityId, division, zone, month, year } = req.query;
+    const { role, zone: userZone, division: userDivision, entityId: userEntityId, userType } = req.user;
+    const userRole = (role || '').toLowerCase();
+
+    let query = db.collection('billingReports');
+
+    if (userType === 'contractor') {
+      query = query.where('entityId', '==', userEntityId);
+    } else if (userRole === 'railway master') {
+      query = query.where('zone', '==', userZone);
+    } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
+      query = query.where('division', '==', userDivision);
+    }
+
+    if (status) query = query.where('status', '==', status);
+    if (contractId) query = query.where('contractId', '==', contractId);
+    if (filterEntityId) query = query.where('entityId', '==', filterEntityId);
+    if (division) query = query.where('division', '==', division);
+    if (zone) query = query.where('zone', '==', zone);
+    if (month) query = query.where('month', '==', parseInt(month));
+    if (year) query = query.where('year', '==', parseInt(year));
+
+    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const reports = [];
+    snapshot.forEach(doc => reports.push(doc.data()));
+
+    res.status(200).json({ count: reports.length, reports });
+  } catch (error) {
+    if (error.code === 'FAILED_PRECONDITION') {
+      return res.status(400).json({ error: 'Index required. Check Firebase Console.' });
+    }
+    console.error('(Billing) Error fetching reports:', error);
+    res.status(500).send({ error: 'Failed to fetch billing reports', details: error.message });
+  }
+});
+
+// 10.6: Get Single Billing Report
+app.get('/api/billing/reports/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const doc = await db.collection('billingReports').doc(uid).get();
+    if (!doc.exists) return res.status(404).send({ error: 'Billing report not found' });
+
+    res.status(200).json({ report: doc.data() });
+  } catch (error) {
+    console.error('(Billing) Error fetching report:', error);
+    res.status(500).send({ error: 'Failed to fetch billing report', details: error.message });
+  }
+});
+
+// 10.7: Approve Bill
+app.post('/api/billing/approve/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { uid: approverId, fullName } = req.user;
+
+    const ref = db.collection('billingReports').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Billing report not found' });
+
+    const report = doc.data();
+    if (report.status !== 'PENDING') {
+      return res.status(400).send({ error: `Cannot approve bill with status: ${report.status}` });
+    }
+
+    const invoiceNumber = `INV-${report.contractNumber}-${report.year}${String(report.month).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+
+    await ref.update({
+      status: 'APPROVED',
+      approvedBy: approverId,
+      approvedByName: fullName,
+      approvedAt: new Date().toISOString(),
+      invoiceNumber,
+      invoiceGeneratedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'APPROVED',
+        performedBy: approverId,
+        performedByName: fullName,
+        timestamp: new Date().toISOString(),
+        details: `Bill approved by ${fullName}. Invoice: ${invoiceNumber}`
+      })
+    });
+
+    console.log(`(Billing) Bill ${uid} approved by ${fullName}. Invoice: ${invoiceNumber}`);
+
+    // Notification: Bill approved
+    notifyContractAdmins(report.contractId, 'Bill Approved', `Bill for ${report.period} has been approved. Invoice: ${invoiceNumber}. Payable: ₹${(report.finalPayable || 0).toLocaleString()}`, 'bill_approved', { billId: uid, contractId: report.contractId, invoiceNumber, amount: report.finalPayable, period: report.period });
+
+    res.status(200).send({ message: 'Bill approved successfully', invoiceNumber });
+  } catch (error) {
+    console.error('(Billing) Error approving bill:', error);
+    res.status(500).send({ error: 'Failed to approve bill', details: error.message });
+  }
+});
+
+// 10.8: Reject Bill
+app.post('/api/billing/reject/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { reason } = req.body;
+    const { uid: rejectorId, fullName } = req.user;
+
+    const ref = db.collection('billingReports').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Billing report not found' });
+
+    const report = doc.data();
+    if (report.status !== 'PENDING') {
+      return res.status(400).send({ error: `Cannot reject bill with status: ${report.status}` });
+    }
+
+    await ref.update({
+      status: 'REJECTED',
+      rejectedBy: rejectorId,
+      rejectedByName: fullName,
+      rejectedAt: new Date().toISOString(),
+      rejectionReason: reason || 'No reason provided',
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'REJECTED',
+        performedBy: rejectorId,
+        performedByName: fullName,
+        timestamp: new Date().toISOString(),
+        details: `Bill rejected by ${fullName}. Reason: ${reason || 'Not specified'}`
+      })
+    });
+
+    console.log(`(Billing) Bill ${uid} rejected by ${fullName}`);
+
+    // Notification: Bill rejected
+    notifyContractAdmins(report.contractId, 'Bill Rejected', `Bill for ${report.period} has been rejected. Reason: ${reason || 'Not specified'}`, 'bill_rejected', { billId: uid, contractId: report.contractId, reason: reason || 'Not specified', period: report.period });
+
+    res.status(200).send({ message: 'Bill rejected successfully' });
+  } catch (error) {
+    console.error('(Billing) Error rejecting bill:', error);
+    res.status(500).send({ error: 'Failed to reject bill', details: error.message });
+  }
+});
+
+// 10.9: Dashboard Summary
+app.get('/api/billing/dashboard', verifyToken, async (req, res) => {
+  try {
+    const { role, zone, division, entityId, userType } = req.user;
+    const userRole = (role || '').toLowerCase();
+
+    let query = db.collection('billingReports');
+    if (userType === 'contractor') {
+      query = query.where('entityId', '==', entityId);
+    } else if (userRole === 'railway master') {
+      query = query.where('zone', '==', zone);
+    } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
+      query = query.where('division', '==', division);
+    }
+
+    const snapshot = await query.get();
+    const summary = { pendingBills: 0, approvedBills: 0, rejectedBills: 0, totalContractValue: 0, totalDeductions: 0, totalPayable: 0, activeContracts: 0 };
+
+    const contractIds = new Set();
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      if (d.status === 'PENDING') summary.pendingBills++;
+      else if (d.status === 'APPROVED') summary.approvedBills++;
+      else if (d.status === 'REJECTED') summary.rejectedBills++;
+      summary.totalContractValue += d.contractValue || 0;
+      summary.totalDeductions += d.totalDeduction || 0;
+      summary.totalPayable += d.finalPayable || 0;
+      if (d.contractId) contractIds.add(d.contractId);
+    });
+    summary.activeContracts = contractIds.size;
+
+    res.status(200).json(summary);
+  } catch (error) {
+    console.error('(Billing) Error fetching dashboard:', error);
+    res.status(500).send({ error: 'Failed to fetch dashboard', details: error.message });
+  }
+});
+
+// 10.10: Generate Invoice
+app.post('/api/billing/generate-invoice/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('billingReports').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Billing report not found' });
+
+    const report = doc.data();
+    if (report.status !== 'APPROVED') {
+      return res.status(400).send({ error: 'Invoice can only be generated for approved bills' });
+    }
+
+    const invoiceNumber = report.invoiceNumber || `INV-${report.contractNumber}-${report.year}${String(report.month).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+
+    await ref.update({
+      invoiceNumber,
+      invoiceGeneratedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'INVOICE_GENERATED',
+        performedBy: req.user.uid,
+        performedByName: req.user.fullName,
+        timestamp: new Date().toISOString(),
+        details: `Invoice ${invoiceNumber} generated`
+      })
+    });
+
+    // Notification: Invoice generated
+    notifyContractAdmins(report.contractId, 'Invoice Generated', `Invoice ${invoiceNumber} for ${report.period} is ready. Amount: ₹${(report.finalPayable || 0).toLocaleString()}`, 'invoice_generated', { billId: uid, contractId: report.contractId, invoiceNumber, amount: report.finalPayable, period: report.period });
+
+    res.status(200).send({ message: 'Invoice generated successfully', invoiceNumber });
+  } catch (error) {
+    console.error('(Billing) Error generating invoice:', error);
+    res.status(500).send({ error: 'Failed to generate invoice', details: error.message });
+  }
+});
+
+// 10.11: Contractor Billing Dashboard
+app.get('/api/billing/contractor', verifyToken, async (req, res) => {
+  try {
+    const { entityId, uid } = req.user;
+    if (!entityId) return res.status(403).send({ error: 'Entity ID missing.' });
+
+    const ruleSnapshot = await db.collection('billingRules')
+      .where('entityId', '==', entityId)
+      .get();
+
+    const configs = [];
+    ruleSnapshot.forEach(doc => configs.push(doc.data()));
+
+    const reportSnapshot = await db.collection('billingReports')
+      .where('entityId', '==', entityId)
+      .orderBy('createdAt', 'desc')
+      .limit(12)
+      .get();
+
+    const reports = [];
+    reportSnapshot.forEach(doc => reports.push(doc.data()));
+
+    let pendingAmount = 0;
+    let approvedAmount = 0;
+    let totalDeductions = 0;
+    reports.forEach(r => {
+      totalDeductions += r.totalDeduction || 0;
+      if (r.status === 'PENDING') pendingAmount += r.finalPayable || 0;
+      if (r.status === 'APPROVED') approvedAmount += r.finalPayable || 0;
+    });
+
+    res.status(200).json({
+      configs: configs.length,
+      totalBills: reports.length,
+      pendingAmount,
+      approvedAmount,
+      totalDeductions,
+      recentBills: reports.slice(0, 5),
+      configList: configs
+    });
+  } catch (error) {
+    console.error('(Billing) Error fetching contractor data:', error);
+    res.status(500).send({ error: 'Failed to fetch contractor billing data', details: error.message });
+  }
+});
+
+// 10.12: Supervisor Billing Dashboard
+app.get('/api/billing/supervisor', verifyToken, async (req, res) => {
+  try {
+    const { uid, division, zone } = req.user;
+
+    const contractsSnapshot = await db.collection('contracts')
+      .where('division', '==', division)
+      .where('status', '==', 'Active')
+      .get();
+
+    const contractIds = [];
+    contractsSnapshot.forEach(doc => contractIds.push(doc.id));
+
+    const reportSnapshot = await db.collection('billingReports')
+      .where('division', '==', division)
+      .orderBy('createdAt', 'desc')
+      .limit(20)
+      .get();
+
+    const reports = [];
+    reportSnapshot.forEach(doc => reports.push(doc.data()));
+
+    let totalPenalties = 0;
+    let pendingCount = 0;
+    let approvedCount = 0;
+    reports.forEach(r => {
+      totalPenalties += r.totalDeduction || 0;
+      if (r.status === 'PENDING') pendingCount++;
+      if (r.status === 'APPROVED') approvedCount++;
+    });
+
+    res.status(200).json({
+      activeContracts: contractIds.length,
+      totalBills: reports.length,
+      pendingCount,
+      approvedCount,
+      totalPenalties,
+      recentBills: reports.slice(0, 5)
+    });
+  } catch (error) {
+    console.error('(Billing) Error fetching supervisor data:', error);
+    res.status(500).send({ error: 'Failed to fetch supervisor billing data', details: error.message });
+  }
+});
+
+//<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Section 12: Station Management APIs >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+async function generateStationFormId(stationCode) {
+  const prefix = 'SF';
+  const code = (stationCode || 'STN').substring(0, 4).toUpperCase();
+  const date = new Date();
+  const seq = date.getFullYear().toString().slice(-2) + String(date.getMonth() + 1).padStart(2, '0');
+  const counterRef = db.collection('counters').doc(`stationForm_${code}_${seq}`);
+  const counter = await counterRef.get();
+  let nextNum = 1;
+  if (counter.exists) { nextNum = (counter.data().value || 0) + 1; }
+  await counterRef.set({ value: nextNum }, { merge: true });
+  return `${prefix}-${code}-${seq}-${String(nextNum).padStart(4, '0')}`;
+}
+
+// 12.1: Create / Update Station
+app.post('/api/stations/create', verifyToken, async (req, res) => {
+  try {
+    const { stationCode, stationName, zone, division, category, stationType, active, latitude, longitude, address } = req.body;
+    const { uid } = req.user;
+    if (!stationCode || !stationName || !zone || !division) {
+      return res.status(400).send({ error: 'stationCode, stationName, zone, division are required' });
+    }
+    const existing = await db.collection('stations').where('stationCode', '==', stationCode).limit(1).get();
+    if (!existing.empty) {
+      return res.status(409).send({ error: `Station with code ${stationCode} already exists` });
+    }
+    const ref = db.collection('stations').doc();
+    const data = {
+      uid: ref.id, stationCode, stationName, zone, division,
+      category: category || 'c', stationType: stationType || 'regular',
+      active: active !== false, latitude: latitude || 0, longitude: longitude || 0,
+      address: address || '', createdBy: uid,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    await ref.set(data);
+    res.status(201).send({ message: 'Station created', uid: ref.id, station: data });
+  } catch (error) {
+    console.error('(Station) Error creating station:', error);
+    res.status(500).send({ error: 'Failed to create station', details: error.message });
+  }
+});
+
+app.put('/api/stations/update/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('stations').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Station not found' });
+    const updates = {};
+    const allowedStationFields = ['stationName', 'category', 'stationType', 'active', 'latitude', 'longitude', 'address', 'zone', 'division'];
+    for (const key of allowedStationFields) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    updates.updatedAt = new Date().toISOString();
+    await ref.update(updates);
+    res.status(200).send({ message: 'Station updated' });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to update station', details: error.message });
+  }
+});
+
+// 12.2: Get Stations List
+app.get('/api/stations/list', verifyToken, async (req, res) => {
+  try {
+    const { zone, division, category, active } = req.query;
+    const { role, zone: userZone, division: userDiv } = req.user;
+    const userRole = (role || '').toLowerCase();
+    let query = db.collection('stations');
+    if (!userRole.includes('master')) {
+      if (division) query = query.where('division', '==', division);
+      else query = query.where('division', '==', userDiv);
+    }
+    if (zone) query = query.where('zone', '==', zone);
+    if (category) query = query.where('category', '==', category);
+    if (active !== undefined) query = query.where('active', '==', active === 'true');
+    const snapshot = await query.orderBy('stationName').get();
+    const stations = [];
+    snapshot.forEach(doc => stations.push(doc.data()));
+    res.status(200).json({ count: stations.length, stations });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch stations', details: error.message });
+  }
+});
+
+// 12.3: Station Area CRUD
+app.post('/api/station-area/create', verifyToken, async (req, res) => {
+  try {
+    const { stationId, name, order, description } = req.body;
+    if (!stationId || !name) return res.status(400).send({ error: 'stationId and name required' });
+    const ref = db.collection('stationAreas').doc();
+    const data = { uid: ref.id, stationId, name, order: order || 0, description: description || '', active: true };
+    await ref.set(data);
+    res.status(201).send({ message: 'Area created', uid: ref.id, area: data });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to create area', details: error.message });
+  }
+});
+
+app.get('/api/station-area/list/:stationId', verifyToken, async (req, res) => {
+  try {
+    const { stationId } = req.params;
+    const snapshot = await db.collection('stationAreas').where('stationId', '==', stationId).orderBy('order').get();
+    const areas = [];
+    snapshot.forEach(doc => areas.push(doc.data()));
+    res.status(200).json({ count: areas.length, areas });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch areas', details: error.message });
+  }
+});
+
+// 12.4: Station Zone CRUD
+app.post('/api/station-zone/create', verifyToken, async (req, res) => {
+  try {
+    const { stationId, areaId, areaName, name, description } = req.body;
+    if (!stationId || !areaId || !name) return res.status(400).send({ error: 'stationId, areaId, name required' });
+    const ref = db.collection('stationZones').doc();
+    const data = { uid: ref.id, stationId, areaId, areaName: areaName || '', name, description: description || '', active: true };
+    await ref.set(data);
+    res.status(201).send({ message: 'Zone created', uid: ref.id, zone: data });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to create zone', details: error.message });
+  }
+});
+
+app.get('/api/station-zone/list/:stationId', verifyToken, async (req, res) => {
+  try {
+    const { stationId } = req.params;
+    const { areaId } = req.query;
+    let query = db.collection('stationZones').where('stationId', '==', stationId);
+    if (areaId) query = query.where('areaId', '==', areaId);
+    const snapshot = await query.get();
+    const zones = [];
+    snapshot.forEach(doc => zones.push(doc.data()));
+    res.status(200).json({ count: zones.length, zones });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch zones', details: error.message });
+  }
+});
+
+// 12.5: Contractor Mapping
+app.post('/api/station-contractor/map', verifyToken, async (req, res) => {
+  try {
+    const { stationId, areaId, zoneId, entityId, entityName, serviceType } = req.body;
+    if (!stationId || !entityId) return res.status(400).send({ error: 'stationId and entityId required' });
+    const ref = db.collection('stationContractors').doc();
+    const data = { uid: ref.id, stationId, areaId: areaId || '', zoneId: zoneId || '', entityId, entityName: entityName || '', serviceType: serviceType || 'Station Cleaning', startDate: new Date().toISOString(), active: true };
+    await ref.set(data);
+    res.status(201).send({ message: 'Contractor mapped', uid: ref.id });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to map contractor', details: error.message });
+  }
+});
+
+app.get('/api/station-contractor/list/:stationId', verifyToken, async (req, res) => {
+  try {
+    const { stationId } = req.params;
+    const snapshot = await db.collection('stationContractors').where('stationId', '==', stationId).get();
+    const mappings = [];
+    snapshot.forEach(doc => mappings.push(doc.data()));
+    res.status(200).json({ count: mappings.length, mappings });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch mappings', details: error.message });
+  }
+});
+
+// 12.6: Cleaning Schedule
+app.post('/api/station-schedule/create', verifyToken, async (req, res) => {
+  try {
+    const { stationId, areaId, zoneId, frequency, shift, entityId, entityName, supervisorId, supervisorName, startTime, endTime, daysOfWeek } = req.body;
+    if (!stationId) return res.status(400).send({ error: 'stationId required' });
+    const ref = db.collection('stationSchedules').doc();
+    const data = { uid: ref.id, stationId, areaId: areaId || '', zoneId: zoneId || '', frequency: frequency || 'daily', shift: shift || 'Morning', entityId: entityId || '', entityName: entityName || '', supervisorId: supervisorId || '', supervisorName: supervisorName || '', startTime: startTime || '', endTime: endTime || '', daysOfWeek: daysOfWeek || [], active: true, createdAt: new Date().toISOString() };
+    await ref.set(data);
+    res.status(201).send({ message: 'Schedule created', uid: ref.id });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to create schedule', details: error.message });
+  }
+});
+
+app.get('/api/station-schedule/list/:stationId', verifyToken, async (req, res) => {
+  try {
+    const { stationId } = req.params;
+    const snapshot = await db.collection('stationSchedules').where('stationId', '==', stationId).get();
+    const schedules = [];
+    snapshot.forEach(doc => schedules.push(doc.data()));
+    res.status(200).json({ count: schedules.length, schedules });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch schedules', details: error.message });
+  }
+});
+
+// 12.7: Station Cleaning Form - Create
+app.post('/api/station-cleaning-form/create', verifyToken, async (req, res) => {
+  try {
+    const { stationId, stationName, areaId, areaName, zoneId, zoneName, division, depot, contractId, contractNumber, cleaningDate, shift, startTime, endTime, manpowerCount, machineCount, areaCovered, areaUncleaned, garbageCollected, remarks, latitude, longitude, deviceId, gpsAddress, photos, activities } = req.body;
+    const { uid, fullName, entityId, entityName } = req.user;
+    if (!stationId || !division) return res.status(400).send({ error: 'stationId and division required' });
+
+    // Get station code
+    const stationDoc = await db.collection('stations').doc(stationId).get();
+    const stationCode = stationDoc.exists ? stationDoc.data().stationCode : 'STN';
+    const formId = await generateStationFormId(stationCode);
+
+    const ref = db.collection('stationCleaningForms').doc();
+    const data = {
+      uid: ref.id, formId, stationId, stationName: stationName || '', areaId: areaId || '', areaName: areaName || '',
+      zoneId: zoneId || '', zoneName: zoneName || '', division, depot: depot || '',
+      contractId: contractId || '', contractNumber: contractNumber || '',
+      entityId: entityId || '', entityName: entityName || '',
+      submittedBy: uid, submittedByName: fullName,
+      status: 'draft',
+      cleaningDate: cleaningDate || '', shift: shift || '', startTime: startTime || '', endTime: endTime || '',
+      manpowerCount: manpowerCount || 0, machineCount: machineCount || 0,
+      areaCovered: areaCovered || 0, areaUncleaned: areaUncleaned || 0, garbageCollected: garbageCollected || 0,
+      remarks: remarks || '', latitude: latitude || 0, longitude: longitude || 0,
+      deviceId: deviceId || '', gpsAddress: gpsAddress || '',
+      photos: photos || [], activities: activities || [],
+      auditLog: [{ action: 'CREATED', performedBy: uid, performedByName: fullName, timestamp: new Date().toISOString(), details: `Form ${formId} created` }],
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    await ref.set(data);
+    res.status(201).send({ message: 'Station cleaning form created', uid: ref.id, formId });
+  } catch (error) {
+    console.error('(StationForm) Error creating:', error);
+    res.status(500).send({ error: 'Failed to create form', details: error.message });
+  }
+});
+
+// 12.8: Submit Station Cleaning Form
+app.post('/api/station-cleaning-form/submit/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('stationCleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    const form = doc.data();
+    if (form.status !== 'draft') return res.status(400).send({ error: 'Only draft forms can be submitted' });
+
+    await ref.update({
+      status: 'submitted', updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'SUBMITTED', performedBy: req.user.uid, performedByName: req.user.fullName, timestamp: new Date().toISOString(), details: 'Submitted for review' })
+    });
+
+    // Notify supervisors
+    notifySupervisors(form.division, 'New Station Cleaning Form', `Form ${form.formId} for ${form.stationName} submitted.`, 'station_form_submitted', { stationFormId: uid, formId: form.formId, stationName: form.stationName });
+
+    res.status(200).send({ message: 'Form submitted' });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to submit', details: error.message });
+  }
+});
+
+// 12.9: Approve Station Cleaning Form
+app.post('/api/station-cleaning-form/approve/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { uid: approverId, fullName } = req.user;
+    const ref = db.collection('stationCleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    const form = doc.data();
+    if (form.status !== 'submitted') return res.status(400).send({ error: 'Only submitted forms can be approved' });
+
+    await ref.update({
+      status: 'approved', approvedBy: approverId, approvedByName: fullName, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'APPROVED', performedBy: approverId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Approved by ${fullName}` })
+    });
+    res.status(200).send({ message: 'Form approved' });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to approve', details: error.message });
+  }
+});
+
+// 12.10: Reject Station Cleaning Form
+app.post('/api/station-cleaning-form/reject/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { reason } = req.body;
+    const { uid: rejectorId, fullName } = req.user;
+    const ref = db.collection('stationCleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    const form = doc.data();
+    if (form.status !== 'submitted') return res.status(400).send({ error: 'Only submitted forms can be rejected' });
+
+    await ref.update({
+      status: 'rejected', rejectedBy: rejectorId, rejectedByName: fullName, rejectedAt: new Date().toISOString(), rejectionReason: reason || 'No reason', updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'REJECTED', performedBy: rejectorId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Rejected: ${reason || 'No reason'}` })
+    });
+    res.status(200).send({ message: 'Form rejected' });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to reject', details: error.message });
+  }
+});
+
+// 12.11: Score Station Cleaning Form (built-in scoring)
+app.post('/api/station-cleaning-form/score/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { scoringData, totalScore, grade } = req.body;
+    const { uid: scorerId, fullName } = req.user;
+    const ref = db.collection('stationCleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    const form = doc.data();
+    if (form.status !== 'approved') return res.status(400).send({ error: 'Only approved forms can be scored' });
+
+    const computedGrade = grade || (totalScore >= 90 ? 'A' : totalScore >= 80 ? 'B' : totalScore >= 70 ? 'C' : 'D');
+
+    await ref.update({
+      status: 'scored', score: totalScore, grade: computedGrade, scoringData: scoringData || { criteria: [], totalScore, grade: computedGrade },
+      scoredBy: scorerId, scoredByName: fullName, scoringAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'SCORED', performedBy: scorerId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Score: ${totalScore} (Grade: ${computedGrade})` })
+    });
+    res.status(200).send({ message: 'Score submitted', grade: computedGrade });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to score', details: error.message });
+  }
+});
+
+// 12.12: Lock Station Cleaning Form
+app.post('/api/station-cleaning-form/lock/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('stationCleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    const form = doc.data();
+    if (form.status !== 'scored') return res.status(400).send({ error: 'Only scored forms can be locked' });
+
+    await ref.update({
+      status: 'locked', lockedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'LOCKED', performedBy: req.user.uid, performedByName: req.user.fullName, timestamp: new Date().toISOString(), details: 'Form locked. Ready for billing.' })
+    });
+    res.status(200).send({ message: 'Form locked' });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to lock', details: error.message });
+  }
+});
+
+// 12.13: Get Station Cleaning Forms List
+app.get('/api/station-cleaning-form/list', verifyToken, async (req, res) => {
+  try {
+    const { status, stationId, areaId, zoneId, division } = req.query;
+    const { role, division: userDiv, entityId, userType } = req.user;
+    let query = db.collection('stationCleaningForms').orderBy('createdAt', 'desc');
+    if (userType === 'contractor') query = query.where('entityId', '==', entityId);
+    else if (!(role || '').toLowerCase().includes('master')) query = query.where('division', '==', userDiv);
+    if (status) query = query.where('status', '==', status);
+    if (stationId) query = query.where('stationId', '==', stationId);
+    if (areaId) query = query.where('areaId', '==', areaId);
+    if (zoneId) query = query.where('zoneId', '==', zoneId);
+    if (division) query = query.where('division', '==', division);
+    const snapshot = await query.get();
+    const forms = [];
+    snapshot.forEach(doc => forms.push(doc.data()));
+    res.status(200).json({ count: forms.length, forms });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch forms', details: error.message });
+  }
+});
+
+// 12.14: Get Station Cleaning Form Details
+app.get('/api/station-cleaning-form/details/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const doc = await db.collection('stationCleaningForms').doc(uid).get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    res.status(200).json({ form: doc.data() });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to fetch form', details: error.message });
+  }
+});
+
+// 12.15: Station Dashboard
+app.get('/api/station-dashboard', verifyToken, async (req, res) => {
+  try {
+    const { role, division: userDiv, zone: userZone, entityId, userType } = req.user;
+    const userRole = (role || '').toLowerCase();
+
+    let stationQuery = db.collection('stations');
+    let formQuery = db.collection('stationCleaningForms');
+    let areaQuery = db.collection('stationAreas');
+    let zoneQuery = db.collection('stationZones');
+    let schedQuery = db.collection('stationSchedules');
+    let contrQuery = db.collection('stationContractors');
+
+    if (!userRole.includes('master')) {
+      stationQuery = stationQuery.where('division', '==', userDiv);
+      formQuery = formQuery.where('division', '==', userDiv);
+    }
+    if (userType === 'contractor') {
+      formQuery = formQuery.where('entityId', '==', entityId);
+    }
+
+    const [stationSnap, formSnap, areaSnap, zoneSnap, schedSnap, contrSnap] = await Promise.all([
+      stationQuery.get(), formQuery.get(), areaQuery.get(), zoneQuery.get(), schedQuery.get(), contrQuery.get(),
+    ]);
+
+    let totalScore = 0, scoredCount = 0;
+    let draftForms = 0, submittedForms = 0, approvedForms = 0, scoredForms = 0, lockedForms = 0, rejectedForms = 0;
+
+    formSnap.forEach(doc => {
+      const d = doc.data();
+      switch (d.status) {
+        case 'draft': draftForms++; break;
+        case 'submitted': submittedForms++; break;
+        case 'approved': approvedForms++; break;
+        case 'scored': scoredForms++; totalScore += d.score || 0; scoredCount++; break;
+        case 'locked': lockedForms++; totalScore += d.score || 0; scoredCount++; break;
+        case 'rejected': rejectedForms++; break;
+      }
+    });
+
+    res.status(200).json({
+      totalStations: stationSnap.size, activeStations: stationSnap.docs.filter(d => d.data().active !== false).length,
+      totalAreas: areaSnap.size, totalZones: zoneSnap.size,
+      draftForms, submittedForms, approvedForms, scoredForms, lockedForms, rejectedForms,
+      pendingReview: submittedForms,
+      schedules: schedSnap.size, contractorMappings: contrSnap.size,
+      averageScore: scoredCount > 0 ? Math.round((totalScore / scoredCount) * 100) / 100 : 0,
+    });
+  } catch (error) {
+    console.error('(StationDashboard) Error:', error);
+    res.status(500).send({ error: 'Failed to fetch dashboard', details: error.message });
+  }
+});
+
+// --- Notification Helper ---
+async function createNotification({ userId, title, body, type, data, entityId }) {
+  try {
+    const notifRef = db.collection('notifications').doc();
+    await notifRef.set({
+      uid: notifRef.id,
+      userId: userId || null,
+      entityId: entityId || null,
+      title,
+      body,
+      type: type || 'billing',
+      data: data || {},
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return notifRef.id;
+  } catch (e) {
+    console.error('(Notification) Error creating notification:', e.message);
+  }
+}
+
+async function notifyContractAdmins(contractId, title, body, type, data) {
+  try {
+    const contractDoc = await db.collection('contracts').doc(contractId).get();
+    if (!contractDoc.exists) return;
+    const contract = contractDoc.data();
+    const entityId = contract.entityId || contract.agencyId;
+    if (entityId) {
+      await createNotification({ entityId, title, body, type, data });
+      const userSnapshot = await db.collection('users')
+        .where('entityId', '==', entityId)
+        .limit(5)
+        .get();
+      userSnapshot.forEach(doc => {
+        createNotification({ userId: doc.id, title, body, type, data });
+      });
+    }
+  } catch (e) {
+    console.error('(Notification) Error notifying contract admins:', e.message);
+  }
+}
+
+// 10.13: Get Notifications for current user
+app.get('/api/notifications', verifyToken, async (req, res) => {
+  try {
+    const { uid, entityId, role, division, zone } = req.user;
+    let query = db.collection('notifications').orderBy('createdAt', 'desc').limit(50);
+
+    if (req.query.all === 'true') {
+      // no filter
+    } else if (entityId) {
+      query = db.collection('notifications')
+        .where('entityId', '==', entityId)
+        .orderBy('createdAt', 'desc')
+        .limit(50);
+    } else {
+      query = db.collection('notifications')
+        .where('userId', '==', uid)
+        .orderBy('createdAt', 'desc')
+        .limit(50);
+    }
+
+    const snapshot = await query.get();
+    const notifications = [];
+    snapshot.forEach(doc => notifications.push(doc.data()));
+
+    res.status(200).json({ count: notifications.length, notifications });
+  } catch (error) {
+    console.error('(Notification) Error fetching notifications:', error);
+    res.status(500).send({ error: 'Failed to fetch notifications', details: error.message });
+  }
+});
+
+// 10.14: Mark notification as read
+app.post('/api/notifications/:uid/read', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    await db.collection('notifications').doc(uid).update({ read: true });
+    res.status(200).send({ message: 'Notification marked as read' });
+  } catch (error) {
+    console.error('(Notification) Error marking notification as read:', error);
+    res.status(500).send({ error: 'Failed to mark notification', details: error.message });
+  }
+});
+
+// 10.15: Mark all notifications as read
+app.post('/api/notifications/read-all', verifyToken, async (req, res) => {
+  try {
+    const { uid, entityId } = req.user;
+    let query = db.collection('notifications');
+    if (entityId) {
+      query = query.where('entityId', '==', entityId);
+    } else {
+      query = query.where('userId', '==', uid);
+    }
+    const snapshot = await query.where('read', '==', false).get();
+    const batch = db.batch();
+    snapshot.forEach(doc => batch.update(doc.ref, { read: true }));
+    await batch.commit();
+    res.status(200).send({ message: `${snapshot.size} notifications marked as read` });
+  } catch (error) {
+    console.error('(Notification) Error marking all as read:', error);
+    res.status(500).send({ error: 'Failed to mark notifications', details: error.message });
+  }
+});
+
+// 10.16: Get unread notification count
+app.get('/api/notifications/unread-count', verifyToken, async (req, res) => {
+  try {
+    const { uid, entityId } = req.user;
+    let query = db.collection('notifications').where('read', '==', false);
+    if (entityId) {
+      query = query.where('entityId', '==', entityId);
+    } else {
+      query = query.where('userId', '==', uid);
+    }
+    const snapshot = await query.get();
+    res.status(200).json({ count: snapshot.size });
+  } catch (error) {
+    console.error('(Notification) Error fetching unread count:', error);
+    res.status(500).send({ error: 'Failed to fetch unread count', details: error.message });
+  }
+});
+
+//<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Section 11: Cleaning Form APIs >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+async function notifySupervisors(division, title, body, type, data) {
+  try {
+    const userSnapshot = await db.collection('users')
+      .where('division', '==', division)
+      .where('role', '==', 'Railway Supervisor')
+      .get();
+    userSnapshot.forEach(doc => {
+      createNotification({ userId: doc.id, title, body, type, data });
+    });
+  } catch (e) {
+    console.error('(CleaningForm) Error notifying supervisors:', e.message);
+  }
+}
+
+async function generateCleaningFormId(formType, division) {
+  const prefix = formType === 'coach' ? 'CF' : 'PF';
+  const div = (division || 'GEN').substring(0, 3).toUpperCase();
+  const date = new Date();
+  const seq = date.getFullYear().toString().slice(-2) + String(date.getMonth() + 1).padStart(2, '0');
+  const counterRef = db.collection('counters').doc(`cleaningForm_${prefix}_${seq}`);
+  const counter = await counterRef.get();
+  let nextNum = 1;
+  if (counter.exists) { nextNum = (counter.data().value || 0) + 1; }
+  await counterRef.set({ value: nextNum }, { merge: true });
+  return `${prefix}-${div}-${seq}-${String(nextNum).padStart(4, '0')}`;
+}
+
+// 11.1: Create Cleaning Form (Draft or Submit)
+app.post('/api/cleaning-form/create', verifyToken, async (req, res) => {
+  try {
+    const { formType, division, depot, contractId, contractNumber, cleaningDate, cleaningShift, startTime, endTime, manpowerCount, machineCount, remarks, latitude, longitude, deviceId, gpsAddress, coachDetails, premiseDetails, photos } = req.body;
+    const { uid, fullName, entityId, entityName } = req.user;
+
+    if (!formType || !division || !contractId) {
+      return res.status(400).send({ error: 'formType, division, and contractId are required.' });
+    }
+
+    const formId = await generateCleaningFormId(formType, division);
+    const ref = db.collection('cleaningForms').doc();
+
+    const formData = {
+      uid: ref.id,
+      formId,
+      formType,
+      division,
+      depot: depot || '',
+      contractId,
+      contractNumber: contractNumber || '',
+      entityId: entityId || '',
+      entityName: entityName || '',
+      submittedBy: uid,
+      submittedByName: fullName,
+      status: 'draft',
+      cleaningDate: cleaningDate || '',
+      cleaningShift: cleaningShift || '',
+      startTime: startTime || '',
+      endTime: endTime || '',
+      manpowerCount: manpowerCount || 0,
+      machineCount: machineCount || 0,
+      remarks: remarks || '',
+      latitude: latitude || 0,
+      longitude: longitude || 0,
+      deviceId: deviceId || '',
+      gpsAddress: gpsAddress || '',
+      photos: photos || [],
+      auditLog: [{
+        action: 'CREATED',
+        performedBy: uid,
+        performedByName: fullName,
+        timestamp: new Date().toISOString(),
+        details: `Form ${formId} created as draft`
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (formType === 'coach' && coachDetails) formData.coachDetails = coachDetails;
+    if (formType === 'premise' && premiseDetails) formData.premiseDetails = premiseDetails;
+
+    await ref.set(formData);
+
+    console.log(`(CleaningForm) Created ${formType} form ${formId}`);
+    res.status(201).send({ message: 'Form created successfully', uid: ref.id, formId });
+  } catch (error) {
+    console.error('(CleaningForm) Error creating form:', error);
+    res.status(500).send({ error: 'Failed to create form', details: error.message });
+  }
+});
+
+// 11.2: Save Draft (update existing)
+app.put('/api/cleaning-form/save-draft/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'draft') return res.status(400).send({ error: 'Can only save draft for forms in draft status' });
+
+    const allowedFields = ['cleaningDate', 'cleaningShift', 'startTime', 'endTime', 'manpowerCount', 'machineCount', 'remarks', 'latitude', 'longitude', 'deviceId', 'gpsAddress', 'coachDetails', 'premiseDetails', 'photos'];
+    const updates = { updatedAt: new Date().toISOString() };
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+
+    updates.auditLog = admin.firestore.FieldValue.arrayUnion({
+      action: 'DRAFT_SAVED',
+      performedBy: req.user.uid,
+      performedByName: req.user.fullName,
+      timestamp: new Date().toISOString(),
+      details: 'Draft saved'
+    });
+
+    await ref.update(updates);
+    res.status(200).send({ message: 'Draft saved successfully' });
+  } catch (error) {
+    console.error('(CleaningForm) Error saving draft:', error);
+    res.status(500).send({ error: 'Failed to save draft', details: error.message });
+  }
+});
+
+// 11.3: Submit Form
+app.post('/api/cleaning-form/submit/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'draft') return res.status(400).send({ error: 'Only draft forms can be submitted' });
+
+    await ref.update({
+      status: 'submitted',
+      updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'SUBMITTED',
+        performedBy: req.user.uid,
+        performedByName: req.user.fullName,
+        timestamp: new Date().toISOString(),
+        details: 'Form submitted for review'
+      })
+    });
+
+    // Notify supervisors in this division
+    notifySupervisors(form.division, 'New Cleaning Form', `Form ${form.formId} (${form.formType}) has been submitted for review.`, 'cleaning_form_submitted', { formId: form.formId, cleaningFormId: uid, formType: form.formType, division: form.division });
+
+    console.log(`(CleaningForm) Submitted ${form.formId}`);
+    res.status(200).send({ message: 'Form submitted successfully' });
+  } catch (error) {
+    console.error('(CleaningForm) Error submitting form:', error);
+    res.status(500).send({ error: 'Failed to submit form', details: error.message });
+  }
+});
+
+// 11.4: Approve Form (opens scoring)
+app.post('/api/cleaning-form/approve/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { uid: approverId, fullName } = req.user;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'submitted') return res.status(400).send({ error: 'Only submitted forms can be approved' });
+
+    await ref.update({
+      status: 'approved',
+      approvedBy: approverId,
+      approvedByName: fullName,
+      approvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'APPROVED',
+        performedBy: approverId,
+        performedByName: fullName,
+        timestamp: new Date().toISOString(),
+        details: `Form approved by ${fullName}. Scoring section opened.`
+      })
+    });
+
+    // Notify contractor
+    notifyContractAdmins(form.contractId, 'Form Approved', `Form ${form.formId} has been approved. Scoring is now open.`, 'cleaning_form_approved', { cleaningFormId: uid, formId: form.formId });
+
+    console.log(`(CleaningForm) Approved ${form.formId}`);
+    res.status(200).send({ message: 'Form approved successfully. Scoring section is now open.' });
+  } catch (error) {
+    console.error('(CleaningForm) Error approving form:', error);
+    res.status(500).send({ error: 'Failed to approve form', details: error.message });
+  }
+});
+
+// 11.5: Reject Form
+app.post('/api/cleaning-form/reject/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { reason } = req.body;
+    const { uid: rejectorId, fullName } = req.user;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'submitted') return res.status(400).send({ error: 'Only submitted forms can be rejected' });
+
+    await ref.update({
+      status: 'rejected',
+      rejectedBy: rejectorId,
+      rejectedByName: fullName,
+      rejectedAt: new Date().toISOString(),
+      rejectionReason: reason || 'No reason provided',
+      updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'REJECTED',
+        performedBy: rejectorId,
+        performedByName: fullName,
+        timestamp: new Date().toISOString(),
+        details: `Form rejected by ${fullName}. Reason: ${reason || 'Not specified'}`
+      })
+    });
+
+    // Notify contractor
+    notifyContractAdmins(form.contractId, 'Form Rejected', `Form ${form.formId} has been rejected. Reason: ${reason || 'Not specified'}`, 'cleaning_form_rejected', { cleaningFormId: uid, formId: form.formId, reason: reason || '' });
+
+    console.log(`(CleaningForm) Rejected ${form.formId}`);
+    res.status(200).send({ message: 'Form rejected successfully' });
+  } catch (error) {
+    console.error('(CleaningForm) Error rejecting form:', error);
+    res.status(500).send({ error: 'Failed to reject form', details: error.message });
+  }
+});
+
+// 11.6: Submit Score (after approval)
+app.post('/api/cleaning-form/score/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { scoringData, totalScore, maxTotalScore, remarks, grade } = req.body;
+    const { uid: scorerId, fullName } = req.user;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'approved') return res.status(400).send({ error: 'Scoring is only allowed for approved forms' });
+
+    const calculatedGrade = grade || (totalScore >= 90 ? 'A' : totalScore >= 80 ? 'B' : totalScore >= 70 ? 'C' : totalScore >= 60 ? 'D' : 'F');
+
+    await ref.update({
+      status: 'scored',
+      score: totalScore,
+      grade: calculatedGrade,
+      scoringData: scoringData || { criteria: [], totalScore, maxTotalScore, remarks, grade: calculatedGrade },
+      scoredBy: scorerId,
+      scoredByName: fullName,
+      scoringAt: new Date().toISOString(),
+      remarks: remarks || form.remarks,
+      updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'SCORED',
+        performedBy: scorerId,
+        performedByName: fullName,
+        timestamp: new Date().toISOString(),
+        details: `Score submitted: ${totalScore}/${maxTotalScore} (Grade: ${calculatedGrade})`
+      })
+    });
+
+    // Notify: scoring complete, needs contractor acknowledgement
+    notifyContractAdmins(form.contractId, 'Form Scored', `Form ${form.formId} scored ${totalScore}/${maxTotalScore} (Grade: ${calculatedGrade}). Please acknowledge.`, 'cleaning_form_scored', { cleaningFormId: uid, formId: form.formId, score: totalScore, grade: calculatedGrade });
+
+    console.log(`(CleaningForm) Scored ${form.formId}: ${totalScore}/${maxTotalScore} (${calculatedGrade})`);
+    res.status(200).send({ message: 'Score submitted successfully', grade: calculatedGrade });
+  } catch (error) {
+    console.error('(CleaningForm) Error scoring form:', error);
+    res.status(500).send({ error: 'Failed to submit score', details: error.message });
+  }
+});
+
+// 11.7: Contractor Acknowledge Score
+app.post('/api/cleaning-form/acknowledge/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'scored') return res.status(400).send({ error: 'Only scored forms can be acknowledged' });
+
+    await ref.update({
+      status: 'contractorApproved',
+      updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'CONTRACTOR_ACKNOWLEDGED',
+        performedBy: req.user.uid,
+        performedByName: req.user.fullName,
+        timestamp: new Date().toISOString(),
+        details: `Contractor acknowledged score: ${form.score}`
+      })
+    });
+
+    console.log(`(CleaningForm) Contractor acknowledged ${form.formId}`);
+    res.status(200).send({ message: 'Score acknowledged successfully' });
+  } catch (error) {
+    console.error('(CleaningForm) Error acknowledging score:', error);
+    res.status(500).send({ error: 'Failed to acknowledge score', details: error.message });
+  }
+});
+
+// 11.8: Auto-Approve after 30 min timeout (can be called by cron or as fallback)
+app.post('/api/cleaning-form/auto-approve/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'scored') return res.status(400).send({ error: 'Only scored forms can be auto-approved' });
+
+    const scoringAt = new Date(form.scoringAt);
+    const now = new Date();
+    const diffMs = now - scoringAt;
+    if (diffMs < 30 * 60 * 1000) {
+      return res.status(400).send({ error: `Auto-approval requires 30 minutes after scoring. ${Math.ceil((30 * 60 * 1000 - diffMs) / 60000)} minutes remaining.` });
+    }
+
+    await ref.update({
+      status: 'autoApproved',
+      autoApprovedAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'AUTO_APPROVED',
+        performedBy: 'system',
+        performedByName: 'System',
+        timestamp: now.toISOString(),
+        details: 'Auto-approved after 30-minute timeout'
+      })
+    });
+
+    console.log(`(CleaningForm) Auto-approved ${form.formId}`);
+    res.status(200).send({ message: 'Form auto-approved successfully' });
+  } catch (error) {
+    console.error('(CleaningForm) Error auto-approving:', error);
+    res.status(500).send({ error: 'Failed to auto-approve', details: error.message });
+  }
+});
+
+// 11.9: Lock Form (final state - no further edits)
+app.post('/api/cleaning-form/lock/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const ref = db.collection('cleaningForms').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    if (form.status !== 'contractorApproved' && form.status !== 'autoApproved' && form.status !== 'scored') {
+      return res.status(400).send({ error: 'Form must be scored and acknowledged before locking' });
+    }
+
+    await ref.update({
+      status: 'locked',
+      lockedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      auditLog: admin.firestore.FieldValue.arrayUnion({
+        action: 'LOCKED',
+        performedBy: req.user.uid,
+        performedByName: req.user.fullName,
+        timestamp: new Date().toISOString(),
+        details: 'Form locked. Ready for billing.'
+      })
+    });
+
+    // Notify: form locked, ready for billing
+    notifyContractAdmins(form.contractId, 'Form Locked', `Form ${form.formId} has been locked and is ready for billing.`, 'cleaning_form_locked', { cleaningFormId: uid, formId: form.formId, score: form.score, grade: form.grade });
+
+    console.log(`(CleaningForm) Locked ${form.formId}`);
+    res.status(200).send({ message: 'Form locked successfully' });
+  } catch (error) {
+    console.error('(CleaningForm) Error locking form:', error);
+    res.status(500).send({ error: 'Failed to lock form', details: error.message });
+  }
+});
+
+// 11.10: Get Cleaning Form List (with filters)
+app.get('/api/cleaning-form/list', verifyToken, async (req, res) => {
+  try {
+    const { status, formType, contractId, division, depot } = req.query;
+    const { role, zone, division: userDiv, entityId, userType } = req.user;
+    const userRole = (role || '').toLowerCase();
+
+    let query = db.collection('cleaningForms');
+    query = query.orderBy('createdAt', 'desc');
+
+    if (userType === 'contractor') {
+      query = query.where('entityId', '==', entityId);
+    } else if (userRole.includes('supervisor')) {
+      query = query.where('division', '==', userDiv);
+    } else if (userRole.includes('admin') || userRole.includes('master')) {
+      if (division) query = query.where('division', '==', division);
+    }
+
+    if (status) query = query.where('status', '==', status);
+    if (formType) query = query.where('formType', '==', formType);
+    if (contractId) query = query.where('contractId', '==', contractId);
+    if (depot) query = query.where('depot', '==', depot);
+
+    const snapshot = await query.get();
+    const forms = [];
+    snapshot.forEach(doc => forms.push(doc.data()));
+
+    res.status(200).json({ count: forms.length, forms });
+  } catch (error) {
+    if (error.code === 'FAILED_PRECONDITION') {
+      return res.status(400).json({ error: 'Index required. Check Firebase Console.' });
+    }
+    console.error('(CleaningForm) Error fetching list:', error);
+    res.status(500).send({ error: 'Failed to fetch forms', details: error.message });
+  }
+});
+
+// 11.11: Get Cleaning Form Details
+app.get('/api/cleaning-form/details/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const doc = await db.collection('cleaningForms').doc(uid).get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+    res.status(200).json({ form: doc.data() });
+  } catch (error) {
+    console.error('(CleaningForm) Error fetching details:', error);
+    res.status(500).send({ error: 'Failed to fetch form details', details: error.message });
+  }
+});
+
+// 11.12: Get Cleaning Form Dashboard Summary
+app.get('/api/cleaning-form/dashboard', verifyToken, async (req, res) => {
+  try {
+    const { role, division: userDiv, zone, entityId, userType } = req.user;
+    const userRole = (role || '').toLowerCase();
+
+    let query = db.collection('cleaningForms');
+    let countQuery = db.collection('cleaningForms');
+
+    if (userType === 'contractor') {
+      query = query.where('entityId', '==', entityId);
+      countQuery = countQuery.where('entityId', '==', entityId);
+    } else if (userRole.includes('supervisor')) {
+      query = query.where('division', '==', userDiv);
+      countQuery = countQuery.where('division', '==', userDiv);
+    }
+
+    const snapshot = await query.get();
+    const summary = { draftForms: 0, submittedForms: 0, approvedForms: 0, rejectedForms: 0, scoredForms: 0, lockedForms: 0, pendingReview: 0, scoringPending: 0, totalScore: 0, scoredCount: 0, totalManpower: 0, totalMachine: 0 };
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      switch (d.status) {
+        case 'draft': summary.draftForms++; break;
+        case 'submitted': summary.submittedForms++; summary.pendingReview++; break;
+        case 'approved': summary.approvedForms++; summary.scoringPending++; break;
+        case 'scored': summary.scoredForms++; summary.totalScore += d.score || 0; summary.scoredCount++; break;
+        case 'contractorApproved': summary.scoredForms++; summary.totalScore += d.score || 0; summary.scoredCount++; break;
+        case 'autoApproved': summary.scoredForms++; summary.totalScore += d.score || 0; summary.scoredCount++; break;
+        case 'locked': summary.lockedForms++; summary.totalScore += d.score || 0; summary.scoredCount++; break;
+        case 'rejected': summary.rejectedForms++; break;
+      }
+      summary.totalManpower += d.manpowerCount || 0;
+      summary.totalMachine += d.machineCount || 0;
+    });
+
+    const averageScore = summary.scoredCount > 0 ? (summary.totalScore / summary.scoredCount) : 0;
+
+    res.status(200).json({ ...summary, averageScore: Math.round(averageScore * 100) / 100 });
+  } catch (error) {
+    console.error('(CleaningForm) Error fetching dashboard:', error);
+    res.status(500).send({ error: 'Failed to fetch dashboard', details: error.message });
+  }
+});
+
+// 11.13: Get Cleaning Form Report Data
+app.get('/api/cleaning-form/report/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const doc = await db.collection('cleaningForms').doc(uid).get();
+    if (!doc.exists) return res.status(404).send({ error: 'Form not found' });
+
+    const form = doc.data();
+    res.status(200).json({ report: form });
+  } catch (error) {
+    console.error('(CleaningForm) Error fetching report:', error);
+    res.status(500).send({ error: 'Failed to fetch report', details: error.message });
+  }
+});
+
 // --- Server Start ---
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);

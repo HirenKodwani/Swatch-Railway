@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'package:crm_train/model/billing_models.dart';
+import 'package:crm_train/model/cleaning_form_models.dart';
 import 'package:crm_train/model/contracts_model.dart';
 import 'package:crm_train/model/user_registeration_model.dart';
+import 'package:crm_train/model/station_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -2933,6 +2936,928 @@ class ApiService {
       }
       print('Error in getCTSStats: $e');
       throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
+  //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Billing APIs >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+  static Future<Map<String, dynamic>> saveBillingConfig({
+    required String contractId,
+    required String contractNumber,
+    required String entityId,
+    required String entityName,
+    required String division,
+    required String zone,
+    required double contractValue,
+    required String billingCycle,
+    required List<String> serviceTypes,
+    required double coachWeightage,
+    required double premiseWeightage,
+    required double obhsWeightage,
+    required double passengerFeedbackWeightage,
+    required double aiVerificationWeightage,
+    required double penaltyScore90Plus,
+    required double penaltyScore80To89,
+    required double penaltyScore70To79,
+    required double penaltyScoreBelow70,
+    required double manpowerShortagePenalty,
+    required double machineShortagePenalty,
+    required double missedObhsComplaintPenalty,
+    required double lateTaskCompletionPenalty,
+    required double nonCompliancePenalty,
+  }) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/billing/config'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'contractId': contractId,
+          'contractNumber': contractNumber,
+          'entityId': entityId,
+          'entityName': entityName,
+          'division': division,
+          'zone': zone,
+          'contractValue': contractValue,
+          'billingCycle': billingCycle,
+          'serviceTypes': serviceTypes,
+          'coachWeightage': coachWeightage,
+          'premiseWeightage': premiseWeightage,
+          'obhsWeightage': obhsWeightage,
+          'passengerFeedbackWeightage': passengerFeedbackWeightage,
+          'aiVerificationWeightage': aiVerificationWeightage,
+          'penaltyScore90Plus': penaltyScore90Plus,
+          'penaltyScore80To89': penaltyScore80To89,
+          'penaltyScore70To79': penaltyScore70To79,
+          'penaltyScoreBelow70': penaltyScoreBelow70,
+          'manpowerShortagePenalty': manpowerShortagePenalty,
+          'machineShortagePenalty': machineShortagePenalty,
+          'missedObhsComplaintPenalty': missedObhsComplaintPenalty,
+          'lateTaskCompletionPenalty': lateTaskCompletionPenalty,
+          'nonCompliancePenalty': nonCompliancePenalty,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'Failed to save billing config');
+      }
+    } catch (e) {
+      throw Exception('Error saving billing config: $e');
+    }
+  }
+
+  static Future<ContractBillingRule?> getBillingConfig(String contractId) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/billing/config/$contractId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['config'] != null) {
+          return ContractBillingRule.fromJson(data['config']);
+        }
+        return null;
+      } else if (response.statusCode == 404) {
+        return null;
+      } else {
+        throw Exception('Failed to get billing config');
+      }
+    } catch (e) {
+      throw Exception('Error getting billing config: $e');
+    }
+  }
+
+  static Future<List<ContractBillingRule>> getAllBillingConfigs() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/billing/config'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List configs = data['configs'] ?? [];
+        return configs.map((e) => ContractBillingRule.fromJson(e)).toList();
+      } else {
+        throw Exception('Failed to fetch billing configs');
+      }
+    } catch (e) {
+      throw Exception('Error fetching billing configs: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> generateBill({
+    required String contractId,
+    required int month,
+    required int year,
+    required double overallScore,
+    required Map<String, dynamic>? scoreBreakdown,
+    required int machineShortageCount,
+    required int manpowerShortageCount,
+    required int missedObhsCount,
+    required double otherPenalties,
+  }) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/billing/generate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'contractId': contractId,
+          'month': month,
+          'year': year,
+          'overallScore': overallScore,
+          'scoreBreakdown': scoreBreakdown,
+          'machineShortageCount': machineShortageCount,
+          'manpowerShortageCount': manpowerShortageCount,
+          'missedObhsCount': missedObhsCount,
+          'otherPenalties': otherPenalties,
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'Failed to generate bill');
+      }
+    } catch (e) {
+      throw Exception('Error generating bill: $e');
+    }
+  }
+
+  static Future<List<BillingReport>> getBillingReports({
+    String? status,
+    String? contractId,
+    String? entityId,
+    String? division,
+    String? zone,
+    int? month,
+    int? year,
+  }) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (status != null) params['status'] = status;
+      if (contractId != null) params['contractId'] = contractId;
+      if (entityId != null) params['entityId'] = entityId;
+      if (division != null) params['division'] = division;
+      if (zone != null) params['zone'] = zone;
+      if (month != null) params['month'] = month.toString();
+      if (year != null) params['year'] = year.toString();
+      final uri = Uri.parse('$baseUrl/api/billing/reports').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List reports = data['reports'] ?? [];
+        return reports.map((e) => BillingReport.fromJson(e)).toList();
+      } else {
+        throw Exception('Failed to fetch billing reports');
+      }
+    } catch (e) {
+      throw Exception('Error fetching billing reports: $e');
+    }
+  }
+
+  static Future<BillingReport?> getBillingReportDetail(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/billing/reports/$uid'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return BillingReport.fromJson(data['report']);
+      } else {
+        throw Exception('Failed to fetch billing report');
+      }
+    } catch (e) {
+      throw Exception('Error fetching billing report: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> approveBill(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/billing/approve/$uid'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'Failed to approve bill');
+      }
+    } catch (e) {
+      throw Exception('Error approving bill: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> rejectBill(String uid, {required String reason}) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/billing/reject/$uid'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'reason': reason}),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'Failed to reject bill');
+      }
+    } catch (e) {
+      throw Exception('Error rejecting bill: $e');
+    }
+  }
+
+  static Future<BillingDashboardSummary> getBillingDashboard() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/billing/dashboard'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return BillingDashboardSummary.fromJson(data);
+      } else {
+        throw Exception('Failed to fetch billing dashboard');
+      }
+    } catch (e) {
+      throw Exception('Error fetching billing dashboard: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> generateInvoice(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/billing/generate-invoice/$uid'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'Failed to generate invoice');
+      }
+    } catch (e) {
+      throw Exception('Error generating invoice: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getContractorBillingData() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/billing/contractor'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to fetch contractor billing data');
+      }
+    } catch (e) {
+      throw Exception('Error fetching contractor billing data: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSupervisorBillingData() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/billing/supervisor'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to fetch supervisor billing data');
+      }
+    } catch (e) {
+      throw Exception('Error fetching supervisor billing data: $e');
+    }
+  }
+
+  //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Notification APIs >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  static Future<List<Map<String, dynamic>>> getNotifications({bool all = false}) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/notifications${all ? '?all=true' : ''}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['notifications'] ?? []);
+      } else {
+        throw Exception('Failed to fetch notifications');
+      }
+    } catch (e) {
+      throw Exception('Error fetching notifications: $e');
+    }
+  }
+
+  static Future<void> markNotificationRead(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/notifications/$uid/read'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Error marking notification read: $e');
+    }
+  }
+
+  static Future<void> markAllNotificationsRead() async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/notifications/read-all'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } catch (e) {
+      throw Exception('Error marking all notifications read: $e');
+    }
+  }
+
+  static Future<int> getUnreadNotificationCount() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/notifications/unread-count'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['count'] ?? 0;
+      }
+      return 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Cleaning Form APIs >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  static Future<Map<String, dynamic>> createCleaningForm(Map<String, dynamic> formData) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(formData),
+      );
+      if (response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to create form');
+    } catch (e) {
+      throw Exception('Error creating cleaning form: $e');
+    }
+  }
+
+  static Future<void> saveCleaningFormDraft(String uid, Map<String, dynamic> formData) async {
+    try {
+      final token = await getToken();
+      await http.put(
+        Uri.parse('$baseUrl/api/cleaning-form/save-draft/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(formData),
+      );
+    } catch (e) {
+      throw Exception('Error saving draft: $e');
+    }
+  }
+
+  static Future<void> submitCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/submit/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to submit');
+    } catch (e) {
+      throw Exception('Error submitting form: $e');
+    }
+  }
+
+  static Future<void> approveCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/approve/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to approve');
+    } catch (e) {
+      throw Exception('Error approving form: $e');
+    }
+  }
+
+  static Future<void> rejectCleaningForm(String uid, {String reason = 'No reason provided'}) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/reject/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'reason': reason}),
+      );
+      if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to reject');
+    } catch (e) {
+      throw Exception('Error rejecting form: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> scoreCleaningForm(String uid, {required double totalScore, double maxTotalScore = 100, String? remarks, String? grade, List<Map<String, dynamic>>? criteria}) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/score/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({
+          'totalScore': totalScore,
+          'maxTotalScore': maxTotalScore,
+          'remarks': remarks ?? '',
+          'grade': grade ?? '',
+          'scoringData': {'criteria': criteria ?? [], 'totalScore': totalScore, 'maxTotalScore': maxTotalScore, 'remarks': remarks ?? '', 'grade': grade ?? ''},
+        }),
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to score');
+    } catch (e) {
+      throw Exception('Error scoring form: $e');
+    }
+  }
+
+  static Future<void> acknowledgeCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/acknowledge/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      throw Exception('Error acknowledging form: $e');
+    }
+  }
+
+  static Future<void> autoApproveCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/auto-approve/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      throw Exception('Error auto-approving form: $e');
+    }
+  }
+
+  static Future<void> lockCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/cleaning-form/lock/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      throw Exception('Error locking form: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getCleaningFormDetail(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/cleaning-form/details/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to fetch form details');
+    } catch (e) {
+      throw Exception('Error fetching form details: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getCleaningFormReport(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/cleaning-form/report/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to fetch report');
+    } catch (e) {
+      throw Exception('Error fetching report: $e');
+    }
+  }
+
+  static Future<List<CleaningForm>> getCleaningForms({String? status, String? formType, String? contractId, String? division, String? depot}) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (status != null) params['status'] = status;
+      if (formType != null) params['formType'] = formType;
+      if (contractId != null) params['contractId'] = contractId;
+      if (division != null) params['division'] = division;
+      if (depot != null) params['depot'] = depot;
+      final uri = Uri.parse('$baseUrl/api/cleaning-form/list').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['forms'] as List).map((f) => CleaningForm.fromJson(f)).toList();
+      }
+      throw Exception('Failed to fetch forms');
+    } catch (e) {
+      throw Exception('Error fetching forms: $e');
+    }
+  }
+
+  static Future<CleaningDashboardSummary> getCleaningFormDashboard() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/cleaning-form/dashboard'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return CleaningDashboardSummary.fromJson(jsonDecode(response.body));
+      throw Exception('Failed to fetch dashboard');
+    } catch (e) {
+      throw Exception('Error fetching dashboard: $e');
+    }
+  }
+
+  //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Station Management APIs >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+  static Future<Map<String, dynamic>> createStation(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/stations/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to create station');
+    } catch (e) {
+      throw Exception('Error creating station: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateStation(String uid, Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/stations/update/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to update station');
+    } catch (e) {
+      throw Exception('Error updating station: $e');
+    }
+  }
+
+  static Future<List<Station>> getStations({String? zone, String? division, String? category, bool? active}) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (zone != null) params['zone'] = zone;
+      if (division != null) params['division'] = division;
+      if (category != null) params['category'] = category;
+      if (active != null) params['active'] = active.toString();
+      final uri = Uri.parse('$baseUrl/api/stations/list').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['stations'] as List).map((s) => Station.fromJson(s)).toList();
+      }
+      throw Exception('Failed to fetch stations');
+    } catch (e) {
+      throw Exception('Error fetching stations: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createStationArea(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-area/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to create station area');
+    } catch (e) {
+      throw Exception('Error creating station area: $e');
+    }
+  }
+
+  static Future<List<StationArea>> getStationAreas(String stationId) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/station-area/list/$stationId'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['areas'] as List).map((a) => StationArea.fromJson(a)).toList();
+      }
+      throw Exception('Failed to fetch station areas');
+    } catch (e) {
+      throw Exception('Error fetching station areas: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createStationZone(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-zone/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to create station zone');
+    } catch (e) {
+      throw Exception('Error creating station zone: $e');
+    }
+  }
+
+  static Future<List<StationZone>> getStationZones(String stationId, {String? areaId}) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (areaId != null) params['areaId'] = areaId;
+      final uri = Uri.parse('$baseUrl/api/station-zone/list/$stationId').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['zones'] as List).map((z) => StationZone.fromJson(z)).toList();
+      }
+      throw Exception('Failed to fetch station zones');
+    } catch (e) {
+      throw Exception('Error fetching station zones: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> mapStationContractor(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-contractor/map'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to map station contractor');
+    } catch (e) {
+      throw Exception('Error mapping station contractor: $e');
+    }
+  }
+
+  static Future<List<StationContractorMapping>> getStationContractors(String stationId) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/station-contractor/list/$stationId'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['contractors'] as List).map((c) => StationContractorMapping.fromJson(c)).toList();
+      }
+      throw Exception('Failed to fetch station contractors');
+    } catch (e) {
+      throw Exception('Error fetching station contractors: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createStationSchedule(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-schedule/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to create station schedule');
+    } catch (e) {
+      throw Exception('Error creating station schedule: $e');
+    }
+  }
+
+  static Future<List<StationCleaningSchedule>> getStationSchedules(String stationId) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/station-schedule/list/$stationId'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['schedules'] as List).map((s) => StationCleaningSchedule.fromJson(s)).toList();
+      }
+      throw Exception('Failed to fetch station schedules');
+    } catch (e) {
+      throw Exception('Error fetching station schedules: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createStationCleaningForm(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning-form/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to create station cleaning form');
+    } catch (e) {
+      throw Exception('Error creating station cleaning form: $e');
+    }
+  }
+
+  static Future<void> submitStationCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning-form/submit/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      throw Exception('Error submitting station cleaning form: $e');
+    }
+  }
+
+  static Future<void> approveStationCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning-form/approve/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      throw Exception('Error approving station cleaning form: $e');
+    }
+  }
+
+  static Future<void> rejectStationCleaningForm(String uid, {String reason = ''}) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning-form/reject/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'reason': reason}),
+      );
+    } catch (e) {
+      throw Exception('Error rejecting station cleaning form: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> scoreStationCleaningForm(String uid, {required double totalScore, String? grade, Map<String, dynamic>? scoringData}) async {
+    try {
+      final token = await getToken();
+      final body = <String, dynamic>{'totalScore': totalScore};
+      if (grade != null) body['grade'] = grade;
+      if (scoringData != null) body['scoringData'] = scoringData;
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning-form/score/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(body),
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to score station cleaning form');
+    } catch (e) {
+      throw Exception('Error scoring station cleaning form: $e');
+    }
+  }
+
+  static Future<void> lockStationCleaningForm(String uid) async {
+    try {
+      final token = await getToken();
+      await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning-form/lock/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      throw Exception('Error locking station cleaning form: $e');
+    }
+  }
+
+  static Future<List<StationCleaningForm>> getStationCleaningForms({String? status, String? stationId, String? areaId, String? zoneId, String? division}) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (status != null) params['status'] = status;
+      if (stationId != null) params['stationId'] = stationId;
+      if (areaId != null) params['areaId'] = areaId;
+      if (zoneId != null) params['zoneId'] = zoneId;
+      if (division != null) params['division'] = division;
+      final uri = Uri.parse('$baseUrl/api/station-cleaning-form/list').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['forms'] as List).map((f) => StationCleaningForm.fromJson(f)).toList();
+      }
+      throw Exception('Failed to fetch station cleaning forms');
+    } catch (e) {
+      throw Exception('Error fetching station cleaning forms: $e');
+    }
+  }
+
+  static Future<StationCleaningForm?> getStationCleaningFormDetail(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/station-cleaning-form/details/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return StationCleaningForm.fromJson(data['form']);
+      }
+      throw Exception('Failed to fetch station cleaning form detail');
+    } catch (e) {
+      throw Exception('Error fetching station cleaning form detail: $e');
+    }
+  }
+
+  static Future<StationDashboardSummary> getStationDashboard() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/station-dashboard'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return StationDashboardSummary.fromJson(jsonDecode(response.body));
+      throw Exception('Failed to fetch station dashboard');
+    } catch (e) {
+      throw Exception('Error fetching station dashboard: $e');
     }
   }
 }

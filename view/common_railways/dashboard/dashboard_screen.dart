@@ -18,6 +18,9 @@ import '../trains/train_from_screen.dart';
 import '../users/common_user_management_screen.dart';
 import '../contracts/common_contracts_screen.dart';
 import '../../obhs_screens/obhs_runs_list_screen.dart';
+import '../billing/billing_dashboard_screen.dart';
+import '../cleaning_forms/cleaning_form_dashboard.dart';
+import '../station_management/station_dashboard_screen.dart';
 import '../complaints/admin_complaints_screen.dart';
 import '../ratings/admin_ratings_screen.dart';
 import '../widgets/DonutChart.dart';
@@ -38,6 +41,7 @@ class CommonDashboard extends StatefulWidget {
 
 class _CommonDashboardState extends State<CommonDashboard> {
   bool isStatsLoading = true;
+  int _unreadNotificationCount = 0;
 
   String? selectedZone;
   String? selectedDivision;
@@ -154,7 +158,15 @@ class _CommonDashboardState extends State<CommonDashboard> {
         selectedDepot = user?.depot;
       });
       _loadDashboardStats();
+      _loadUnreadNotificationCount();
     });
+  }
+
+  Future<void> _loadUnreadNotificationCount() async {
+    try {
+      final count = await ApiService.getUnreadNotificationCount();
+      if (mounted) setState(() { _unreadNotificationCount = count; });
+    } catch (_) {}
   }
 
   Future<void> _loadDashboardStats() async {
@@ -425,10 +437,28 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
+        "icon": Icons.cleaning_services,
+        "title": "Cleaning Forms",
+        "route": "cleaning_forms",
+        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+      },
+      {
+        "icon": Icons.train,
+        "title": "Station Management",
+        "route": "station_management",
+        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+      },
+      {
         "icon": Icons.location_city_outlined,
         "title": "Entities Management",
         "route": "entities",
         "roles": ["Company Master", "Railway Master"]
+      },
+      {
+        "icon": Icons.receipt_long,
+        "title": "Billing",
+        "route": "billing",
+        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.description,
@@ -470,11 +500,32 @@ class _CommonDashboardState extends State<CommonDashboard> {
           MaterialPageRoute(builder: (context) => const OBHSRunsListScreen()),
         );
         break;
+      case "cleaning_forms":
+        Navigator.pop(context); // Close drawer
+        Navigator.push(
+          context,
+            MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()),
+        );
+        break;
+      case "station_management":
+        Navigator.pop(context); // Close drawer
+        Navigator.push(
+          context,
+            MaterialPageRoute(builder: (context) => const StationDashboardScreen()),
+        );
+        break;
       case "entities":
         Navigator.pop(context); // Close drawer
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => CommonEntityManagmentScreen()),
+        );
+        break;
+      case "billing":
+        Navigator.pop(context); // Close drawer
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const BillingDashboardScreen()),
         );
         break;
       case "contracts":
@@ -546,7 +597,22 @@ class _CommonDashboardState extends State<CommonDashboard> {
                 Navigator.push(context,
                     MaterialPageRoute(builder: (context) => CommonAlertScreen()));
               },
-              icon: Icon(Icons.notifications, color: Colors.white)),
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(Icons.notifications, color: Colors.white),
+                  if (_unreadNotificationCount > 0)
+                    Positioned(
+                      right: -4,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        child: Text('$_unreadNotificationCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                ],
+              )),
           IconButton(
               onPressed: () async{
                 final authProvider = Provider.of<AuthProvider>(context, listen: false);

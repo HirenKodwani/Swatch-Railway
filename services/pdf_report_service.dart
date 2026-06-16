@@ -292,6 +292,98 @@ class PDFReportService {
     return pdf.save();
   }
 
+  // 5. Billing Report
+  static Future<Uint8List> generateBillingReportPdf(Map<String, dynamic> bill, List<dynamic> deductions) async {
+    final pdf = pw.Document();
+    final logo = await _getLogo();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(30),
+        build: (pw.Context context) {
+          return [
+            _buildHeader(logo, 'BILLING & INVOICE REPORT', bill['status'] ?? 'PENDING'),
+            _buildSectionHeader('1. BILL SUMMARY'),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+              child: pw.Column(
+                children: [
+                  _buildInfoRow('Bill ID', bill['uid']?.toString() ?? 'N/A', 'Period', bill['period']?.toString() ?? 'N/A'),
+                  _buildInfoRow('Contract', bill['contractNumber']?.toString() ?? 'N/A', 'Entity', bill['entityName']?.toString() ?? 'N/A'),
+                  _buildInfoRow('Zone', bill['zone']?.toString() ?? 'N/A', 'Division', bill['division']?.toString() ?? 'N/A'),
+                  _buildInfoRow('Contract Value', '\u20B9${(bill['contractValue'] ?? 0).toString()}', 'Grade', bill['grade']?.toString() ?? 'N/A'),
+                  _buildInfoRow('Overall Score', '${bill['overallScore']?.toString() ?? '0'}%', 'Status', bill['status']?.toString() ?? 'N/A'),
+                ],
+              ),
+            ),
+            _buildSectionHeader('2. DEDUCTION BREAKDOWN', color: PdfColor.fromInt(0xffdc3545)),
+            pw.TableHelper.fromTextArray(
+              context: context,
+              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9),
+              headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xffdc3545)),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellAlignment: pw.Alignment.center,
+              data: <List<String>>[
+                ['Type', 'Description', 'Count', 'Rate', 'Amount'],
+                ...deductions.map((d) {
+                  return [
+                    d['type']?.toString() ?? 'N/A',
+                    d['description']?.toString() ?? 'N/A',
+                    '${d['count'] ?? 0}',
+                    '\u20B9${(d['rate'] ?? 0).toString()}',
+                    '\u20B9${(d['amount'] ?? 0).toString()}',
+                  ];
+                }),
+              ],
+            ),
+            _buildSectionHeader('3. PAYABLE CALCULATION'),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+              child: pw.Column(
+                children: [
+                  _buildInfoRow('Contract Value', '\u20B9${(bill['contractValue'] ?? 0).toString()}', 'Total Deduction', '-\u20B9${(bill['totalDeduction'] ?? 0).toString()}'),
+                  pw.Divider(thickness: 1, color: primaryColor),
+                  pw.SizedBox(height: 8),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
+                    children: [
+                      pw.Text('FINAL PAYABLE: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: primaryColor)),
+                      pw.Text('\u20B9${(bill['finalPayable'] ?? 0).toString()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: successColor)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            _buildSectionHeader('4. AUDIT TRAIL'),
+            pw.TableHelper.fromTextArray(
+              context: context,
+              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9),
+              headerDecoration: const pw.BoxDecoration(color: primaryColor),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellAlignment: pw.Alignment.center,
+              data: <List<String>>[
+                ['Action', 'Performed By', 'Timestamp', 'Details'],
+                ...(bill['auditLog'] as List? ?? []).map((a) {
+                  return [
+                    a['action']?.toString() ?? 'N/A',
+                    a['performedByName']?.toString() ?? 'N/A',
+                    a['timestamp'] != null ? DateFormat('dd-MMM hh:mm a').format(DateTime.parse(a['timestamp'])) : 'N/A',
+                    a['details']?.toString() ?? 'N/A',
+                  ];
+                }),
+              ],
+            ),
+            _buildSignatures(),
+          ];
+        },
+      ),
+    );
+    return pdf.save();
+  }
+
   // 4. Attendance Report
   static Future<Uint8List> generateAttendanceReportPdf(List<dynamic> runs, List<dynamic> attendance) async {
     final pdf = pw.Document();
@@ -331,4 +423,208 @@ class PDFReportService {
     );
     return pdf.save();
   }
+
+  // 5. Cleaning Form Report
+  static Future<Uint8List> generateCleaningFormReportPdf(Map<String, dynamic> form) async {
+    final pdf = pw.Document();
+    final logo = await _getLogo();
+
+    final isCoach = form['formType'] == 'coach';
+    final status = form['status'] ?? 'draft';
+    final score = form['score'];
+    final grade = form['grade'];
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(30),
+        build: (pw.Context context) {
+          return [
+            _buildHeader(logo, '${isCoach ? "COACH" : "PREMISE"} CLEANING FORM', status.toUpperCase()),
+            _buildSectionHeader('1. FORM DETAILS'),
+            _buildInfoRow('Form ID', form['formId'] ?? 'N/A'),
+            _buildInfoRow('Form Type', isCoach ? 'Coach Cleaning' : 'Premise Cleaning'),
+            _buildInfoRow('Date', form['cleaningDate'] ?? 'N/A'),
+            _buildInfoRow('Shift', form['cleaningShift'] ?? 'N/A'),
+            _buildInfoRow('Start Time', form['startTime'] ?? 'N/A'),
+            _buildInfoRow('End Time', form['endTime'] ?? 'N/A'),
+            _buildInfoRow('Division', form['division'] ?? 'N/A'),
+            _buildInfoRow('Depot', form['depot'] ?? 'N/A'),
+            _buildInfoRow('Status', status),
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('2. CONTRACT & ENTITY'),
+            _buildInfoRow('Contract', form['contractNumber'] ?? 'N/A'),
+            _buildInfoRow('Entity', form['entityName'] ?? 'N/A'),
+            _buildInfoRow('Submitted By', form['submittedByName'] ?? 'N/A'),
+            _buildInfoRow('Manpower', '${form['manpowerCount'] ?? 0}'),
+            _buildInfoRow('Machines', '${form['machineCount'] ?? 0}'),
+            pw.SizedBox(height: 10),
+            if (isCoach && form['coachDetails'] != null) ...[
+              _buildSectionHeader('3. COACH DETAILS'),
+              _buildInfoRow('Train Number', form['coachDetails']['trainNumber'] ?? 'N/A'),
+              _buildInfoRow('Train Name', form['coachDetails']['trainName'] ?? 'N/A'),
+              _buildInfoRow('Coach Number', form['coachDetails']['coachNumber'] ?? 'N/A'),
+              _buildInfoRow('Coach Type', form['coachDetails']['coachType'] ?? 'N/A'),
+              _buildInfoRow('Watering Done', form['coachDetails']['wateringDone'] == true ? 'Yes' : 'No'),
+              _buildInfoRow('Toiletries', form['coachDetails']['toiletriesAvailable'] == true ? 'Available' : 'Not Available'),
+              _buildInfoRow('Dustbins', form['coachDetails']['dustbinsAvailable'] == true ? 'Available' : 'Not Available'),
+            ],
+            if (!isCoach && form['premiseDetails'] != null) ...[
+              _buildSectionHeader('3. PREMISE DETAILS'),
+              _buildInfoRow('Premise Name', form['premiseDetails']['premiseName'] ?? 'N/A'),
+              _buildInfoRow('Premise Type', form['premiseDetails']['premiseType'] ?? 'N/A'),
+              _buildInfoRow('Area Covered', '${form['premiseDetails']['areaCovered'] ?? 0} sq.m'),
+              _buildInfoRow('Area Uncleaned', '${form['premiseDetails']['areaUncleaned'] ?? 0} sq.m'),
+              _buildInfoRow('Garbage Collected', '${form['premiseDetails']['garbageCollected'] ?? 0} kg'),
+            ],
+            if (form['remarks'] != null && form['remarks'].toString().isNotEmpty) ...[
+              pw.SizedBox(height: 10),
+              _buildSectionHeader('4. REMARKS'),
+              pw.Paragraph(text: form['remarks'], style: const pw.TextStyle(fontSize: 10)),
+            ],
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('5. SCORECARD'),
+            if (score != null) ...[
+              _buildInfoRow('Score', '${score.toStringAsFixed(1)}/100'),
+              _buildInfoRow('Grade', grade ?? 'N/A'),
+            ] else ...[
+              pw.Paragraph(text: 'Not scored yet', style: pw.TextStyle(color: PdfColors.grey, fontSize: 10)),
+            ],
+            if (form['scoringData'] != null && form['scoringData']['criteria'] != null) ...[
+              pw.SizedBox(height: 8),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+                headerDecoration: const pw.BoxDecoration(color: primaryColor),
+                cellStyle: const pw.TextStyle(fontSize: 8),
+                cellAlignment: pw.Alignment.center,
+                data: <List<String>>[
+                  ['Criterion', 'Max', 'Score', 'Remarks'],
+                  ...(form['scoringData']['criteria'] as List).map((c) => [
+                    c['name'] ?? '',
+                    '${c['maxScore'] ?? 10}',
+                    '${c['score'] ?? 0}',
+                    c['remarks'] ?? '',
+                  ]),
+                ],
+              ),
+            ],
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('6. PHOTOS'),
+            if (form['photos'] != null && (form['photos'] as List).isNotEmpty) ...[
+              _buildInfoRow('Total Photos', '${(form['photos'] as List).length}'),
+              _buildInfoRow('Before Photos', '${(form['photos'] as List).where((p) => p['type'] == 'before').length}'),
+              _buildInfoRow('After Photos', '${(form['photos'] as List).where((p) => p['type'] == 'after').length}'),
+            ] else ...[
+              pw.Paragraph(text: 'No photos uploaded', style: pw.TextStyle(color: PdfColors.grey, fontSize: 10)),
+            ],
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('7. GPS LOCATION'),
+            _buildInfoRow('Latitude', '${form['latitude'] ?? 'N/A'}'),
+            _buildInfoRow('Longitude', '${form['longitude'] ?? 'N/A'}'),
+            if (form['gpsAddress'] != null && form['gpsAddress'].toString().isNotEmpty)
+              _buildInfoRow('Address', form['gpsAddress']),
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('8. APPROVAL & AUDIT'),
+            if (form['approvedByName'] != null) ...[
+              _buildInfoRow('Approved By', form['approvedByName']),
+              _buildInfoRow('Approved At', form['approvedAt'] != null ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(form['approvedAt'])) : 'N/A'),
+            ],
+            if (form['rejectedByName'] != null) ...[
+              _buildInfoRow('Rejected By', form['rejectedByName']),
+              _buildInfoRow('Rejection Reason', form['rejectionReason'] ?? 'N/A'),
+            ],
+            _buildInfoRow('Created At', form['createdAt'] != null ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(form['createdAt'])) : 'N/A'),
+            if (form['lockedAt'] != null)
+              _buildInfoRow('Locked At', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(form['lockedAt']))),
+            pw.SizedBox(height: 20),
+            _buildSignatures(),
+          ];
+        },
+      ),
+    );
+    return pdf.save();
+  }
+
+  // 6. Station Cleaning Form Report
+  static Future<Uint8List> generateStationCleaningFormReportPdf(Map<String, dynamic> form) async {
+    final pdf = pw.Document();
+    final logo = await _getLogo();
+    final score = form['score'];
+    final grade = form['grade'];
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(30),
+        build: (pw.Context context) {
+          return [
+            _buildHeader(logo, 'STATION CLEANING FORM', (form['status'] ?? 'draft').toString().toUpperCase()),
+            _buildSectionHeader('1. FORM DETAILS'),
+            _buildInfoRow('Form ID', form['formId'] ?? 'N/A'),
+            _buildInfoRow('Station', form['stationName'] ?? 'N/A'),
+            _buildInfoRow('Area', form['areaName'] ?? 'N/A'),
+            _buildInfoRow('Zone', form['zoneName'] ?? 'N/A'),
+            _buildInfoRow('Date', form['cleaningDate'] ?? 'N/A'),
+            _buildInfoRow('Shift', form['shift'] ?? 'N/A'),
+            _buildInfoRow('Division', form['division'] ?? 'N/A'),
+            _buildInfoRow('Status', form['status'] ?? 'N/A'),
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('2. RESOURCE DEPLOYMENT'),
+            _buildInfoRow('Manpower', '${form['manpowerCount'] ?? 0}'),
+            _buildInfoRow('Machines', '${form['machineCount'] ?? 0}'),
+            _buildInfoRow('Area Covered', '${form['areaCovered'] ?? 0} sq.m'),
+            _buildInfoRow('Area Uncleaned', '${form['areaUncleaned'] ?? 0} sq.m'),
+            _buildInfoRow('Garbage Collected', '${form['garbageCollected'] ?? 0} kg'),
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('3. ACTIVITIES PERFORMED'),
+            if (form['activities'] != null && (form['activities'] as List).isNotEmpty)
+              ...(form['activities'] as List).map((a) => pw.Paragraph(text: '• $a', style: const pw.TextStyle(fontSize: 9)))
+            else
+              pw.Paragraph(text: 'No activities recorded', style: pw.TextStyle(color: PdfColors.grey, fontSize: 9)),
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('4. SCORECARD'),
+            if (score != null) ...[
+              _buildInfoRow('Total Score', '${score.toStringAsFixed(1)}/100'),
+              _buildInfoRow('Grade', grade ?? 'N/A'),
+            ] else
+              pw.Paragraph(text: 'Not scored yet', style: pw.TextStyle(color: PdfColors.grey, fontSize: 10)),
+            if (form['scoringData'] != null && form['scoringData']['criteria'] != null) ...[
+              pw.SizedBox(height: 8),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+                headerDecoration: const pw.BoxDecoration(color: primaryColor),
+                cellStyle: const pw.TextStyle(fontSize: 8),
+                cellAlignment: pw.Alignment.center,
+                data: <List<String>>[
+                  ['Criterion', 'Weight', 'Score'],
+                  ...(form['scoringData']['criteria'] as List).map((c) => [
+                    c['name'] ?? '',
+                    '${c['weight'] ?? 0}%',
+                    '${c['score'] ?? 0}',
+                  ]),
+                ],
+              ),
+            ],
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('5. PHOTOS & GPS'),
+            _buildInfoRow('Photos', '${(form['photos'] as List?)?.length ?? 0}'),
+            _buildInfoRow('Latitude', '${form['latitude'] ?? 'N/A'}'),
+            _buildInfoRow('Longitude', '${form['longitude'] ?? 'N/A'}'),
+            pw.SizedBox(height: 10),
+            _buildSectionHeader('6. APPROVAL & AUDIT'),
+            if (form['approvedByName'] != null) _buildInfoRow('Approved By', form['approvedByName']),
+            if (form['rejectedByName'] != null) _buildInfoRow('Rejected By', form['rejectedByName']),
+            _buildInfoRow('Submitted By', form['submittedByName'] ?? 'N/A'),
+            _buildInfoRow('Entity', form['entityName'] ?? 'N/A'),
+            pw.SizedBox(height: 20),
+            _buildSignatures(),
+          ];
+        },
+      ),
+    );
+    return pdf.save();
+  }
 }
+

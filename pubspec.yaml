@@ -29,6 +29,8 @@ dependencies:
   google_fonts: ^6.3.2
   excel: ^4.0.6
   open_filex: ^4.7.0
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
   syncfusion_flutter_xlsio: ^29.2.11
   dropdown_search: ^6.0.2
   firebase_core: ^4.2.0
