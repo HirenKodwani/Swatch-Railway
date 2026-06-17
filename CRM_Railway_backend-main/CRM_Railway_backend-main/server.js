@@ -10872,11 +10872,12 @@ app.post('/api/divisions', verifyToken, async (req, res) => {
 app.get('/api/divisions', verifyToken, async (req, res) => {
   try {
     const { zone } = req.query;
-    let query = db.collection('divisions').orderBy('name');
+    let query = db.collection('divisions');
     if (zone) query = query.where('zone', '==', zone);
     const snapshot = await query.get();
     const divisions = [];
     snapshot.forEach(doc => divisions.push(doc.data()));
+    divisions.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     res.status(200).json({ count: divisions.length, divisions });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch divisions', details: error.message });
