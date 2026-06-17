@@ -849,6 +849,7 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
                   child: ElevatedButton(
                     onPressed: _canProceed() && !isSubmitting
                         ? () {
+                            FocusScope.of(context).unfocus();
                             if (currentStep < 3) {
                               setState(() => currentStep++);
                             } else {
@@ -1156,6 +1157,7 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
   }
 
   Future<void> _captureTaskPhoto({required bool isBefore}) async {
+    FocusScope.of(context).unfocus();
     final picker = ImagePicker();
     final photo = await picker.pickImage(
       source: ImageSource.camera,

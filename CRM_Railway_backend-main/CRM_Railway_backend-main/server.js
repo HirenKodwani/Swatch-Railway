@@ -10,6 +10,9 @@ import twilio from 'twilio';
 import ExcelJS from 'exceljs';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
+import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
 dotenv.config();
 import axios from 'axios';
 import { RekognitionClient, CompareFacesCommand } from "@aws-sdk/client-rekognition";
@@ -3408,89 +3411,10 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
   }
 });
 // =======================================================
-// == OBHS TASK APIs (Worker & Supervisor & Passenger)
+// == OBHS TASK APIs — superseded by newer handlers below
 // =======================================================
-
-// 1. Get Tasks for a Worker (Task Board)
-app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
-  try {
-    const workerId = req.user.uid;
-    const { runInstanceId, status } = req.query;
-
-    let query = db.collection('task_instances').where('workerId', '==', workerId);
-    if (runInstanceId) {
-      query = query.where('runInstanceId', '==', runInstanceId);
-    }
-    if (status) {
-      query = query.where('status', '==', status.toUpperCase());
-    }
-
-    const snapshot = await query.get();
-    const tasks = [];
-    snapshot.forEach(doc => tasks.push(doc.data()));
-
-    res.status(200).json({ success: true, count: tasks.length, data: tasks });
-  } catch (error) {
-    console.error('Error fetching worker tasks:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 2. Submit Task Status & Photos (Worker)
-app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
-  try {
-    const workerId = req.user.uid;
-    const { runInstanceId, taskType, coachNo, beforePhoto, afterPhoto, comment, status } = req.body;
-
-    if (!runInstanceId || !taskType || !coachNo) {
-      return res.status(400).json({ error: 'Missing required fields (runInstanceId, taskType, coachNo)' });
-    }
-
-    // Find the corresponding task_instance generated earlier
-    const snapshot = await db.collection('task_instances')
-      .where('runInstanceId', '==', runInstanceId)
-      .where('workerId', '==', workerId)
-      .get();
-
-    let taskDoc = null;
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const dbCoachId = String(data.coachId || '').trim().toLowerCase();
-      const reqCoachNo = String(coachNo).trim().toLowerCase();
-
-      // Match coach (e.g. '2' matches 2, '2' matches '2', and '2' matches 'coach 2')
-      if (dbCoachId === reqCoachNo || dbCoachId.includes(reqCoachNo) || reqCoachNo.includes(dbCoachId)) {
-        const dbTaskName = (data.taskName || '').toLowerCase();
-        const dbTaskType = (data.taskType || '').toLowerCase();
-        const reqTaskType = taskType.toLowerCase();
-
-        if (dbTaskName === reqTaskType || dbTaskType === reqTaskType || dbTaskName.includes(reqTaskType) || reqTaskType.includes(dbTaskType)) {
-          taskDoc = doc;
-        }
-      }
-    });
-
-    if (!taskDoc) {
-      return res.status(404).json({ error: 'Task not found for this coach and worker.' });
-    }
-
-    const taskRef = db.collection('task_instances').doc(taskDoc.id);
-
-    const updateData = { 
-      status: status ? status.toUpperCase() : 'SUBMITTED', 
-      updatedAt: new Date().toISOString(),
-      submittedAt: new Date().toISOString()
-    };
-    if (beforePhoto) updateData.beforePhotoUrl = beforePhoto;
-    if (afterPhoto) updateData.afterPhotoUrl = afterPhoto;
-    if (comment) updateData.workerComments = comment;
-
-    await taskRef.update(updateData);
-    res.status(200).json({ success: true, message: 'Task submitted successfully', data: updateData });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+// Old board + submit handlers removed (they queried task_instances and
+// conflicted with the newer OBHS handlers at ~line 7957+ that use obhs_tasks).
 
 // 3. Raise Complaint / Report Issue (Worker)
 app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
@@ -8099,25 +8023,46 @@ app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
       }
     }
 
-    // 3. Define the Dynamic Task Matrix dynamically based on your operational schedules
-    const taskDefinitions = [
-      // --- TOILET CLEANING ---
-      { type: 'Toilet Cleaning', coach: 'S2', freq: 'Hour 1', startRel: 0, duration: 1 },
-      { type: 'Toilet Cleaning', coach: 'S2', freq: 'Hour 2', startRel: 1, duration: 1 },
-      { type: 'Toilet Cleaning', coach: 'S2', freq: 'Hour 3', startRel: 2, duration: 1 }, 
-      { type: 'Toilet Cleaning', coach: 'S2', freq: 'Hour 5', startRel: 4, duration: 2 }, 
-      { type: 'Toilet Cleaning', coach: 'S2', freq: 'Hour 7', startRel: 6, duration: 2 },
-      { type: 'Toilet Cleaning', coach: 'S2', freq: 'Hour 9', startRel: 8, duration: 2 },
+    // 3. Build the Dynamic Task Matrix from the worker's assigned coaches
+    const coachesArr = runDoc.exists ? (runDoc.data().coaches || []) : [];
+    const myCoaches = coachesArr.filter(c => c.workerId === req.user.uid);
+    const coachTypes = myCoaches.length > 0
+      ? myCoaches.map(c => c.coachType)
+      : ['S2', 'S1']; // fallback if no coach mapping found
 
-      // --- COACH CLEANING ---
-      { type: 'Coach Cleaning', coach: 'S2', freq: 'Train Start', startRel: 0, duration: 3 },
-      { type: 'Coach Cleaning', coach: 'S2', freq: 'Mid Journey', startRel: 6, duration: 4 },
-      { type: 'Coach Cleaning', coach: 'S2', freq: 'Train End', startRel: 12, duration: 3 },
-
-      // --- LINEN DISTRIBUTION ---
-      { type: 'Linen Distribution', coach: 'S1', freq: 'Initial Distribution', startRel: 0, duration: 4 },
-      { type: 'Linen Distribution', coach: 'S1', freq: 'Night Return Check', startRel: 10, duration: 4 }
+    const taskDefinitions = [];
+    const toiletFreqs = [
+      { freq: 'Hour 1', startRel: 0, duration: 1 },
+      { freq: 'Hour 2', startRel: 1, duration: 1 },
+      { freq: 'Hour 3', startRel: 2, duration: 1 },
+      { freq: 'Hour 5', startRel: 4, duration: 2 },
+      { freq: 'Hour 7', startRel: 6, duration: 2 },
+      { freq: 'Hour 9', startRel: 8, duration: 2 },
     ];
+    const coachCleaningFreqs = [
+      { freq: 'Train Start', startRel: 0, duration: 3 },
+      { freq: 'Mid Journey', startRel: 6, duration: 4 },
+      { freq: 'Train End', startRel: 12, duration: 3 },
+    ];
+    const linenFreqs = [
+      { freq: 'Initial Distribution', startRel: 0, duration: 4 },
+      { freq: 'Night Return Check', startRel: 10, duration: 4 },
+    ];
+
+    for (const coach of coachTypes) {
+      for (const f of toiletFreqs) {
+        taskDefinitions.push({ type: 'Toilet Cleaning', coach, ...f });
+      }
+      for (const f of coachCleaningFreqs) {
+        taskDefinitions.push({ type: 'Coach Cleaning', coach, ...f });
+      }
+      // Only first coach gets linen distribution
+      if (coach === coachTypes[0]) {
+        for (const f of linenFreqs) {
+          taskDefinitions.push({ type: 'Linen Distribution', coach, ...f });
+        }
+      }
+    }
 
     const now = new Date();
 
@@ -10871,6 +10816,465 @@ app.get('/api/cleaning-form/report/:uid', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('(CleaningForm) Error fetching report:', error);
     res.status(500).send({ error: 'Failed to fetch report', details: error.message });
+  }
+});
+
+// =======================================================
+// == DIVISION MANAGEMENT CRUD
+// =======================================================
+// POST /api/divisions — Create a new division
+app.post('/api/divisions', verifyToken, async (req, res) => {
+  try {
+    const { name, zone, code } = req.body;
+    if (!name || !zone) {
+      return res.status(400).json({ error: 'Division name and zone are required.' });
+    }
+    const ref = db.collection('divisions').doc();
+    await ref.set({
+      divisionId: ref.id,
+      name,
+      zone,
+      code: code || name.substring(0, 3).toUpperCase(),
+      createdBy: req.user.uid,
+      createdByName: req.user.fullName,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    res.status(201).json({ message: 'Division created', divisionId: ref.id });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create division', details: error.message });
+  }
+});
+
+// GET /api/divisions — List all divisions
+app.get('/api/divisions', verifyToken, async (req, res) => {
+  try {
+    const { zone } = req.query;
+    let query = db.collection('divisions').orderBy('name');
+    if (zone) query = query.where('zone', '==', zone);
+    const snapshot = await query.get();
+    const divisions = [];
+    snapshot.forEach(doc => divisions.push(doc.data()));
+    res.status(200).json({ count: divisions.length, divisions });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch divisions', details: error.message });
+  }
+});
+
+// GET /api/divisions/:id — Get single division
+app.get('/api/divisions/:id', verifyToken, async (req, res) => {
+  try {
+    const doc = await db.collection('divisions').doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Division not found' });
+    res.status(200).json({ division: doc.data() });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch division', details: error.message });
+  }
+});
+
+// PUT /api/divisions/:id — Update division
+app.put('/api/divisions/:id', verifyToken, async (req, res) => {
+  try {
+    const { name, zone, code } = req.body;
+    const ref = db.collection('divisions').doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Division not found' });
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (zone !== undefined) updateData.zone = zone;
+    if (code !== undefined) updateData.code = code;
+    updateData.updatedAt = new Date().toISOString();
+    await ref.update(updateData);
+    res.status(200).json({ message: 'Division updated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update division', details: error.message });
+  }
+});
+
+// DELETE /api/divisions/:id — Delete division
+app.delete('/api/divisions/:id', verifyToken, async (req, res) => {
+  try {
+    const ref = db.collection('divisions').doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Division not found' });
+    await ref.delete();
+    res.status(200).json({ message: 'Division deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete division', details: error.message });
+  }
+});
+
+// =======================================================
+// == PROFILE SELF-EDIT
+// =======================================================
+app.post('/api/user/update-profile', verifyToken, async (req, res) => {
+  try {
+    const { fullName, designation, mobile } = req.body;
+    const { uid } = req.user;
+    const ref = db.collection('users').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'User not found' });
+    const updateData = {};
+    if (fullName !== undefined) updateData.fullName = fullName;
+    if (designation !== undefined) updateData.designation = designation;
+    if (mobile !== undefined) {
+      if (!/^\d{10}$/.test(mobile)) {
+        return res.status(400).json({ error: 'Invalid mobile number. Must be 10 digits.' });
+      }
+      updateData.mobile = mobile;
+    }
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No fields to update.' });
+    }
+    updateData.updatedAt = new Date().toISOString();
+    updateData.updatedBy = uid;
+    await ref.update(updateData);
+    const updated = await ref.get();
+    res.status(200).json({ message: 'Profile updated successfully', user: updated.data() });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update profile', details: error.message });
+  }
+});
+
+// =======================================================
+// == CHANGE PASSWORD (logged-in user)
+// =======================================================
+app.post('/api/auth/change-password', verifyToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+    const { uid } = req.user;
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) return res.status(404).json({ error: 'User not found' });
+    const userData = userDoc.data();
+    if (userData.password !== currentPassword) {
+      return res.status(403).json({ error: 'Current password is incorrect.' });
+    }
+    // Update password in Firestore
+    await userRef.update({ password: newPassword, updatedAt: new Date().toISOString() });
+    // Try to update Firebase Auth password
+    try {
+      await admin.auth().updateUser(uid, { password: newPassword });
+    } catch (authError) {
+      // Non-critical — password is stored in Firestore as fallback
+    }
+    // Audit log
+    const auditRef = db.collection('auditLogs').doc();
+    await auditRef.set({
+      logId: auditRef.id,
+      action: 'PASSWORD_CHANGED',
+      performedBy: uid,
+      performedByName: req.user.fullName,
+      targetUser: uid,
+      targetUserName: req.user.fullName,
+      timestamp: new Date().toISOString(),
+      details: 'User changed their password'
+    });
+    res.status(200).json({ message: 'Password changed successfully.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to change password', details: error.message });
+  }
+});
+
+// =======================================================
+// == COMPLAINT ESCALATION WORKFLOW
+// =======================================================
+// PATCH /api/obhs/complaints/assign/:complaintId — Assign complaint
+app.patch('/api/obhs/complaints/assign/:complaintId', verifyToken, async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    const { assignedTo, assignedToName, remarks } = req.body;
+    const allowedRoles = ['Admin', 'Supervisor', 'Company Master'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only Admin, Supervisor, or Company Master can assign complaints.' });
+    }
+    if (!assignedTo) return res.status(400).json({ error: 'assignedTo (user UID) is required.' });
+    const ref = db.collection('obhs_complaints').doc(complaintId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Complaint not found' });
+    await ref.update({
+      status: 'IN_PROGRESS',
+      assignedTo,
+      assignedToName: assignedToName || 'Assigned User',
+      assignedBy: req.user.uid,
+      assignedByName: req.user.fullName,
+      assignedAt: new Date().toISOString(),
+      assignmentRemarks: remarks || '',
+      updatedAt: new Date().toISOString()
+    });
+    // Audit log
+    const auditRef = db.collection('auditLogs').doc();
+    await auditRef.set({
+      logId: auditRef.id,
+      action: 'COMPLAINT_ASSIGNED',
+      performedBy: req.user.uid,
+      performedByName: req.user.fullName,
+      targetUser: assignedTo,
+      targetEntity: complaintId,
+      targetEntityType: 'obhs_complaints',
+      timestamp: new Date().toISOString(),
+      details: `Complaint ${complaintId} assigned to ${assignedToName || assignedTo}`
+    });
+    res.status(200).json({ message: 'Complaint assigned and status set to IN_PROGRESS.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to assign complaint', details: error.message });
+  }
+});
+
+// PATCH /api/obhs/complaints/escalate/:complaintId — Escalate complaint
+app.patch('/api/obhs/complaints/escalate/:complaintId', verifyToken, async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    const { escalationReason, escalatedTo } = req.body;
+    const ref = db.collection('obhs_complaints').doc(complaintId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Complaint not found' });
+    const data = doc.data();
+    if (data.status === 'CLOSED') {
+      return res.status(400).json({ error: 'Cannot escalate a closed complaint.' });
+    }
+    const escalationLevel = (data.escalationLevel || 0) + 1;
+    await ref.update({
+      status: 'ESCALATED',
+      escalationLevel,
+      escalationReason: escalationReason || 'No reason provided',
+      escalatedBy: req.user.uid,
+      escalatedByName: req.user.fullName,
+      escalatedAt: new Date().toISOString(),
+      escalatedTo: escalatedTo || null,
+      updatedAt: new Date().toISOString()
+    });
+    const auditRef = db.collection('auditLogs').doc();
+    await auditRef.set({
+      logId: auditRef.id,
+      action: 'COMPLAINT_ESCALATED',
+      performedBy: req.user.uid,
+      performedByName: req.user.fullName,
+      targetEntity: complaintId,
+      targetEntityType: 'obhs_complaints',
+      timestamp: new Date().toISOString(),
+      details: `Complaint escalated to level ${escalationLevel}. Reason: ${escalationReason || 'Not specified'}`
+    });
+    res.status(200).json({ message: `Complaint escalated to level ${escalationLevel}.` });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to escalate complaint', details: error.message });
+  }
+});
+
+// Update the resolve endpoint to allow resolving from IN_PROGRESS and ESCALATED too
+// (The existing PATCH /api/obhs/complaints/resolve/:complaintId already works for OPEN/IN_PROGRESS/ESCALATED)
+
+// =======================================================
+// == PDF INVOICE GENERATION
+// =======================================================
+app.get('/api/billing/invoice-pdf/:uid', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const doc = await db.collection('billingReports').doc(uid).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Billing report not found' });
+    const bill = doc.data();
+    if (bill.status !== 'APPROVED' && !bill.invoiceNumber) {
+      return res.status(400).json({ error: 'Invoice not yet generated. Please generate invoice first.' });
+    }
+    const invoiceNumber = bill.invoiceNumber || `INV-${uid.substring(0, 8)}`;
+    const docPdf = new PDFDocument({ margin: 50 });
+    const fileName = `invoice_${invoiceNumber}.pdf`;
+    const tmpDir = path.join(process.cwd(), 'tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const filePath = path.join(tmpDir, fileName);
+    const stream = fs.createWriteStream(filePath);
+    docPdf.pipe(stream);
+    // Header
+    docPdf.fontSize(22).fillColor('#1f4e78').text('SWACHH RAILWAYS', { align: 'center' });
+    docPdf.fontSize(10).fillColor('#666').text('Indian Railways – OBHS Billing System', { align: 'center' });
+    docPdf.moveDown();
+    docPdf.fontSize(16).fillColor('#1f4e78').text('INVOICE', { align: 'center' });
+    docPdf.moveDown();
+    // Invoice info
+    docPdf.fontSize(10).fillColor('#333');
+    docPdf.text(`Invoice Number: ${invoiceNumber}`);
+    docPdf.text(`Date: ${new Date(bill.invoiceGeneratedAt || new Date()).toLocaleDateString('en-IN')}`);
+    docPdf.text(`Period: ${bill.period || 'N/A'}`);
+    docPdf.moveDown();
+    // Horizontal rule
+    docPdf.moveTo(50, docPdf.y).lineTo(545, docPdf.y).strokeColor('#ddd').stroke();
+    docPdf.moveDown();
+    // Bill details
+    docPdf.fontSize(12).fillColor('#1f4e78').text('Bill Details', { underline: true });
+    docPdf.moveDown(0.5);
+    docPdf.fontSize(10).fillColor('#333');
+    const details = [
+      ['Contract', bill.contractNumber || 'N/A'],
+      ['Entity', bill.entityName || 'N/A'],
+      ['Zone', bill.zone || 'N/A'],
+      ['Division', bill.division || 'N/A'],
+      ['Contract Value', `₹${(bill.contractValue || 0).toLocaleString('en-IN')}`],
+      ['Overall Score', `${bill.overallScore || 0}%`],
+      ['Grade', bill.grade || 'N/A'],
+    ];
+    details.forEach(([label, value]) => {
+      docPdf.text(`${label}: ${value}`, { continued: false });
+    });
+    docPdf.moveDown();
+    // Deductions table
+    if (bill.deductions && bill.deductions.length > 0) {
+      docPdf.fontSize(12).fillColor('#1f4e78').text('Deductions', { underline: true });
+      docPdf.moveDown(0.5);
+      docPdf.fontSize(9).fillColor('#333');
+      const tableTop = docPdf.y;
+      const col1 = 50, col2 = 200, col3 = 320, col4 = 420, col5 = 500;
+      docPdf.font('Helvetica-Bold');
+      docPdf.text('Type', col1, tableTop);
+      docPdf.text('Description', col2, tableTop);
+      docPdf.text('Count', col3, tableTop);
+      docPdf.text('Rate', col4, tableTop);
+      docPdf.text('Amount', col5, tableTop);
+      docPdf.font('Helvetica');
+      let y = tableTop + 15;
+      bill.deductions.forEach(d => {
+        docPdf.text(d.type || 'N/A', col1, y);
+        docPdf.text(d.description || 'N/A', col2, y);
+        docPdf.text(`${d.count || 0}`, col3, y);
+        docPdf.text(`₹${(d.rate || 0).toLocaleString('en-IN')}`, col4, y);
+        docPdf.text(`₹${(d.amount || 0).toLocaleString('en-IN')}`, col5, y);
+        y += 15;
+      });
+      docPdf.y = y;
+    }
+    docPdf.moveDown();
+    // Payable
+    docPdf.moveTo(50, docPdf.y).lineTo(545, docPdf.y).strokeColor('#ddd').stroke();
+    docPdf.moveDown();
+    docPdf.fontSize(14).fillColor('#28a745').text(
+      `FINAL PAYABLE: ₹${(bill.finalPayable || 0).toLocaleString('en-IN')}`,
+      { align: 'center' }
+    );
+    docPdf.moveDown(2);
+    // Footer
+    docPdf.fontSize(8).fillColor('#999').text(
+      'Swachh Railways – Contractor Employee Portal | Indian Railways',
+      { align: 'center' }
+    );
+    docPdf.text(`Generated on ${new Date().toLocaleString('en-IN')}`, { align: 'center' });
+    docPdf.end();
+    stream.on('finish', () => {
+      res.download(filePath, fileName, (err) => {
+        if (err) {
+          res.status(500).json({ error: 'Failed to download invoice' });
+        }
+        // Cleanup after download
+        fs.unlink(filePath, () => {});
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate invoice PDF', details: error.message });
+  }
+});
+
+// =======================================================
+// == CENTRALIZED AUDIT LOG
+// =======================================================
+// GET /api/audit/logs — Query audit logs
+app.get('/api/audit/logs', verifyToken, async (req, res) => {
+  try {
+    const { action, targetEntity, targetUser, limit: limitParam, offset: offsetParam } = req.query;
+    let query = db.collection('auditLogs').orderBy('timestamp', 'desc');
+    if (action) query = query.where('action', '==', action);
+    if (targetEntity) query = query.where('targetEntity', '==', targetEntity);
+    if (targetUser) query = query.where('targetUser', '==', targetUser);
+    const maxLimit = Math.min(parseInt(limitParam) || 50, 200);
+    const snapshot = await query.limit(maxLimit).get();
+    const logs = [];
+    snapshot.forEach(doc => logs.push(doc.data()));
+    res.status(200).json({ count: logs.length, logs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch audit logs', details: error.message });
+  }
+});
+
+// GET /api/audit/logs/stats — Audit log summary stats
+app.get('/api/audit/logs/stats', verifyToken, async (req, res) => {
+  try {
+    const snapshot = await db.collection('auditLogs').get();
+    const stats = {};
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      stats[d.action] = (stats[d.action] || 0) + 1;
+    });
+    res.status(200).json({ stats, total: snapshot.size });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch audit stats', details: error.message });
+  }
+});
+
+// =======================================================
+// == AI COMPLAINT ROUTING (Keyword-based auto-categorization)
+// =======================================================
+app.post('/api/obhs/complaints/auto-route', verifyToken, async (req, res) => {
+  try {
+    const { complaintId } = req.body;
+    if (!complaintId) return res.status(400).json({ error: 'complaintId is required.' });
+    const ref = db.collection('obhs_complaints').doc(complaintId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Complaint not found' });
+    const complaint = doc.data();
+    // Keyword-based auto-categorization
+    const description = (complaint.description || '').toLowerCase();
+    const category = (complaint.category || '').toLowerCase();
+    const text = `${category} ${description}`;
+    const keywordMap = [
+      { keywords: ['toilet', 'bathroom', 'restroom', 'washroom', 'sanitary', 'urinal', 'foul smell', 'stink'], taskType: 'Toilet Cleaning', priority: 'high' },
+      { keywords: ['clean', 'dirty', 'dust', 'sweep', 'mop', 'garbage', 'waste', 'litter', 'rubbish', 'spill'], taskType: 'Coach Cleaning', priority: 'medium' },
+      { keywords: ['linen', 'bedsheet', 'pillow', 'blanket', 'bed roll', 'curtain'], taskType: 'Linen Distribution', priority: 'medium' },
+      { keywords: ['light', 'fan', 'ac', 'air conditioner', 'cooling', 'electrical', 'plug', 'charging', 'switch'], taskType: 'Electrical Issue', priority: 'high' },
+      { keywords: ['water', 'drinking', 'supply', 'tap', 'leak', 'pipeline', 'overflow'], taskType: 'Water Issue', priority: 'high' },
+      { keywords: ['seat', 'berth', 'broken', 'damage', 'repair', 'maintenance', 'crack', 'rust'], taskType: 'Maintenance Issue', priority: 'high' },
+      { keywords: ['security', 'theft', 'safety', 'suspicious', 'unauthorized'], taskType: 'Security Issue', priority: 'critical' },
+      { keywords: ['staff', 'behaviour', 'rude', 'misbehave', 'attitude', 'service'], taskType: 'Staff Behaviour', priority: 'medium' },
+    ];
+    let assignedTaskType = 'Coach Cleaning';
+    let assignedPriority = 'medium';
+    let bestScore = 0;
+    keywordMap.forEach(entry => {
+      const score = entry.keywords.reduce((sum, kw) => sum + (text.includes(kw) ? 1 : 0), 0);
+      if (score > bestScore) {
+        bestScore = score;
+        assignedTaskType = entry.taskType;
+        assignedPriority = entry.priority;
+      }
+    });
+    // Update complaint with routing suggestion
+    await ref.update({
+      suggestedTaskType: assignedTaskType,
+      suggestedPriority: assignedPriority,
+      autoRoutedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    // Audit log
+    const auditRef = db.collection('auditLogs').doc();
+    await auditRef.set({
+      logId: auditRef.id,
+      action: 'COMPLAINT_AUTO_ROUTED',
+      performedBy: 'system',
+      performedByName: 'System',
+      targetEntity: complaintId,
+      targetEntityType: 'obhs_complaints',
+      timestamp: new Date().toISOString(),
+      details: `Auto-routed complaint ${complaintId} → Task: ${assignedTaskType}, Priority: ${assignedPriority}`
+    });
+    res.status(200).json({
+      message: 'Complaint auto-routed',
+      suggestedTaskType: assignedTaskType,
+      suggestedPriority: assignedPriority
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to auto-route complaint', details: error.message });
   }
 });
 

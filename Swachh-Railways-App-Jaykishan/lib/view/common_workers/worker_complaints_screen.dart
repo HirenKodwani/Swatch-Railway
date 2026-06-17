@@ -63,6 +63,8 @@ class ComplaintModel {
       case 'IN_PROGRESS':
       case 'INPROGRESS':
         return 'In Progress';
+      case 'ESCALATED':
+        return 'Escalated';
       case 'RESOLVED':
         return 'Resolved';
       case 'CLOSED':

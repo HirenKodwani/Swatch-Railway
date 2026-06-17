@@ -268,6 +268,54 @@ class AuthService {
     );
   }
 
+  Future<AuthResponse> changePassword(String currentPassword, String newPassword) async {
+    try {
+      final token = await ApiService.getToken();
+      if (token == null) {
+        return AuthResponse(
+          success: false,
+          message: 'You must be logged in to change password.',
+          statusCode: 401,
+          errorType: ErrorType.validation,
+        );
+      }
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/change-password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        }),
+      ).timeout(connectionTimeout, onTimeout: () => throw TimeoutException('Request timeout'));
+      final Map<String, dynamic> responseData = jsonDecode(response.body);
+      return AuthResponse.fromJson(responseData, response.statusCode);
+    } on SocketException catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'No internet connection.',
+        statusCode: 0,
+        errorType: ErrorType.noInternet,
+      );
+    } on TimeoutException catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'Connection timeout.',
+        statusCode: 0,
+        errorType: ErrorType.timeout,
+      );
+    } catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'Something went wrong: $e',
+        statusCode: 500,
+        errorType: ErrorType.unknown,
+      );
+    }
+  }
+
   Future<AuthResponse> resetPassword(String newPassword, String resetToken) async {
     if (newPassword.isEmpty || newPassword.length < 6) {
       return AuthResponse(

@@ -6,6 +6,9 @@ import '../../model/worker_profile_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../utills/app_colors.dart';
 import '../common_railways/alert/common_alert_screen.dart';
+import '../common_railways/profile/profile_edit_screen.dart';
+import '../common_railways/profile/change_password_screen.dart';
+import '../common_railways/settings/settings_screen.dart';
 import '../onboarding_screens/login_screen.dart';
 
 class WorkerProfileScreen extends StatelessWidget {
@@ -194,6 +197,51 @@ class WorkerProfileScreen extends StatelessWidget {
                       _buildDetailRow(
                           Icons.done_all, 'Status', controller.workerStatus),
                     ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                _buildActionTile(
+                  Icons.edit_outlined,
+                  'Edit Profile',
+                  Colors.indigo.shade50,
+                  Colors.indigo,
+                      () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ProfileEditScreen(),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                _buildActionTile(
+                  Icons.lock_outline,
+                  'Change Password',
+                  Colors.orange.shade50,
+                  Colors.orange,
+                      () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ChangePasswordScreen(),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                _buildActionTile(
+                  Icons.settings_outlined,
+                  'Settings',
+                  Colors.blueGrey.shade50,
+                  Colors.blueGrey,
+                      () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(),
+                    ),
                   ),
                 ),
 

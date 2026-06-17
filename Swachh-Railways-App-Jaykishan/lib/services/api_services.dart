@@ -3860,4 +3860,199 @@ class ApiService {
       throw Exception('Error fetching station dashboard: $e');
     }
   }
+
+  // ================================================================
+  // == DIVISION MANAGEMENT
+  // ================================================================
+  static Future<List<Map<String, dynamic>>> getDivisions({String? zone}) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (zone != null) params['zone'] = zone;
+      final uri = Uri.parse('$baseUrl/api/divisions').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['divisions'] ?? []);
+      }
+      throw Exception('Failed to fetch divisions');
+    } catch (e) {
+      throw Exception('Error fetching divisions: $e');
+    }
+  }
+
+  static Future<void> createDivision(String name, String zone, {String? code}) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/divisions'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'name': name, 'zone': zone, 'code': code}),
+      );
+      if (response.statusCode != 201) {
+        final err = jsonDecode(response.body);
+        throw Exception(err['error'] ?? 'Failed to create division');
+      }
+    } catch (e) {
+      throw Exception('Error creating division: $e');
+    }
+  }
+
+  static Future<void> updateDivision(String id, {String? name, String? zone, String? code}) async {
+    try {
+      final token = await getToken();
+      final body = <String, dynamic>{};
+      if (name != null) body['name'] = name;
+      if (zone != null) body['zone'] = zone;
+      if (code != null) body['code'] = code;
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/divisions/$id'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(body),
+      );
+      if (response.statusCode != 200) {
+        final err = jsonDecode(response.body);
+        throw Exception(err['error'] ?? 'Failed to update division');
+      }
+    } catch (e) {
+      throw Exception('Error updating division: $e');
+    }
+  }
+
+  static Future<void> deleteDivision(String id) async {
+    try {
+      final token = await getToken();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/divisions/$id'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) {
+        final err = jsonDecode(response.body);
+        throw Exception(err['error'] ?? 'Failed to delete division');
+      }
+    } catch (e) {
+      throw Exception('Error deleting division: $e');
+    }
+  }
+
+  // ================================================================
+  // == PROFILE SELF-EDIT
+  // ================================================================
+  static Future<Map<String, dynamic>> updateProfile({
+    String? fullName, String? designation, String? mobile,
+  }) async {
+    try {
+      final token = await getToken();
+      final body = <String, dynamic>{};
+      if (fullName != null) body['fullName'] = fullName;
+      if (designation != null) body['designation'] = designation;
+      if (mobile != null) body['mobile'] = mobile;
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/user/update-profile'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(body),
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update profile');
+    } catch (e) {
+      throw Exception('Error updating profile: $e');
+    }
+  }
+
+  // ================================================================
+  // == COMPLAINT ACTIONS (Assign, Escalate)
+  // ================================================================
+  static Future<void> assignComplaint(String complaintId, String assignedTo, {String? assignedToName, String? remarks}) async {
+    try {
+      final token = await getToken();
+      final response = await http.patch(
+        Uri.parse('$baseUrl/api/obhs/complaints/assign/$complaintId'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'assignedTo': assignedTo, 'assignedToName': assignedToName, 'remarks': remarks}),
+      );
+      if (response.statusCode != 200) {
+        final err = jsonDecode(response.body);
+        throw Exception(err['error'] ?? 'Failed to assign complaint');
+      }
+    } catch (e) {
+      throw Exception('Error assigning complaint: $e');
+    }
+  }
+
+  static Future<void> escalateComplaint(String complaintId, {String? escalationReason, String? escalatedTo}) async {
+    try {
+      final token = await getToken();
+      final response = await http.patch(
+        Uri.parse('$baseUrl/api/obhs/complaints/escalate/$complaintId'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'escalationReason': escalationReason, 'escalatedTo': escalatedTo}),
+      );
+      if (response.statusCode != 200) {
+        final err = jsonDecode(response.body);
+        throw Exception(err['error'] ?? 'Failed to escalate complaint');
+      }
+    } catch (e) {
+      throw Exception('Error escalating complaint: $e');
+    }
+  }
+
+  static Future<void> autoRouteComplaint(String complaintId) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/obhs/complaints/auto-route'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'complaintId': complaintId}),
+      );
+      if (response.statusCode != 200) {
+        final err = jsonDecode(response.body);
+        throw Exception(err['error'] ?? 'Failed to auto-route complaint');
+      }
+    } catch (e) {
+      throw Exception('Error auto-routing complaint: $e');
+    }
+  }
+
+  // ================================================================
+  // == AUDIT LOGS
+  // ================================================================
+  static Future<List<Map<String, dynamic>>> getAuditLogs({String? action, String? targetEntity, int limit = 50}) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{'limit': limit.toString()};
+      if (action != null) params['action'] = action;
+      if (targetEntity != null) params['targetEntity'] = targetEntity;
+      final uri = Uri.parse('$baseUrl/api/audit/logs').replace(queryParameters: params);
+      final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['logs'] ?? []);
+      }
+      throw Exception('Failed to fetch audit logs');
+    } catch (e) {
+      throw Exception('Error fetching audit logs: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getAuditLogStats() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/audit/logs/stats'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to fetch audit stats');
+    } catch (e) {
+      throw Exception('Error fetching audit stats: $e');
+    }
+  }
+
+  // ================================================================
+  // == INVOICE PDF DOWNLOAD
+  // ================================================================
+  static Future<String> getInvoicePdfUrl(String uid) async {
+    return '$baseUrl/api/billing/invoice-pdf/$uid';
+  }
 }

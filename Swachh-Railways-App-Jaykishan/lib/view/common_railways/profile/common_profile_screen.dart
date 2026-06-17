@@ -7,6 +7,9 @@ import '../../../../providers/auth_provider.dart';
 import '../../../controller/contractor_nav_controller.dart';
 import '../../onboarding_screens/login_screen.dart';
 import '../alert/common_alert_screen.dart';
+import 'profile_edit_screen.dart';
+import 'change_password_screen.dart';
+import '../settings/settings_screen.dart';
 
 class CommonProfileScreen extends StatefulWidget {
   const CommonProfileScreen({super.key,});
@@ -181,6 +184,21 @@ class _CommonProfileScreenState extends State<CommonProfileScreen> {
                   final navController = Get.find<ContractorNavController>();
                   navController.changeTab(4);
                   Navigator.pop(context);
+                }),
+            const SizedBox(height: 10),
+            _actionTile(Icons.edit_outlined, 'Edit Profile',
+                Colors.indigo.shade50, Colors.indigo, () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditScreen()));
+                }),
+            const SizedBox(height: 10),
+            _actionTile(Icons.lock_outline, 'Change Password',
+                Colors.orange.shade50, Colors.orange, () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()));
+                }),
+            const SizedBox(height: 10),
+            _actionTile(Icons.settings_outlined, 'Settings',
+                Colors.blueGrey.shade50, Colors.blueGrey, () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
                 }),
             const SizedBox(height: 10),
             _actionTile(Icons.notifications_outlined, 'Notifications',
