@@ -182,12 +182,34 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
   }
 
 
+  List<TrainModel> _applyFilters(List<TrainModel> trains) {
+    return trains.where((t) {
+      // First apply role-based filtering
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      if (user?.role == 'Railway Master' || user?.role == 'Contractor Master') {
+        if (user?.zone != null && t.zone != user?.zone) return false;
+      } else if (user?.role == 'Railway Admin' || user?.role == 'Contractor Admin') {
+        if (user?.zone != null && t.zone != user?.zone) return false;
+        if (user?.division != null && t.division != user?.division) return false;
+      } else if (user?.role == 'Railway Supervisor' || user?.role == 'Contractor Supervisor') {
+        if (user?.zone != null && t.zone != user?.zone) return false;
+        if (user?.division != null && t.division != user?.division) return false;
+        if (user?.depot != null && t.depot != null && t.depot != user?.depot) return false;
+      }
+      // Then apply manual filter selections
+      if (_selectedFilterZone != null && t.zone != _selectedFilterZone) return false;
+      if (_selectedFilterDivision != null && t.division != _selectedFilterDivision) return false;
+      if (_selectedFilterDepot != null && t.depot != null && t.depot != _selectedFilterDepot) return false;
+      return true;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
 
-    final filteredActiveTrains = _applyRoleBasedFiltering(activeTrains);
-    final filteredInactiveTrains = _applyRoleBasedFiltering(inactiveTrains);
+    final filteredActiveTrains = _applyFilters(activeTrains);
+    final filteredInactiveTrains = _applyFilters(inactiveTrains);
     activeCount = filteredActiveTrains.length;
     inactiveCount = filteredInactiveTrains.length;
 
@@ -389,8 +411,8 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _trainListView(activeTrains),
-                      _trainListView(inactiveTrains),
+                      _trainListView(filteredActiveTrains),
+                      _trainListView(filteredInactiveTrains),
                       _buildDraftsTab(),
                     ],
                   ),
