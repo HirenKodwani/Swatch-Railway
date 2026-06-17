@@ -1544,6 +1544,145 @@ app.get('/api/worker/profile', verifyToken, async (req, res) => {
 });
 
 // =======================================================
+// == API: Worker Statistics
+// =======================================================
+app.get('/api/worker/statistics', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.user;
+    const now = new Date();
+
+    // 1. Find active run instance for this worker
+    const runsSnapshot = await db.collection('RunInstance')
+      .where('status', 'in', ['Scheduled', 'Active'])
+      .get();
+
+    let activeRun = null;
+    runsSnapshot.forEach(doc => {
+      const runData = doc.data();
+      const assignedCoach = runData.coaches.find(c => c.workerId === uid);
+      if (assignedCoach && !activeRun) {
+        activeRun = { ...runData, runInstanceId: runData.runInstanceId || doc.id, coachType: assignedCoach.coachType };
+      }
+    });
+
+    // 2. Task counts — replicate board counting logic
+    let dueTasks = 0, overdueTasks = 0, completedTasks = 0, upcomingTasks = 0;
+
+    if (activeRun) {
+      const runInstanceId = activeRun.runInstanceId;
+      const coachType = activeRun.coachType || 'S2';
+
+      // Fetch completed tasks from obhs_tasks
+      const completedSnapshot = await db.collection('obhs_tasks')
+        .where('runInstanceId', '==', runInstanceId)
+        .get();
+      const completedTaskIds = new Set();
+      completedSnapshot.forEach(doc => { completedTaskIds.add(doc.data().uid); });
+
+      // Build task definitions same as board endpoint
+      const tripStartDate = new Date(activeRun.createdAt || now);
+      const toiletFreqs = [
+        { freq: 'Hour 1', startRel: 0, duration: 1 },
+        { freq: 'Hour 2', startRel: 1, duration: 1 },
+        { freq: 'Hour 3', startRel: 2, duration: 1 },
+        { freq: 'Hour 5', startRel: 4, duration: 2 },
+        { freq: 'Hour 7', startRel: 6, duration: 2 },
+        { freq: 'Hour 9', startRel: 8, duration: 2 },
+      ];
+      const coachCleaningFreqs = [
+        { freq: 'Train Start', startRel: 0, duration: 3 },
+        { freq: 'Mid Journey', startRel: 6, duration: 4 },
+        { freq: 'Train End', startRel: 12, duration: 3 },
+      ];
+      const linenFreqs = [
+        { freq: 'Initial Distribution', startRel: 0, duration: 4 },
+        { freq: 'Night Return Check', startRel: 10, duration: 4 },
+      ];
+
+      const taskDefs = [];
+      for (const coach of [coachType]) {
+        for (const f of toiletFreqs) taskDefs.push({ type: 'Toilet Cleaning', coach, ...f });
+        for (const f of coachCleaningFreqs) taskDefs.push({ type: 'Coach Cleaning', coach, ...f });
+        for (const f of linenFreqs) taskDefs.push({ type: 'Linen Distribution', coach, ...f });
+      }
+
+      taskDefs.forEach(task => {
+        const startTime = new Date(tripStartDate.getTime() + task.startRel * 60 * 60 * 1000);
+        const endTime = new Date(startTime.getTime() + task.duration * 60 * 60 * 1000);
+        const suffix = task.freq ? `_${task.freq.replace(/\s+/g, '')}` : '';
+        const generatedTaskId = `${runInstanceId}_${task.coach}_${task.type.replace(/\s+/g, '')}${suffix}`;
+
+        if (completedTaskIds.has(generatedTaskId)) {
+          completedTasks++;
+        } else if (now > endTime) {
+          overdueTasks++;
+        } else if (now >= startTime) {
+          dueTasks++;
+        } else {
+          upcomingTasks++;
+        }
+      });
+    }
+
+    // 3. Attendance counts for today
+    const today = now.toISOString().split('T')[0];
+    let attendancePercentage = 0;
+    try {
+      const attendanceSnapshot = await db.collection('obhs_attendance')
+        .where('workerId', '==', uid)
+        .where('date', '==', today)
+        .get();
+      const types = new Set();
+      attendanceSnapshot.forEach(doc => types.add(doc.data().type));
+      const expected = 3; // start, mid, end
+      attendancePercentage = Math.round((types.size / expected) * 100);
+    } catch (_) { /* ignore */ }
+
+    // 4. Complaints count for this worker
+    let complaintsRaised = 0;
+    try {
+      const complaintsSnapshot = await db.collection('obhs_complaints')
+        .where('submittedBy.uid', '==', uid)
+        .get();
+      complaintsRaised = complaintsSnapshot.size;
+    } catch (_) { /* ignore */ }
+
+    // 5. Average rating
+    let averageRating = 0;
+    try {
+      const ratingSnapshot = await db.collection('ratings')
+        .where('workerId', '==', uid)
+        .get();
+      let total = 0, count = 0;
+      ratingSnapshot.forEach(doc => {
+        const r = doc.data().rating || 0;
+        total += r;
+        count++;
+      });
+      averageRating = count > 0 ? Math.round((total / count) * 10) / 10 : 0;
+    } catch (_) { /* ignore */ }
+
+    res.status(200).json({
+      success: true,
+      statistics: {
+        dueTasks,
+        overdueTasks,
+        completedTasks,
+        upcomingTasks,
+        tasksCompleted: completedTasks,
+        attendancePercentage,
+        complaintsRaised,
+        averageRating
+      }
+    });
+
+  } catch (error) {
+    console.error('(Worker Statistics) Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch statistics', details: error.message });
+  }
+});
+
+// =======================================================
 // == FORGOT PASSWORD WORKFLOW (Mobile)
 // =======================================================
 
@@ -3440,39 +3579,7 @@ app.delete('/api/run-instances/:runInstanceId', verifyToken, async (req, res) =>
 // Old board + submit handlers removed (they queried task_instances and
 // conflicted with the newer OBHS handlers at ~line 7957+ that use obhs_tasks).
 
-// 3. Raise Complaint / Report Issue (Worker)
-app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
-  try {
-    const workerId = req.user.uid;
-    const workerName = req.user.name || req.user.fullName || 'Unknown';
-    const { runInstanceId, coachNo, category, description, photoUrl } = req.body;
-
-    if (!runInstanceId || !coachNo || !category) {
-      return res.status(400).json({ error: 'Missing required fields (runInstanceId, coachNo, category)' });
-    }
-
-    const complaintRef = db.collection('complaints').doc();
-    const newComplaint = {
-      complaintId: complaintRef.id,
-      runInstanceId,
-      coachNo,
-      category,
-      description: description || '',
-      photoUrl: photoUrl || null,
-      raisedBy: workerId,
-      raisedByName: workerName,
-      status: 'OPEN',
-      createdAt: new Date().toISOString(),
-    };
-
-    await complaintRef.set(newComplaint);
-
-    res.status(201).json({ success: true, message: 'Complaint raised successfully', data: newComplaint });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
+// 3. Raise Complaint / Report Issue (Worker) — handled at ~line 8446
 // 3. Get Pending Review Tasks for Supervisor
 app.get('/api/tasks/pending-review', verifyToken, async (req, res) => {
   try {
@@ -8445,7 +8552,7 @@ app.get('/api/obhs/tasks/pending-routing', verifyToken, async (req, res) => {
 // NOTE: "verifyToken" aapke JWT verification middleware ka naam hona chahiye
 app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
   try {
-    const { coachNo, category, description, photoUrl } = req.body;
+    const { runInstanceId: bodyRunInstanceId, coachNo, category, description, photoUrl } = req.body;
 
     // 1. Input Fields Validation
     if (!coachNo || !category || !description) {
@@ -8469,12 +8576,13 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
     const workerName = workerUser.fullName || "Testing";
 
     // 3. Resilient RunInstance Logic (Fallback mechanism)
-    let runInstanceId = workerUser.activeRunInstanceId;
+    // Priority: body > token > DB fallback
+    let runInstanceId = bodyRunInstanceId || workerUser.activeRunInstanceId;
 
-    // Fallback: Agar session/token purana hai aur runInstanceId nahi mila, 
+    // Fallback: Agar body ya token mein runInstanceId nahi mila, 
     // toh live database (RunInstance collection) se fetch karo jahan workerId matched ho.
     if (!runInstanceId) {
-      console.log(`(Complaint) activeRunInstanceId missing in token for worker ${workerId}. Fetching from DB...`);
+      console.log(`(Complaint) runInstanceId missing in request & token for worker ${workerId}. Fetching from DB...`);
       
       const runInstanceSnapshot = await db.collection('RunInstance')
         .where('status', 'in', ['Scheduled', 'Active'])
