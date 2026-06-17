@@ -2077,10 +2077,10 @@ app.get('/api/contractors', verifyToken, async (req, res) => {
 
       if (isFilteredByContract) {
         const contractSnap = await contractQuery.get();
-        if (contractSnap.empty) {
-          return res.status(200).json({ count: 0, contractors: [] });
+        if (!contractSnap.empty) {
+          finalEntityIds = [...new Set(contractSnap.docs.map(doc => doc.data().entityId))];
         }
-        finalEntityIds = [...new Set(contractSnap.docs.map(doc => doc.data().entityId))];
+        // When no contracts exist yet, skip entityId filter so all approved entities show up
       }
     }
 
@@ -2090,7 +2090,7 @@ app.get('/api/contractors', verifyToken, async (req, res) => {
       if (!entityId) return res.status(403).send({ error: "Entity ID missing." });
       entityQuery = entityQuery.where('uid', '==', entityId);
     }
-    else if (isFilteredByContract) {
+    else if (isFilteredByContract && finalEntityIds.length > 0) {
       entityQuery = entityQuery.where('uid', 'in', finalEntityIds.slice(0, 30));
     }
 
