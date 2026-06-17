@@ -125,7 +125,12 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => isLoadingStations = false);
+      if (mounted) {
+        setState(() => isLoadingStations = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load stations: $e'), backgroundColor: kErrorRed),
+        );
+      }
     }
   }
 
@@ -144,7 +149,12 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => isLoadingAreas = false);
+      if (mounted) {
+        setState(() => isLoadingAreas = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load areas: $e'), backgroundColor: kErrorRed),
+        );
+      }
     }
   }
 
@@ -161,7 +171,12 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => isLoadingZones = false);
+      if (mounted) {
+        setState(() => isLoadingZones = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load zones: $e'), backgroundColor: kErrorRed),
+        );
+      }
     }
   }
 

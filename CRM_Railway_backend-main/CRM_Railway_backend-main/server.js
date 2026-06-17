@@ -9861,18 +9861,18 @@ app.get('/api/stations/list', verifyToken, async (req, res) => {
     const { zone, division, category, active } = req.query;
     const { role, zone: userZone, division: userDiv } = req.user;
     const userRole = (role || '').toLowerCase();
-    let query = db.collection('stations');
-    if (!userRole.includes('master')) {
-      if (division) query = query.where('division', '==', division);
-      else query = query.where('division', '==', userDiv);
-    }
-    if (zone) query = query.where('zone', '==', zone);
-    if (category) query = query.where('category', '==', category);
-    if (active !== undefined) query = query.where('active', '==', active === 'true');
-    const snapshot = await query.get();
-    const stations = [];
+    // Fetch all stations and filter in-memory to avoid composite index requirements
+    const snapshot = await db.collection('stations').get();
+    let stations = [];
     snapshot.forEach(doc => stations.push(doc.data()));
-    // Sort in-memory to avoid composite index requirement
+    // Apply filters in-memory
+    if (!userRole.includes('master')) {
+      const divFilter = division || userDiv;
+      if (divFilter) stations = stations.filter(s => s.division === divFilter);
+    }
+    if (zone) stations = stations.filter(s => s.zone === zone);
+    if (category) stations = stations.filter(s => s.category === category);
+    if (active !== undefined) stations = stations.filter(s => s.active === (active === 'true'));
     stations.sort((a, b) => (a.stationName || '').localeCompare(b.stationName || ''));
     res.status(200).json({ count: stations.length, stations });
   } catch (error) {
@@ -9926,12 +9926,12 @@ app.get('/api/station-zone/list/:stationId', verifyToken, async (req, res) => {
   try {
     const { stationId } = req.params;
     const { areaId } = req.query;
-    let query = db.collection('stationZones').where('stationId', '==', stationId);
-    if (areaId) query = query.where('areaId', '==', areaId);
-    const snapshot = await query.get();
+    const snapshot = await db.collection('stationZones').where('stationId', '==', stationId).get();
     const zones = [];
     snapshot.forEach(doc => zones.push(doc.data()));
-    res.status(200).json({ count: zones.length, zones });
+    // Filter by areaId in-memory to avoid composite index requirement
+    const filtered = areaId ? zones.filter(z => z.areaId === areaId) : zones;
+    res.status(200).json({ count: filtered.length, zones: filtered });
   } catch (error) {
     res.status(500).send({ error: 'Failed to fetch zones', details: error.message });
   }
