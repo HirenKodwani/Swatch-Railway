@@ -3410,6 +3410,30 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
     });
   }
 });
+
+// DELETE /api/run-instances/:runInstanceId — Delete a run instance
+app.delete('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const ref = db.collection('RunInstance').doc(runInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Run instance not found' });
+    }
+    const data = doc.data();
+    await ref.delete();
+    // If the instance had a linked TrainPair, reset its status
+    if (data && data.instanceId) {
+      try {
+        await db.collection('TrainPairs').doc(data.instanceId).update({ status: 'Available' });
+      } catch (_) {}
+    }
+    res.status(200).json({ success: true, message: 'Run instance deleted successfully' });
+  } catch (error) {
+    console.error('(RunInstance) Error deleting:', error);
+    res.status(500).json({ error: 'Failed to delete run instance', details: error.message });
+  }
+});
 // =======================================================
 // == OBHS TASK APIs — superseded by newer handlers below
 // =======================================================
@@ -9486,9 +9510,10 @@ app.get('/api/billing/reports', verifyToken, async (req, res) => {
     if (month) query = query.where('month', '==', parseInt(month));
     if (year) query = query.where('year', '==', parseInt(year));
 
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await query.get();
     const reports = [];
     snapshot.forEach(doc => reports.push(doc.data()));
+    reports.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
 
     res.status(200).json({ count: reports.length, reports });
   } catch (error) {
@@ -9692,12 +9717,12 @@ app.get('/api/billing/contractor', verifyToken, async (req, res) => {
 
     const reportSnapshot = await db.collection('billingReports')
       .where('entityId', '==', entityId)
-      .orderBy('createdAt', 'desc')
-      .limit(12)
       .get();
 
     const reports = [];
     reportSnapshot.forEach(doc => reports.push(doc.data()));
+    reports.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
+    const recentReports = reports.slice(0, 12);
 
     let pendingAmount = 0;
     let approvedAmount = 0;
@@ -9714,7 +9739,7 @@ app.get('/api/billing/contractor', verifyToken, async (req, res) => {
       pendingAmount,
       approvedAmount,
       totalDeductions,
-      recentBills: reports.slice(0, 5),
+      recentBills: recentReports.slice(0, 5),
       configList: configs
     });
   } catch (error) {
@@ -9738,12 +9763,12 @@ app.get('/api/billing/supervisor', verifyToken, async (req, res) => {
 
     const reportSnapshot = await db.collection('billingReports')
       .where('division', '==', division)
-      .orderBy('createdAt', 'desc')
-      .limit(20)
       .get();
 
     const reports = [];
     reportSnapshot.forEach(doc => reports.push(doc.data()));
+    reports.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
+    const recentReports = reports.slice(0, 20);
 
     let totalPenalties = 0;
     let pendingCount = 0;
@@ -11203,34 +11228,107 @@ app.get('/api/billing/invoice-pdf/:uid', verifyToken, async (req, res) => {
 // =======================================================
 // == CENTRALIZED AUDIT LOG
 // =======================================================
-// GET /api/audit/logs — Query audit logs
+// GET /api/audit/logs — Query audit logs (aggregated from centralized collection + form documents)
 app.get('/api/audit/logs', verifyToken, async (req, res) => {
   try {
     const { action, targetEntity, targetUser, limit: limitParam, offset: offsetParam } = req.query;
-    let query = db.collection('auditLogs').orderBy('timestamp', 'desc');
-    if (action) query = query.where('action', '==', action);
-    if (targetEntity) query = query.where('targetEntity', '==', targetEntity);
-    if (targetUser) query = query.where('targetUser', '==', targetUser);
     const maxLimit = Math.min(parseInt(limitParam) || 50, 200);
-    const snapshot = await query.limit(maxLimit).get();
+
+    // 1. Fetch from centralized auditLogs collection
+    let centralQuery = db.collection('auditLogs').orderBy('timestamp', 'desc');
+    if (action) centralQuery = centralQuery.where('action', '==', action);
+    if (targetEntity) centralQuery = centralQuery.where('targetEntity', '==', targetEntity);
+    if (targetUser) centralQuery = centralQuery.where('targetUser', '==', targetUser);
+    const centralSnapshot = await centralQuery.limit(maxLimit).get();
     const logs = [];
-    snapshot.forEach(doc => logs.push(doc.data()));
-    res.status(200).json({ count: logs.length, logs });
+    centralSnapshot.forEach(doc => logs.push(doc.data()));
+
+    // 2. Fetch embedded audit logs from form collections for comprehensive view
+    const formCollections = ['coachForms', 'premisesForms', 'stationCleaningForms'];
+    const formPromises = formCollections.map(collName => {
+      let q = db.collection(collName).orderBy('updatedAt', 'desc').limit(50);
+      if (targetEntity === 'cleaning_form' || targetEntity === 'CleaningForm') {
+        // no additional filter
+      }
+      return q.get();
+    });
+    const formSnapshots = await Promise.allSettled(formPromises);
+    const formAuditLogs = [];
+    for (const result of formSnapshots) {
+      if (result.status !== 'fulfilled') continue;
+      result.value.forEach(doc => {
+        const data = doc.data();
+        if (data.auditLog && Array.isArray(data.auditLog)) {
+          for (const entry of data.auditLog) {
+            if (entry && entry.action) {
+              if (action && entry.action !== action) continue;
+              if (targetUser && entry.performedBy !== targetUser) continue;
+              formAuditLogs.push({
+                ...entry,
+                _source: collName,
+                _formId: data.uid || doc.id,
+                _formType: data.formType || collName,
+                timestamp: entry.timestamp || data.updatedAt || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // 3. Merge and sort by timestamp desc
+    logs.push(...formAuditLogs);
+    logs.sort((a, b) => {
+      const tA = a.timestamp || '';
+      const tB = b.timestamp || '';
+      return tB.localeCompare(tA);
+    });
+
+    // 4. Apply limit
+    const limited = logs.slice(0, maxLimit);
+
+    res.status(200).json({ count: limited.length, logs: limited });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch audit logs', details: error.message });
   }
 });
 
-// GET /api/audit/logs/stats — Audit log summary stats
+// GET /api/audit/logs/stats — Audit log summary stats (aggregated)
 app.get('/api/audit/logs/stats', verifyToken, async (req, res) => {
   try {
-    const snapshot = await db.collection('auditLogs').get();
+    const centralSnapshot = await db.collection('auditLogs').get();
     const stats = {};
-    snapshot.forEach(doc => {
+    centralSnapshot.forEach(doc => {
       const d = doc.data();
       stats[d.action] = (stats[d.action] || 0) + 1;
     });
-    res.status(200).json({ stats, total: snapshot.size });
+
+    // Also aggregate from form collections
+    const formCollections = ['coachForms', 'premisesForms', 'stationCleaningForms'];
+    const formPromises = formCollections.map(collName =>
+      db.collection(collName).get()
+    );
+    const formSnapshots = await Promise.allSettled(formPromises);
+    for (const result of formSnapshots) {
+      if (result.status !== 'fulfilled') continue;
+      result.value.forEach(doc => {
+        const data = doc.data();
+        if (data.auditLog && Array.isArray(data.auditLog)) {
+          for (const entry of data.auditLog) {
+            if (entry && entry.action) {
+              stats[entry.action] = (stats[entry.action] || 0) + 1;
+            }
+          }
+        }
+      });
+    }
+
+    let total = 0;
+    for (const key of Object.keys(stats)) {
+      total += stats[key];
+    }
+
+    res.status(200).json({ stats, total });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch audit stats', details: error.message });
   }

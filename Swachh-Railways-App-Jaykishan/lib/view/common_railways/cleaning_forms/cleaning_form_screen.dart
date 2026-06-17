@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:crm_train/model/cleaning_form_models.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
+import 'package:crm_train/repositories/worker_repo.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 
@@ -727,6 +729,27 @@ class _CleaningFormScreenState extends State<CleaningFormScreen> {
     );
   }
 
+  final ImagePicker _imagePicker = ImagePicker();
+
+  Future<void> _pickAndUploadPhoto(List<String> photos) async {
+    final XFile? image = await _imagePicker.pickImage(source: ImageSource.camera, imageQuality: 70);
+    if (image == null) return;
+    try {
+      final url = await WorkerRepository.uploadMedia(image.path);
+      if (mounted && url.isNotEmpty) {
+        setState(() {
+          photos.add(url);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload photo: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    }
+  }
+
   Widget _buildPhotoList(String label, List<String> photos) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -736,11 +759,7 @@ class _CleaningFormScreenState extends State<CleaningFormScreen> {
           children: [
             Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  photos.add('placeholder_${photos.length + 1}.jpg');
-                });
-              },
+              onPressed: () => _pickAndUploadPhoto(photos),
               icon: const Icon(Icons.add_a_photo, size: 16),
               label: const Text('Add Photo'),
             ),
@@ -762,9 +781,8 @@ class _CleaningFormScreenState extends State<CleaningFormScreen> {
                 label: Text('Photo ${idx + 1}', style: const TextStyle(fontSize: 12)),
                 deleteIcon: const Icon(Icons.close, size: 16),
                 onDeleted: () => setState(() => photos.removeAt(idx)),
-                avatar: CircleAvatar(
-                  backgroundColor: kRailwayBlue.withOpacity(0.1),
-                  child: const Icon(Icons.image, size: 14, color: kRailwayBlue),
+                avatar: ClipOval(
+                  child: Image.network(url, width: 28, height: 28, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 14)),
                 ),
               );
             }).toList(),

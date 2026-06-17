@@ -1,7 +1,9 @@
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/repositories/worker_repo.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -53,13 +55,24 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
   Future<void> _pickPhoto(bool isBefore) async {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70);
     if (image != null) {
-      setState(() {
-        if (isBefore) {
-          _beforePhotoUrl = image.path; // In a real app, upload this to a server and get URL
-        } else {
-          _afterPhotoUrl = image.path;
+      try {
+        final url = await WorkerRepository.uploadMedia(image.path);
+        if (mounted && url.isNotEmpty) {
+          setState(() {
+            if (isBefore) {
+              _beforePhotoUrl = url;
+            } else {
+              _afterPhotoUrl = url;
+            }
+          });
         }
-      });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to upload photo: $e'), backgroundColor: kErrorRed),
+          );
+        }
+      }
     }
   }
 
