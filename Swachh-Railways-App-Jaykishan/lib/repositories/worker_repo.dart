@@ -827,5 +827,42 @@ class WorkerRepository {
       return {'success': true, 'data': []};
     }
   }
+
+  static Future<Map<String, dynamic>> verifyFace({
+    required String image1Url,
+    required String image2Url,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/api/verifyFace'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'image1Url': image1Url,
+            'image2Url': image2Url,
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 400) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(
+          ApiErrorHandler.getErrorMessage(response.body, response.statusCode),
+        );
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
 }
 

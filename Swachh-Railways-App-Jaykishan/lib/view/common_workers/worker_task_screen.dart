@@ -773,118 +773,114 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: keyboardHeight),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.task.taskName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Coach ${widget.task.coachId}',
-                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // Progress Indicator
-              _buildProgressIndicator(),
-              const SizedBox(height: 20),
-              // Content
-              if (currentStep == 0)
-                _buildBeforePhotoStep()
-              else if (currentStep == 1)
-                _buildCommentStep()
-              else if (currentStep == 2)
-                _buildAfterPhotoStep()
-              else
-                _buildSummaryStep(),
-              const SizedBox(height: 20),
-              // Action Buttons
-              Row(
-                children: [
-                  if (currentStep > 0)
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          setState(() => currentStep--);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          side: const BorderSide(color: Colors.grey),
-                        ),
-                        child: const Text('Back'),
-                      ),
-                    ),
-                  if (currentStep > 0) const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _canProceed() && !isSubmitting
-                          ? () {
-                              if (currentStep < 3) {
-                                setState(() => currentStep++);
-                              } else {
-                                _submitTask();
-                              }
-                            }
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kRailwayBlue,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        isSubmitting
-                            ? 'Submitting...'
-                            : currentStep == 3
-                            ? 'Submit Task'
-                            : 'Next',
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.task.taskName,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: Colors.black87,
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Coach ${widget.task.coachId}',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Progress Indicator
+            _buildProgressIndicator(),
+            const SizedBox(height: 20),
+            // Content
+            if (currentStep == 0)
+              _buildBeforePhotoStep()
+            else if (currentStep == 1)
+              _buildCommentStep()
+            else if (currentStep == 2)
+              _buildAfterPhotoStep()
+            else
+              _buildSummaryStep(),
+            const SizedBox(height: 20),
+            // Action Buttons
+            Row(
+              children: [
+                if (currentStep > 0)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        setState(() => currentStep--);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: Colors.grey),
+                      ),
+                      child: const Text('Back'),
+                    ),
+                  ),
+                if (currentStep > 0) const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _canProceed() && !isSubmitting
+                        ? () {
+                            if (currentStep < 3) {
+                              setState(() => currentStep++);
+                            } else {
+                              _submitTask();
+                            }
+                          }
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kRailwayBlue,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      isSubmitting
+                          ? 'Submitting...'
+                          : currentStep == 3
+                          ? 'Submit Task'
+                          : 'Next',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            // Spacing for on-screen keyboard so focused fields are scrollable into view
+            SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+          ],
         ),
       ),
     );

@@ -24,11 +24,55 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
+const validateEnvironment = () => {
+  const required = {
+    'JWT_SECRET': 'JWT secret for authentication',
+    'RESEND_API_KEY': 'Email service API key',
+    'TWOF_API_KEY': '2Factor.in API key for SMS OTP',
+    'AWS_ACCESS_KEY_ID': 'AWS access key for Rekognition',
+    'AWS_SECRET_ACCESS_KEY': 'AWS secret key for Rekognition'
+  };
+
+  const missing = [];
+  const warnings = [];
+
+  for (const [key, description] of Object.entries(required)) {
+    if (!process.env[key]) {
+      missing.push(`${key} (${description})`);
+    }
+  }
+
+  if (!process.env.TWILIO_ACCOUNT_SID) {
+    warnings.push('TWILIO_ACCOUNT_SID - SMS features will not work');
+  }
+  if (!process.env.SENDGRID_API_KEY) {
+    warnings.push('SENDGRID_API_KEY - Some email features may not work');
+  }
+
+  if (missing.length > 0) {
+    console.error('❌ CRITICAL: Missing required environment variables:');
+    missing.forEach(item => console.error(`   - ${item}`));
+    console.error('\nPlease add these to your .env file and restart the server.');
+    process.exit(1);
+  }
+
+  if (warnings.length > 0) {
+    console.warn('⚠️ WARNING: Optional environment variables missing:');
+    warnings.forEach(item => console.warn(`   - ${item}`));
+  }
+
+  console.log('✅ Environment validation passed');
+};
+
+validateEnvironment();
+
 console.log("--- DEBUGGING .env VARIABLES ---");
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const client = twilio(accountSid, authToken);
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 
 const app = express();
@@ -60,6 +104,14 @@ const verifyToken = async (req, res, next) => {
 
     const userData = userDoc.data();
 
+    let entityDetails = null;
+    if (userData.entityId) {
+      const entityDoc = await db.collection('entities').doc(userData.entityId).get();
+      if (entityDoc.exists) {
+        entityDetails = entityDoc.data();
+      }
+    }
+
     req.user = {
       uid: decoded.uid,
       email: decoded.email,
@@ -70,7 +122,9 @@ const verifyToken = async (req, res, next) => {
       division: userData.division,
       depot: userData.depot,
       userType: userData.userType,
-      entityId: userData.entityId
+      entityId: userData.entityId,
+      entityName: entityDetails?.companyName || null,
+      entityDetails: entityDetails
     };
 
     next();
@@ -126,16 +180,14 @@ async function getDailyReportData() {
 
             const premisesData = premisesSnapshot.docs.map(d => d.data());
 
-            if (coachData.length > 0 || premisesData.length > 0) {
-                console.log(`Data found! Generating files for ${adminDivision} division...`);
-                
-                const coachBuffer = await generateCoachExcelBuffer(coachData);
-                const premisesBuffer = await generatePremisesExcelBuffer(premisesData);
+            // Always send email, even if no data
+            const coachBuffer = coachData.length > 0 ? await generateCoachExcelBuffer(coachData) : null;
+            const premisesBuffer = premisesData.length > 0 ? await generatePremisesExcelBuffer(premisesData) : null;
 
-                await sendEmailWithAttachments(adminEmail, adminDivision, coachBuffer, premisesBuffer);
-            } else {
-                console.log(`No data found for ${adminDivision} on ${today.toDateString()}`);
-            }
+            await sendEmailWithAttachments(adminEmail, adminDivision, coachBuffer, premisesBuffer, {
+                coachCount: coachData.length,
+                premisesCount: premisesData.length
+            });
         }
     } catch (error) {
         console.error("Error in Automated Reporting Loop:", error);
@@ -228,10 +280,12 @@ async function generatePremisesExcelBuffer(data) {
 }
 
 // --- STEP 4.1: FINAL EMAIL LOGIC WITH VERIFIED DOMAIN ---
-async function sendEmailWithAttachments(email, division, coachBuffer, premisesBuffer) {
+async function sendEmailWithAttachments(email, division, coachBuffer, premisesBuffer, stats = { coachCount: 0, premisesCount: 0 }) {
     const todayDate = new Date().toISOString().split('T')[0];
 
     try {
+        const hasData = stats.coachCount > 0 || stats.premisesCount > 0;
+        
         await resend.emails.send({
             // Using your verified domain
             from: 'Swachh Railways <reports@swachhrailways.com>', 
@@ -243,17 +297,31 @@ async function sendEmailWithAttachments(email, division, coachBuffer, premisesBu
                     
                     <p>Dear Admin,</p>
                     
-                    <p>Please find the automated cleaning performance reports for the <b>${division}</b> division. These reports include all forms submitted and locked today, <b>${todayDate}</b>.</p>
+                    <p>Please find the automated cleaning performance reports for the <b>${division}</b> division.</p>
                     
                     <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #1F4E78; margin: 20px 0;">
-                        <p style="margin: 0; font-weight: bold;">Attached Files:</p>
+                        <p style="margin: 0; font-weight: bold;">Summary for ${todayDate}:</p>
                         <ul style="margin: 10px 0 0 0;">
-                            <li>Coach Cleaning Detailed Report (.xlsx)</li>
-                            <li>Premises Cleaning Detailed Report (.xlsx)</li>
+                            <li>Coach Forms: ${stats.coachCount}</li>
+                            <li>Premises Forms: ${stats.premisesCount}</li>
                         </ul>
                     </div>
 
-                    <p>Please review the attachments for specific coach numbers, location scores, and penalty details.</p>
+                    ${hasData ? `
+                        <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #1F4E78; margin: 20px 0;">
+                            <p style="margin: 0; font-weight: bold;">Attached Files:</p>
+                            <ul style="margin: 10px 0 0 0;">
+                                ${stats.coachCount > 0 ? '<li>Coach Cleaning Detailed Report (.xlsx)</li>' : ''}
+                                ${stats.premisesCount > 0 ? '<li>Premises Cleaning Detailed Report (.xlsx)</li>' : ''}
+                            </ul>
+                        </div>
+                    ` : `
+                        <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+                            <p style="margin: 0; color: #856404;">
+                                ⚠️ No forms were submitted today. Please check if forms are being created properly.
+                            </p>
+                        </div>
+                    `}
                     
                     <p style="margin-top: 30px; font-size: 0.85em; color: #888; border-top: 1px solid #eee; padding-top: 15px;">
                         <i>This is an automated message generated by the Swachh Railways System. Please do not reply to this email.</i>
@@ -264,14 +332,8 @@ async function sendEmailWithAttachments(email, division, coachBuffer, premisesBu
                 </div>
             `,
             attachments: [
-                {
-                    filename: `Coach_Report_${division}_${todayDate}.xlsx`,
-                    content: coachBuffer.toString('base64'),
-                },
-                {
-                    filename: `Premises_Report_${division}_${todayDate}.xlsx`,
-                    content: premisesBuffer.toString('base64'),
-                }
+                ...(coachBuffer ? [{ filename: `Coach_Report_${division}_${todayDate}.xlsx`, content: coachBuffer.toString('base64') }] : []),
+                ...(premisesBuffer ? [{ filename: `Premises_Report_${division}_${todayDate}.xlsx`, content: premisesBuffer.toString('base64') }] : [])
             ],
         });
         console.log(`Report successfully emailed to Admin: ${email} (${division})`);
@@ -1487,6 +1549,10 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
     const { mobile } = req.body;
     if (!mobile) return res.status(400).send({ error: "Mobile number is required." });
 
+    if (!/^\d{10}$/.test(mobile)) {
+      return res.status(400).send({ error: "Invalid mobile number. Must be 10 digits." });
+    }
+
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('mobile', '==', mobile).limit(1).get();
 
@@ -1496,10 +1562,13 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-
     otpStore.set(`RESET_${mobile}`, otp);
-
     setTimeout(() => otpStore.delete(`RESET_${mobile}`), 300000);
+
+    if (!process.env.TWILIO_PHONE_NUMBER) {
+      console.error('❌ TWILIO_PHONE_NUMBER not configured');
+      return res.status(500).send({ error: "SMS service not configured" });
+    }
 
     const formattedPhone = `+91${mobile}`;
     await client.messages.create({
@@ -1513,6 +1582,9 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
 
   } catch (error) {
     console.error('(ForgotPwd) Error sending OTP:', error);
+    if (error.code === 21211) {
+      return res.status(400).send({ error: "Invalid phone number format." });
+    }
     res.status(500).send({ error: 'Failed to send OTP', details: error.message });
   }
 });
@@ -1606,17 +1678,27 @@ app.post('/api/auth/forgot-password/email/send-otp', async (req, res) => {
     otpStore.set(`RESET_EMAIL_${email}`, otp);
 
     setTimeout(() => otpStore.delete(`RESET_EMAIL_${email}`), 300000);
-    const msg = {
-      to: email,
-      from: process.env.SENDGRID_FROM_EMAIL,
-      subject: 'Password Reset OTP',
-      text: `Your Password Reset OTP is: ${otp}. It is valid for 5 minutes.`,
-      html: `<h3>Password Reset Request</h3>
-            <p>Your OTP code is: <strong>${otp}</strong></p>
-            <p>It is valid for 5 minutes. If you did not request this, please ignore.</p>`,
-    };
 
-    await sgMail.send(msg);
+    const { data, error } = await resend.emails.send({
+      from: 'Swachh Railways <auth@swachhrailways.com>',
+      to: [email],
+      subject: 'Password Reset OTP - Swachh Railways',
+      html: `
+        <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px; border-radius: 10px;">
+          <h2 style="color: #2c3e50;">Password Reset Request</h2>
+          <p>Your One-Time Password (OTP) for password reset is:</p>
+          <h1 style="color: #e67e22; letter-spacing: 5px;">${otp}</h1>
+          <p>This code is valid for <b>5 minutes</b>. Please do not share this with anyone.</p>
+          <hr style="border: 0; border-top: 1px solid #eee;" />
+          <p style="font-size: 12px; color: #7f8c8d;">If you didn't request this, please ignore this email.</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('(Resend) ERROR:', error);
+      return res.status(400).json({ error: "Failed to send email via Resend", details: error });
+    }
 
     console.log(`(ForgotPwd) Email OTP ${otp} sent to ${email}`);
     res.status(200).json({ message: "OTP sent to your registered email." });
@@ -2777,7 +2859,7 @@ app.post('/api/trains', verifyToken, async (req, res) => {
 // == HELPER: Auto-generate OBHS Tasks for Run Instance
 // =======================================================
 async function generateTaskInstancesForRun(runData) {
-  const defaultTasks = [
+  let defaultTasks = [
     { name: 'Toilet Cleaning & Disinfection', type: 'Toilet' },
     { name: 'Compartment Mopping & Dry Cleaning', type: 'Compartment' },
     { name: 'Garbage Collection & Disposal', type: 'General' },
@@ -2785,11 +2867,20 @@ async function generateTaskInstancesForRun(runData) {
     { name: 'Doorway & Vestibule Cleaning', type: 'General' }
   ];
 
+  try {
+    const trainDoc = await db.collection('trains').doc(runData.parentTrainId).get();
+    if (trainDoc.exists && trainDoc.data().taskTemplates) {
+      defaultTasks = trainDoc.data().taskTemplates;
+    }
+  } catch (error) {
+    console.log('Using default task templates');
+  }
+
   const batch = db.batch();
   let taskCount = 0;
 
   for (const coach of runData.coaches) {
-    if (!coach.workerId) continue; // Only generate if worker assigned
+    if (!coach.workerId) continue;
 
     for (const template of defaultTasks) {
       const taskRef = db.collection('task_instances').doc();
@@ -3359,15 +3450,23 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
     const snapshot = await db.collection('task_instances')
       .where('runInstanceId', '==', runInstanceId)
       .where('workerId', '==', workerId)
-      .where('coachId', '==', coachNo)
-      // taskType from frontend is sometimes the title/category. Let's match by taskType or taskName in DB
       .get();
 
     let taskDoc = null;
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (data.taskName === taskType || data.taskType === taskType) {
-        taskDoc = doc;
+      const dbCoachId = String(data.coachId || '').trim().toLowerCase();
+      const reqCoachNo = String(coachNo).trim().toLowerCase();
+
+      // Match coach (e.g. '2' matches 2, '2' matches '2', and '2' matches 'coach 2')
+      if (dbCoachId === reqCoachNo || dbCoachId.includes(reqCoachNo) || reqCoachNo.includes(dbCoachId)) {
+        const dbTaskName = (data.taskName || '').toLowerCase();
+        const dbTaskType = (data.taskType || '').toLowerCase();
+        const reqTaskType = taskType.toLowerCase();
+
+        if (dbTaskName === reqTaskType || dbTaskType === reqTaskType || dbTaskName.includes(reqTaskType) || reqTaskType.includes(dbTaskType)) {
+          taskDoc = doc;
+        }
       }
     });
 
@@ -5559,22 +5658,48 @@ app.get('/api/filter/supervisors', verifyToken, async (req, res) => {
 const checkAndApprove = async (collectionName) => {
   try {
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    
     const snapshot = await db.collection(collectionName)
       .where('status', '==', 'SCORED')
-      .where('ratedAt', '<=', admin.firestore.Timestamp.fromDate(thirtyMinAgo))
       .get();
 
     if (snapshot.empty) return;
 
     const batch = db.batch();
+    let approvedCount = 0;
+
     snapshot.forEach(doc => {
-      batch.update(doc.ref, {
-        status: 'AUTO-APPROVED',
-        completedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      const data = doc.data();
+      let shouldApprove = false;
+      
+      if (data.ratedAt) {
+        let ratedDate;
+        if (typeof data.ratedAt.toDate === 'function') {
+          ratedDate = data.ratedAt.toDate();
+        } else {
+          ratedDate = new Date(data.ratedAt);
+        }
+        
+        if (!isNaN(ratedDate.getTime()) && ratedDate < thirtyMinAgo) {
+          shouldApprove = true;
+        }
+      }
+      
+      if (shouldApprove) {
+        batch.update(doc.ref, {
+          status: 'AUTO-APPROVED',
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+          autoApprovedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        approvedCount++;
+      }
     });
-    await batch.commit();
-    console.log(`[Cron] Auto-approved ${snapshot.size} forms in ${collectionName}`);
+
+    if (approvedCount > 0) {
+      await batch.commit();
+      console.log(`[Cron] Auto-approved ${approvedCount} forms in ${collectionName}`);
+    }
+
   } catch (e) {
     if (e.code !== 'FAILED_PRECONDITION') console.error(`[Cron Error] Form Approval:`, e.message);
   }
@@ -5652,7 +5777,7 @@ setInterval(() => {
   checkContractExpiry();
 }, 600000); 
 // =======================================================
-// == 14. TRAIN WISE PERFORMANCE REPORT API (New)
+// == 16. COACH CLEANING STATS API (FINAL: GRADES + OPS BREAKDOWN)
 // =======================================================
 
 app.get('/api/reports/train-performance', verifyToken, async (req, res) => {
@@ -5866,7 +5991,7 @@ app.get("/api/stats/system-overview", async (req, res) => {
         
         let decoded;
         try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
         } catch (err) {
             return res.status(401).json({ success: false, error: "Invalid or expired token" });
         }
@@ -7361,13 +7486,19 @@ app.get('/api/reports/cts-data', verifyToken, async (req, res) => {
 //const axios = require('axios');
 
 // AWS Rekognition Client Initialization
-const rekognition = new RekognitionClient({
-  region: process.env.AWS_REGION || "ap-south-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
+let rekognition;
+try {
+  rekognition = new RekognitionClient({
+    region: process.env.AWS_REGION || "ap-south-1",
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    }
+  });
+  console.log('✅ AWS Rekognition initialized');
+} catch (error) {
+  console.error('❌ Failed to initialize AWS Rekognition:', error.message);
+}
 
 /**
  * Core AWS Helper: Fetches remote images as binary buffers and evaluates face structures.
@@ -7602,6 +7733,80 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('(OBHS Attendance Engine) Thread Exception:', error);
     res.status(500).send({ error: 'Failed to process attendance lifecycle', details: error.message });
+  }
+});
+
+// =======================================================
+// == API 4.7.2: Standalone Face Comparison / Verification APIs
+// =======================================================
+app.post('/api/obhs/attendance/verify-face', verifyToken, async (req, res) => {
+  try {
+    const { image1Url, image2Url } = req.body;
+    if (!image1Url || !image2Url) {
+      return res.status(400).send({
+        error: "Missing parameters",
+        details: "Both image1Url and image2Url are required in the request body."
+      });
+    }
+
+    const faceVerification = await compareFaces(image1Url, image2Url);
+    
+    if (!faceVerification.matched) {
+      return res.status(400).send({
+        success: false,
+        error: "Identity Verification Failed",
+        details: faceVerification.reason
+      });
+    }
+
+    res.status(200).send({
+      success: true,
+      message: "Face verified successfully",
+      similarity: faceVerification.similarity
+    });
+  } catch (error) {
+    console.error('(Face Verification Endpoint) Error:', error);
+    res.status(500).send({ error: 'Failed to verify face', details: error.message });
+  }
+});
+
+app.post('/api/verifyFace', verifyToken, async (req, res) => {
+  try {
+    const { image1Url, image2Url } = req.body;
+    if (!image1Url || !image2Url) {
+      return res.status(400).send({
+        error: "Missing parameters",
+        details: "Both image1Url and image2Url are required."
+      });
+    }
+    const faceVerification = await compareFaces(image1Url, image2Url);
+    res.status(faceVerification.matched ? 200 : 400).send({
+      success: faceVerification.matched,
+      similarity: faceVerification.similarity,
+      reason: faceVerification.reason
+    });
+  } catch (error) {
+    res.status(500).send({ error: 'Face verification failed', details: error.message });
+  }
+});
+
+app.post('/api/compareFace', verifyToken, async (req, res) => {
+  try {
+    const { image1Url, image2Url } = req.body;
+    if (!image1Url || !image2Url) {
+      return res.status(400).send({
+        error: "Missing parameters",
+        details: "Both image1Url and image2Url are required."
+      });
+    }
+    const faceVerification = await compareFaces(image1Url, image2Url);
+    res.status(faceVerification.matched ? 200 : 400).send({
+      success: faceVerification.matched,
+      similarity: faceVerification.similarity,
+      reason: faceVerification.reason
+    });
+  } catch (error) {
+    res.status(500).send({ error: 'Face comparison failed', details: error.message });
   }
 });
 
