@@ -9844,9 +9844,11 @@ app.get('/api/stations/list', verifyToken, async (req, res) => {
     if (zone) query = query.where('zone', '==', zone);
     if (category) query = query.where('category', '==', category);
     if (active !== undefined) query = query.where('active', '==', active === 'true');
-    const snapshot = await query.orderBy('stationName').get();
+    const snapshot = await query.get();
     const stations = [];
     snapshot.forEach(doc => stations.push(doc.data()));
+    // Sort in-memory to avoid composite index requirement
+    stations.sort((a, b) => (a.stationName || '').localeCompare(b.stationName || ''));
     res.status(200).json({ count: stations.length, stations });
   } catch (error) {
     res.status(500).send({ error: 'Failed to fetch stations', details: error.message });
@@ -9870,9 +9872,11 @@ app.post('/api/station-area/create', verifyToken, async (req, res) => {
 app.get('/api/station-area/list/:stationId', verifyToken, async (req, res) => {
   try {
     const { stationId } = req.params;
-    const snapshot = await db.collection('stationAreas').where('stationId', '==', stationId).orderBy('order').get();
+    const snapshot = await db.collection('stationAreas').where('stationId', '==', stationId).get();
     const areas = [];
     snapshot.forEach(doc => areas.push(doc.data()));
+    // Sort in-memory to avoid composite index requirement
+    areas.sort((a, b) => (a.order || 0) - (b.order || 0));
     res.status(200).json({ count: areas.length, areas });
   } catch (error) {
     res.status(500).send({ error: 'Failed to fetch areas', details: error.message });
