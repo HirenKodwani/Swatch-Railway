@@ -17,6 +17,7 @@ import '../trains/common_train_screen.dart';
 import '../trains/train_from_screen.dart';
 import '../users/common_user_management_screen.dart';
 import '../contracts/common_contracts_screen.dart';
+import '../divisions/division_management_screen.dart';
 import '../../obhs_screens/obhs_runs_list_screen.dart';
 import '../complaints/admin_complaints_screen.dart';
 import '../audit/audit_log_screen.dart';
@@ -540,9 +541,10 @@ class _CommonDashboardState extends State<CommonDashboard> {
       case "obhs_reports":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 3)));
         break;
-      case "billing_rules":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ContractBillingConfigScreen()));
+      case "divisions":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const DivisionManagementScreen()));
         break;
+      case "billing_rules":
       case "billing":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const BillingDashboardScreen()));
         break;
