@@ -764,28 +764,37 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
   XFile? beforePhoto;
   XFile? afterPhoto;
   bool isSubmitting = false;
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _commentFocusNode = FocusNode();
 
   @override
   void dispose() {
     commentController.dispose();
+    _scrollController.dispose();
+    _commentFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
             Row(
               children: [
                 Expanded(
@@ -879,10 +888,9 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
                 ),
               ],
             ),
-            // Spacing for on-screen keyboard so focused fields are scrollable into view
-            SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
           ],
         ),
+      ),
       ),
     );
   }
@@ -994,6 +1002,7 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
         const SizedBox(height: 12),
         TextField(
           controller: commentController,
+          focusNode: _commentFocusNode,
           minLines: 3,
           maxLines: 3,
           decoration: InputDecoration(
@@ -1001,6 +1010,15 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.all(12),
           ),
+          onTap: () => WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_scrollController.hasClients) {
+              _scrollController.animateTo(
+                _scrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          }),
         ),
         const SizedBox(height: 12),
         Text(

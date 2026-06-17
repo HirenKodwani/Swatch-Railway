@@ -10243,27 +10243,35 @@ async function notifyContractAdmins(contractId, title, body, type, data) {
 app.get('/api/notifications', verifyToken, async (req, res) => {
   try {
     const { uid, entityId, role, division, zone } = req.user;
-    let query = db.collection('notifications').orderBy('createdAt', 'desc').limit(50);
+    let query = db.collection('notifications');
 
     if (req.query.all === 'true') {
       // no filter
     } else if (entityId) {
-      query = db.collection('notifications')
-        .where('entityId', '==', entityId)
-        .orderBy('createdAt', 'desc')
-        .limit(50);
+      query = query.where('entityId', '==', entityId);
     } else {
-      query = db.collection('notifications')
-        .where('userId', '==', uid)
-        .orderBy('createdAt', 'desc')
-        .limit(50);
+      query = query.where('userId', '==', uid);
     }
 
     const snapshot = await query.get();
-    const notifications = [];
+    let notifications = [];
     snapshot.forEach(doc => notifications.push(doc.data()));
 
-    res.status(200).json({ count: notifications.length, notifications });
+    // Sort by createdAt descending (in-memory to avoid composite index requirement)
+    notifications.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || a.createdAt || 0;
+      const bTime = b.createdAt?.toMillis?.() || b.createdAt || 0;
+      return bTime - aTime;
+    });
+    notifications = notifications.slice(0, 50);
+
+    // Convert Firestore Timestamps to ISO strings for JSON-safe serialization
+    const serialized = notifications.map(n => ({
+      ...n,
+      createdAt: n.createdAt?.toDate?.()?.toISOString() || n.createdAt || null,
+    }));
+
+    res.status(200).json({ count: notifications.length, notifications: serialized });
   } catch (error) {
     console.error('(Notification) Error fetching notifications:', error);
     res.status(500).send({ error: 'Failed to fetch notifications', details: error.message });
@@ -10292,11 +10300,17 @@ app.post('/api/notifications/read-all', verifyToken, async (req, res) => {
     } else {
       query = query.where('userId', '==', uid);
     }
-    const snapshot = await query.where('read', '==', false).get();
+    const snapshot = await query.get();
     const batch = db.batch();
-    snapshot.forEach(doc => batch.update(doc.ref, { read: true }));
-    await batch.commit();
-    res.status(200).send({ message: `${snapshot.size} notifications marked as read` });
+    let count = 0;
+    snapshot.forEach(doc => {
+      if (doc.data().read !== true) {
+        batch.update(doc.ref, { read: true });
+        count++;
+      }
+    });
+    if (count > 0) await batch.commit();
+    res.status(200).send({ message: `${count} notifications marked as read` });
   } catch (error) {
     console.error('(Notification) Error marking all as read:', error);
     res.status(500).send({ error: 'Failed to mark notifications', details: error.message });
@@ -10307,14 +10321,18 @@ app.post('/api/notifications/read-all', verifyToken, async (req, res) => {
 app.get('/api/notifications/unread-count', verifyToken, async (req, res) => {
   try {
     const { uid, entityId } = req.user;
-    let query = db.collection('notifications').where('read', '==', false);
+    let query = db.collection('notifications');
     if (entityId) {
       query = query.where('entityId', '==', entityId);
     } else {
       query = query.where('userId', '==', uid);
     }
     const snapshot = await query.get();
-    res.status(200).json({ count: snapshot.size });
+    let unreadCount = 0;
+    snapshot.forEach(doc => {
+      if (doc.data().read !== true) unreadCount++;
+    });
+    res.status(200).json({ count: unreadCount });
   } catch (error) {
     console.error('(Notification) Error fetching unread count:', error);
     res.status(500).send({ error: 'Failed to fetch unread count', details: error.message });
