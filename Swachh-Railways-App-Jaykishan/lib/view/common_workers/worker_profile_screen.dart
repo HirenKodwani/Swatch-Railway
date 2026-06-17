@@ -5,6 +5,7 @@ import '../../controllers/worker_controller.dart';
 import '../../model/worker_profile_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../utills/app_colors.dart';
+import '../common_railways/alert/common_alert_screen.dart';
 import '../onboarding_screens/login_screen.dart';
 
 class WorkerProfileScreen extends StatelessWidget {
@@ -196,7 +197,22 @@ class WorkerProfileScreen extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
+
+                _buildActionTile(
+                  Icons.notifications_outlined,
+                  'Notifications',
+                  Colors.blue.shade50,
+                  kRailwayBlue,
+                      () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CommonAlertScreen(),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
 
                 _buildActionTile(
                   Icons.logout_outlined,

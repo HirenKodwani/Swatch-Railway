@@ -1,4 +1,8 @@
+import 'package:crm_train/view/common_railways/alert/common_alert_screen.dart';
+import 'package:crm_train/view/common_workers/worker_complaints_screen.dart';
 import 'package:crm_train/view/common_workers/worker_profile_screen.dart';
+import 'package:crm_train/view/common_workers/worker_rating_screen.dart';
+import 'package:crm_train/view/common_workers/worker_task_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -54,7 +58,12 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           }),
           IconButton(
             icon: const Icon(Icons.notifications, color: Colors.white),
-            onPressed: () {},
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const CommonAlertScreen(),
+              ),
+            ),
           ),
         ],
       ),
@@ -745,13 +754,18 @@ class WorkerMobileHomeScreen extends StatelessWidget {
                 ),
                 itemBuilder: (context, index) {
                   final action = actions[index];
-                  return GestureDetector(
+                    return GestureDetector(
                     onTap: () {
-                      Get.snackbar(
-                        'Info',
-                        'Navigate to ${action['title']}',
-                        snackPosition: SnackPosition.BOTTOM,
-                        duration: const Duration(seconds: 1),
+                      final title = action['title'] as String;
+                      Widget page;
+                      if (title == 'Complaints') {
+                        page = const WorkerComplaintsScreen();
+                      } else {
+                        page = const WorkerTaskScreen();
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => page),
                       );
                     },
                     child: Container(
@@ -835,12 +849,24 @@ class WorkerMobileHomeScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 10),
               child: InkWell(
                 onTap: () {
-                  Get.snackbar(
-                    'Info',
-                    '${role['title']} form coming soon!',
-                    snackPosition: SnackPosition.BOTTOM,
-                    duration: const Duration(seconds: 2),
-                  );
+                  final title = role['title'] as String;
+                  if (title == 'Official Rating') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const WorkerRatingScreen(
+                          isOfficialMode: true,
+                        ),
+                      ),
+                    );
+                  } else {
+                    Get.snackbar(
+                      'Info',
+                      '${role['title']} form coming soon!',
+                      snackPosition: SnackPosition.BOTTOM,
+                      duration: const Duration(seconds: 2),
+                    );
+                  }
                 },
                 child: Container(
                   padding: const EdgeInsets.all(14),

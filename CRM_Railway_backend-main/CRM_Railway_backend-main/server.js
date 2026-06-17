@@ -7482,6 +7482,17 @@ app.get('/api/reports/cts-data', verifyToken, async (req, res) => {
   }
 });
 
+// ─── HAVERSINE DISTANCE HELPER (GPS Geo-fencing) ──────────────────────
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 //const { RekognitionClient, CompareFacesCommand } = require("@aws-sdk/client-rekognition");
 //const axios = require('axios');
 
@@ -7627,6 +7638,93 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
 
     const { uid: workerId, fullName: workerName } = req.user; 
     const finalWorkerName = workerName || 'Unknown Worker';
+
+    // ─── GPS GEO-FENCING & SHIFT-TIMING VALIDATION ─────────────────────
+    let resolvedStationLat = null;
+    let resolvedStationLng = null;
+    let resolvedStationName = null;
+    let resolvedStationId = null;
+
+    if (runInstanceId) {
+      const runInstanceDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+      if (runInstanceDoc.exists) {
+        const runData = runInstanceDoc.data();
+        const parentTrainId = runData.parentTrainId;
+
+        // Resolve station from train's origin
+        let stationName = '';
+        if (parentTrainId) {
+          const trainDoc = await db.collection('trains').doc(parentTrainId).get();
+          if (trainDoc.exists) {
+            stationName = trainDoc.data().origin || '';
+          }
+        }
+
+        if (stationName) {
+          const stationSnap = await db.collection('stations')
+            .where('stationName', '==', stationName)
+            .where('active', '==', true)
+            .limit(1)
+            .get();
+
+          if (!stationSnap.empty) {
+            const st = stationSnap.docs[0].data();
+            resolvedStationLat = parseFloat(st.latitude);
+            resolvedStationLng = parseFloat(st.longitude);
+            resolvedStationName = st.stationName;
+            resolvedStationId = st.uid;
+          }
+        }
+      }
+    }
+
+    // GPS Geo-fence check
+    if (latitude && longitude && resolvedStationLat && resolvedStationLng) {
+      const workerLat = parseFloat(latitude);
+      const workerLng = parseFloat(longitude);
+      const distance = haversineDistance(workerLat, workerLng, resolvedStationLat, resolvedStationLng);
+      const geofenceRadius = 500; // metres
+
+      if (distance > geofenceRadius) {
+        return res.status(403).send({
+          error: "Location Out of Bounds",
+          details: `You are ${Math.round(distance)}m away from ${resolvedStationName}. Please mark attendance within ${geofenceRadius}m of the station.`
+        });
+      }
+    }
+
+    // Shift-timing validation
+    if (resolvedStationId && workerId) {
+      const scheduleSnap = await db.collection('stationSchedules')
+        .where('stationId', '==', resolvedStationId)
+        .where('entityId', '==', workerId)
+        .where('active', '==', true)
+        .limit(1)
+        .get();
+
+      if (!scheduleSnap.empty) {
+        const schedule = scheduleSnap.docs[0].data();
+        const startTime = schedule.startTime;
+        const endTime = schedule.endTime;
+
+        if (startTime && endTime) {
+          const [startH, startM] = startTime.split(':').map(Number);
+          const [endH, endM] = endTime.split(':').map(Number);
+          const now = new Date();
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          const startMinutes = startH * 60 + startM;
+          const endMinutes = endH * 60 + endM;
+
+          if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+            return res.status(403).send({
+              error: "Outside Shift Hours",
+              details: `Attendance can only be marked between ${startTime} and ${endTime}. Current time is outside your shift window.`
+            });
+          }
+        }
+      }
+    }
+    // ─── END VALIDATION ─────────────────────────────────────────────────
 
     const attendanceDocId = `${runInstanceId}_${workerId}`;
     const attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
@@ -7859,6 +7957,7 @@ app.get('/api/obhs/attendance/status', verifyToken, async (req, res) => {
 app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
   try {
     const allowedFields = [
+      'taskId',
       'runInstanceId', 
       'taskType', 
       'coachNo',
@@ -7877,6 +7976,7 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
     }
 
     const { 
+      taskId: incomingTaskId,
       runInstanceId, 
       taskType, 
       coachNo, 
@@ -7898,9 +7998,8 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
     // Token se User Details nikalna
     const { uid: userId, fullName: userName, role } = req.user;
 
-    // Unique Composite Task ID Generation (e.g., runId_S2_ToiletCleaning_Hour1)
-    const suffix = frequencyIndex ? `_${frequencyIndex.replace(/\s+/g, '')}` : `_${Date.now()}`;
-    const taskId = `${runInstanceId}_${coachNo}_${taskType.replace(/\s+/g, '')}${suffix}`;
+    // Use incoming taskId if provided (from task board), else generate one
+    const taskId = incomingTaskId || `${runInstanceId}_${coachNo}_${taskType.replace(/\s+/g, '')}_${Date.now()}`;
 
     const taskRef = db.collection('obhs_tasks').doc(taskId);
     
@@ -8097,6 +8196,262 @@ app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
       error: 'Failed to compile categorized task matrix metrics.', 
       details: error.message 
     });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == API 4.x: Bridge — Route Complaints / Feedback into OBHS Tasks Queue
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── 4.x.1: Route a Complaint to the OBHS Task Queue ─────────────────────
+app.post('/api/obhs/tasks/route-from-complaint/:complaintId', verifyToken, async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    if (!complaintId) {
+      return res.status(400).send({ error: "complaintId is required." });
+    }
+
+    const userRole = (req.user.role || '').toLowerCase();
+    if (!['admin', 'supervisor', 'company master'].includes(userRole)) {
+      return res.status(403).send({ error: "Only Admins, Supervisors, or Company Masters can route complaints to tasks." });
+    }
+
+    const complaintRef = db.collection('obhs_complaints').doc(complaintId);
+    const complaintDoc = await complaintRef.get();
+
+    if (!complaintDoc.exists) {
+      return res.status(404).send({ error: `Complaint ${complaintId} not found.` });
+    }
+
+    const complaint = complaintDoc.data();
+
+    if (complaint.status === 'ROUTED_TO_TASK') {
+      return res.status(400).send({ error: "This complaint has already been routed to a task." });
+    }
+
+    // Build the task document
+    const taskType = complaint.category || 'Cleaning Issue';
+    const taskId = `${complaint.runInstanceId}_ROUTED_${complaint.coachNo}_${taskType.replace(/\s+/g, '')}_${Date.now()}`;
+
+    const taskRef = db.collection('obhs_tasks').doc(taskId);
+    const taskData = {
+      uid: taskId,
+      runInstanceId: complaint.runInstanceId,
+      coachNo: complaint.coachNo,
+      taskType: taskType,
+      frequencyIndex: 'Routed', // Marks it as system-routed
+      source: 'complaint',
+      sourceId: complaintId,
+      submittedBy: {
+        id: req.user.uid,
+        name: req.user.fullName || 'System',
+        role: req.user.role || 'Admin'
+      },
+      beforePhoto: complaint.photoUrl || null,
+      afterPhoto: null,
+      comment: complaint.description || '',
+      status: 'Pending',
+      deviceTimestamp: new Date().toISOString(),
+      serverCreatedAt: new Date().toISOString(),
+      routedFrom: {
+        type: 'complaint',
+        id: complaintId,
+        at: new Date().toISOString()
+      }
+    };
+
+    await taskRef.set(taskData);
+
+    // Mark the complaint as routed
+    await complaintRef.update({
+      status: 'ROUTED_TO_TASK',
+      routedToTaskId: taskId,
+      routedAt: new Date().toISOString()
+    });
+
+    console.log(`(Bridge) Complaint ${complaintId} routed to task ${taskId}`);
+    res.status(201).send({
+      success: true,
+      message: 'Complaint routed to task queue successfully.',
+      taskId: taskId,
+      task: taskData
+    });
+
+  } catch (error) {
+    console.error('(Bridge) Error routing complaint to task:', error);
+    res.status(500).send({ error: 'Failed to route complaint to task', details: error.message });
+  }
+});
+
+// ─── 4.x.2: Route Feedback to the OBHS Task Queue ─────────────────────────
+app.post('/api/obhs/tasks/route-from-feedback/:feedbackId', verifyToken, async (req, res) => {
+  try {
+    const { feedbackId } = req.params;
+    const { category } = req.body; // Optional override for task type
+
+    if (!feedbackId) {
+      return res.status(400).send({ error: "feedbackId is required." });
+    }
+
+    const userRole = (req.user.role || '').toLowerCase();
+    if (!['admin', 'supervisor', 'company master'].includes(userRole)) {
+      return res.status(403).send({ error: "Only Admins, Supervisors, or Company Masters can route feedback to tasks." });
+    }
+
+    const feedbackRef = db.collection('obhs_feedbacks').doc(feedbackId);
+    const feedbackDoc = await feedbackRef.get();
+
+    if (!feedbackDoc.exists) {
+      return res.status(404).send({ error: `Feedback ${feedbackId} not found.` });
+    }
+
+    const feedback = feedbackDoc.data();
+
+    if (feedback.routedToTaskId) {
+      return res.status(400).send({ error: "This feedback has already been routed to a task." });
+    }
+
+    // Determine task type from ratings or category
+    let taskType = category || 'Cleaning Required';
+    if (!category && feedback.ratings) {
+      const r = feedback.ratings;
+      const lowestParam = Object.entries(r).reduce((a, b) => (a[1] < b[1] ? a : b));
+      const paramLabels = {
+        cleanliness: 'Coach Cleaning',
+        toiletHygiene: 'Toilet Cleaning',
+        linenQuality: 'Linen Replacement',
+        security: 'Security Check',
+        staffBehaviour: 'Staff Behaviour Review'
+      };
+      taskType = paramLabels[lowestParam[0]] || 'Cleaning Required';
+    }
+
+    const runInstanceId = feedback.runInstanceId || 'UNKNOWN_RUN';
+    const taskId = `${runInstanceId}_ROUTED_${feedback.coachNo || 'GEN'}_${taskType.replace(/\s+/g, '')}_${Date.now()}`;
+
+    const taskRef = db.collection('obhs_tasks').doc(taskId);
+    const taskData = {
+      uid: taskId,
+      runInstanceId: runInstanceId,
+      coachNo: feedback.coachNo || 'General',
+      taskType: taskType,
+      frequencyIndex: 'Routed',
+      source: 'feedback',
+      sourceId: feedbackId,
+      submittedBy: {
+        id: req.user.uid,
+        name: req.user.fullName || 'System',
+        role: req.user.role || 'Admin'
+      },
+      beforePhoto: feedback.photoUrl || null,
+      afterPhoto: null,
+      comment: feedback.remarks || `Routed from feedback (Overall: ${feedback.overallRating || 'N/A'})`,
+      status: 'Pending',
+      deviceTimestamp: new Date().toISOString(),
+      serverCreatedAt: new Date().toISOString(),
+      routedFrom: {
+        type: 'feedback',
+        id: feedbackId,
+        at: new Date().toISOString()
+      }
+    };
+
+    await taskRef.set(taskData);
+
+    // Mark the feedback as routed
+    await feedbackRef.update({
+      routedToTaskId: taskId,
+      routedAt: new Date().toISOString()
+    });
+
+    console.log(`(Bridge) Feedback ${feedbackId} routed to task ${taskId}`);
+    res.status(201).send({
+      success: true,
+      message: 'Feedback routed to task queue successfully.',
+      taskId: taskId,
+      task: taskData
+    });
+
+  } catch (error) {
+    console.error('(Bridge) Error routing feedback to task:', error);
+    res.status(500).send({ error: 'Failed to route feedback to task', details: error.message });
+  }
+});
+
+// ─── 4.x.3: List All Un-routed Complaints & Feedbacks (for admin dashboard) ─
+app.get('/api/obhs/tasks/pending-routing', verifyToken, async (req, res) => {
+  try {
+    const userRole = (req.user.role || '').toLowerCase();
+    if (!['admin', 'supervisor', 'company master'].includes(userRole)) {
+      return res.status(403).send({ error: "Only Admins, Supervisors, or Company Masters can view pending routing items." });
+    }
+
+    // Fetch open (not yet routed) complaints
+    const openComplaintsSnap = await db.collection('obhs_complaints')
+      .where('status', '==', 'OPEN')
+      .get();
+
+    const unRoutedComplaints = [];
+    openComplaintsSnap.forEach(doc => {
+      const data = doc.data();
+      if (!data.routedToTaskId) {
+        unRoutedComplaints.push({
+          sourceType: 'complaint',
+          sourceId: data.complaintId || doc.id,
+          runInstanceId: data.runInstanceId,
+          trainNo: data.trainNo,
+          coachNo: data.coachNo,
+          category: data.category,
+          description: data.description,
+          photoUrl: data.photoUrl,
+          submittedBy: data.submittedBy,
+          createdAt: data.createdAt
+        });
+      }
+    });
+
+    // Fetch feedbacks not yet routed
+    const allFeedbacksSnap = await db.collection('obhs_feedbacks').get();
+    const unRoutedFeedbacks = [];
+    allFeedbacksSnap.forEach(doc => {
+      const data = doc.data();
+      if (!data.routedToTaskId) {
+        unRoutedFeedbacks.push({
+          sourceType: 'feedback',
+          sourceId: data.feedbackId || doc.id,
+          feedbackType: data.feedbackType,
+          runInstanceId: data.runInstanceId,
+          trainNo: data.trainNo,
+          coachNo: data.coachNo,
+          overallRating: data.overallRating,
+          ratings: data.ratings,
+          remarks: data.remarks,
+          photoUrl: data.photoUrl,
+          passengerName: data.passengerName || null,
+          inspectorName: data.inspectorName || null,
+          targetWorker: data.targetWorker || null,
+          createdAt: data.createdAt
+        });
+      }
+    });
+
+    // Sort by createdAt descending (newest first)
+    const allItems = [...unRoutedComplaints, ...unRoutedFeedbacks]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.status(200).send({
+      success: true,
+      counts: {
+        complaints: unRoutedComplaints.length,
+        feedbacks: unRoutedFeedbacks.length,
+        total: allItems.length
+      },
+      items: allItems
+    });
+
+  } catch (error) {
+    console.error('(Bridge) Error fetching pending routing items:', error);
+    res.status(500).send({ error: 'Failed to fetch pending routing items', details: error.message });
   }
 });
 
