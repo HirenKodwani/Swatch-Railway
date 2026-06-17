@@ -19,6 +19,7 @@ import '../users/common_user_management_screen.dart';
 import '../contracts/common_contracts_screen.dart';
 import '../../obhs_screens/obhs_runs_list_screen.dart';
 import '../complaints/admin_complaints_screen.dart';
+import '../audit/audit_log_screen.dart';
 import '../billing/billing_dashboard_screen.dart';
 import '../cleaning_forms/cleaning_form_dashboard.dart';
 import '../station_management/station_dashboard_screen.dart';
@@ -544,10 +545,11 @@ class _CommonDashboardState extends State<CommonDashboard> {
       case "ratings":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRatingsScreen()));
         break;
-      case "complaints":
       case "audit_logs":
       case "activity_logs":
-        // Defaulting these to Complaints screen for now to preserve functionality
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AuditLogScreen()));
+        break;
+      case "complaints":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
         break;
       default:
