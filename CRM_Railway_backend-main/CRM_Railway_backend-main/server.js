@@ -8238,7 +8238,9 @@ app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
         status: 'Pending',
         beforePhoto: null,
         afterPhoto: null,
-        comment: ""
+        comment: "",
+        requiresPhoto: true,
+        requiresComment: true
       };
 
       if (completedTaskIds.has(generatedTaskId)) {
@@ -8672,7 +8674,7 @@ app.get('/api/obhs/complaints', verifyToken, async (req, res) => {
 
     const userRole = currentUser.role || "Railway Worker";
     const userId = currentUser.uid;
-    const { status } = req.query;
+    const { status, runInstanceId } = req.query;
 
     // 1. Base Reference of Firestore Collection
     let complaintsQuery = db.collection('obhs_complaints');
@@ -8711,7 +8713,12 @@ app.get('/api/obhs/complaints', verifyToken, async (req, res) => {
       complaintsList.push(doc.data());
     });
 
-    // 5. Newest complaints first sorting
+    // 5. Optional runInstanceId filter (client-side to avoid composite indexes)
+    if (runInstanceId) {
+      complaintsList = complaintsList.filter(c => c.runInstanceId === runInstanceId);
+    }
+
+    // 6. Newest complaints first sorting
     complaintsList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     // 6. Return Clean Response
