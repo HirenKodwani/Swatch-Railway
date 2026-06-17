@@ -331,6 +331,31 @@ class OBHSRepository {
     }
   }
 
+  /// Get OBHS Attendance List (admin view)
+  static Future<List<Map<String, dynamic>>> getAttendanceList({String? runInstanceId}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+      final params = <String, String>{};
+      if (runInstanceId != null) params['runInstanceId'] = runInstanceId;
+      final uri = Uri.parse('$baseUrl/api/obhs/attendance/list').replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await _handleRequest(
+        () => http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['records'] ?? []);
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
   /// Get All Run Instances (for list screen)
   /// Returns all run instances across all trains
   static Future<List<RunInstanceModel>> getAllRunInstances() async {

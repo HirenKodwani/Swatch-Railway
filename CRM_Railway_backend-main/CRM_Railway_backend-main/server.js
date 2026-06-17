@@ -7899,6 +7899,24 @@ app.get('/api/obhs/attendance/status', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/obhs/attendance/list — List all attendance records (admin view)
+app.get('/api/obhs/attendance/list', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    let query = db.collection('obhs_attendance');
+    if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
+    const snapshot = await query.get();
+    const records = [];
+    snapshot.forEach(doc => records.push(doc.data()));
+    // Sort by updatedAt desc
+    records.sort((a, b) => ((b.updatedAt || '') > (a.updatedAt || '') ? 1 : -1));
+    res.status(200).json({ count: records.length, records });
+  } catch (error) {
+    console.error('(OBHS Attendance List) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch attendance records', details: error.message });
+  }
+});
+
 // =======================================================
 // == API 4.8: Submit Completed OBHS Task (Single Submission)
 // =======================================================
