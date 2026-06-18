@@ -20,8 +20,8 @@ class AttendanceLogModel {
   AttendanceLogModel({
     required this.id,
     required this.runInstanceId,
-    required this.janitorId,
-    required this.janitorName,
+    required this.workerId,
+    required this.workerName,
     required this.attendanceType,
     required this.attendanceTime,
     this.scheduledDepartureTime,
@@ -41,8 +41,8 @@ class AttendanceLogModel {
     return AttendanceLogModel(
       id: json['id'] as String? ?? '',
       runInstanceId: json['runInstanceId'] as String? ?? '',
-      janitorId: json['janitorId'] as String? ?? '',
-      janitorName: json['janitorName'] as String? ?? '',
+      workerId: json['workerId'] as String? ?? '',
+      workerName: json['workerName'] as String? ?? '',
       attendanceType: json['attendanceType'] as String? ?? '',
       attendanceTime: json['attendanceTime'] != null
           ? DateTime.parse(json['attendanceTime'] as String)
@@ -115,8 +115,8 @@ class AttendanceLogModel {
     return AttendanceLogModel(
       id: id ?? this.id,
       runInstanceId: runInstanceId ?? this.runInstanceId,
-      janitorId: workerId ?? this.janitorId,
-      janitorName: workerName ?? this.janitorName,
+      workerId: workerId ?? this.workerId,
+      workerName: workerName ?? this.workerName,
       attendanceType: attendanceType ?? this.attendanceType,
       attendanceTime: attendanceTime ?? this.attendanceTime,
       scheduledDepartureTime:

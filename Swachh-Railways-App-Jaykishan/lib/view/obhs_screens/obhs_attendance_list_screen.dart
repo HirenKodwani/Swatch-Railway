@@ -35,7 +35,7 @@ class _OBHSAttendanceListScreenState extends State<OBHSAttendanceListScreen> {
     if (_searchQuery.isEmpty) return _records;
     final q = _searchQuery.toLowerCase();
     return _records.where((r) =>
-      (r['janitorName'] ?? '').toString().toLowerCase().contains(q) ||
+      (r['workerName'] ?? '').toString().toLowerCase().contains(q) ||
       (r['runInstanceId'] ?? '').toString().toLowerCase().contains(q) ||
       (r['identityAuditStatus'] ?? '').toString().toLowerCase().contains(q)
     ).toList();
@@ -124,7 +124,7 @@ class _OBHSAttendanceListScreenState extends State<OBHSAttendanceListScreen> {
                                               radius: 20,
                                               backgroundColor: kRailwayBlue.withOpacity(0.1),
                                               child: Text(
-                                                (r['janitorName'] ?? '?').toString().substring(0, 1).toUpperCase(),
+                                                (r['workerName'] ?? '?').toString().substring(0, 1).toUpperCase(),
                                                 style: const TextStyle(fontWeight: FontWeight.bold, color: kRailwayBlue),
                                               ),
                                             ),
@@ -133,7 +133,7 @@ class _OBHSAttendanceListScreenState extends State<OBHSAttendanceListScreen> {
                                               child: Column(
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  Text(r['janitorName'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                                  Text(r['workerName'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                                                   Text('Run: ${(r['runInstanceId'] ?? '').toString().length > 20 ? '...${(r['runInstanceId'] ?? '').toString().substring((r['runInstanceId'] ?? '').toString().length - 20)}' : (r['runInstanceId'] ?? '')}',
                                                     style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                                                 ],

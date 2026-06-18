@@ -178,7 +178,7 @@ class _OBHSReviewQueueScreenState extends State<OBHSReviewQueueScreen> {
                         final task = _tasks[index];
                         final String taskId = task['id'] ?? task['taskId'] ?? '';
                         final String taskName = task['taskName'] ?? task['taskType'] ?? 'Unknown Task';
-                        final String workerName = task['janitorName'] ?? 'Unknown Worker';
+                        final String workerName = task['workerName'] ?? 'Unknown Worker';
                         final String coachId = task['coachId'] ?? 'Unknown Coach';
                         final String submittedAt = task['submittedAt'] ?? '';
                         

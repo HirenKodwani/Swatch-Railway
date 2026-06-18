@@ -31,7 +31,7 @@ class WorkerMobileHomeScreen extends StatelessWidget {
         actions: [
           Obx(() {
             controller.workerProfile.value;
-            final name = controller.janitorName;
+            final name = controller.workerName;
             return IconButton(
               icon: CircleAvatar(
                 backgroundColor: Colors.white,
@@ -152,7 +152,7 @@ class WorkerMobileHomeScreen extends StatelessWidget {
     return Obx(() {
       controller.workerProfile.value;
 
-      final name = controller.janitorName;
+      final name = controller.workerName;
       final trainNo = controller.trainNo;
       final trainName = controller.trainName;
       final instanceId = controller.instanceId;

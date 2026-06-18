@@ -1200,8 +1200,8 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
         res = await WorkerRepository.submitOfficialFeedback(
           inspectorName: _inspectorController.text.trim(),
           isRandomInspection: _isRandomInspection,
-          janitorId: _selectedWorkerId!,
-          janitorName: worker.fullName,
+          workerId: _selectedWorkerId!,
+          workerName: worker.fullName,
           coachNo: _selectedCoach!,
           ratings: intRatings,
           remarks: _remarksController.text.trim(),
@@ -1218,7 +1218,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
           remarks: _remarksController.text.trim(),
           photoUrl: photoUrl,
           runInstanceId: runInstanceId!,
-          janitorId: _selectedWorkerId,
+          workerId: _selectedWorkerId,
         );
       }
 

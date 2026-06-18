@@ -1,6 +1,6 @@
 class JanitorPerformanceModel {
-  final String janitorId;
-  final String janitorName;
+  final String workerId;
+  final String workerName;
   final int tasksCompleted;
   final int tasksMissed;
   final int tasksOverdue;
@@ -9,8 +9,8 @@ class JanitorPerformanceModel {
   final double coachCleanlinessScore;
 
   JanitorPerformanceModel({
-    required this.janitorId,
-    required this.janitorName,
+    required this.workerId,
+    required this.workerName,
     this.tasksCompleted = 0,
     this.tasksMissed = 0,
     this.tasksOverdue = 0,
@@ -21,8 +21,8 @@ class JanitorPerformanceModel {
 
   factory JanitorPerformanceModel.fromJson(Map<String, dynamic> json) {
     return JanitorPerformanceModel(
-      janitorId: json['janitorId'] as String? ?? '',
-      janitorName: json['janitorName'] as String? ?? '',
+      workerId: json['workerId'] as String? ?? '',
+      workerName: json['workerName'] as String? ?? '',
       tasksCompleted: json['tasksCompleted'] as int? ?? 0,
       tasksMissed: json['tasksMissed'] as int? ?? 0,
       tasksOverdue: json['tasksOverdue'] as int? ?? 0,

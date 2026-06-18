@@ -786,7 +786,7 @@ class WorkerRepository {
 
       final queryParams = <String, String>{};
       if (runInstanceId != null) queryParams['runInstanceId'] = runInstanceId;
-      if (workerId != null) queryParams['janitorId'] = workerId;
+      if (workerId != null) queryParams['workerId'] = workerId;
 
       final uri = Uri.parse('$baseUrl/api/obhs/feedback/worker-summary').replace(
         queryParameters: queryParams.isNotEmpty ? queryParams : null,

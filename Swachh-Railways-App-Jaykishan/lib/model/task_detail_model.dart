@@ -3,7 +3,7 @@ class TaskDetailModel {
   final String headerId;
   final String runInstanceId;
   final String coachNo;
-  final String janitorId;
+  final String workerId;
   final String taskType;
   final String scheduledTime;
   final String? toiletStatus;
@@ -28,7 +28,7 @@ class TaskDetailModel {
     required this.headerId,
     required this.runInstanceId,
     required this.coachNo,
-    required this.janitorId,
+    required this.workerId,
     required this.taskType,
     required this.scheduledTime,
     this.toiletStatus,
@@ -55,7 +55,7 @@ class TaskDetailModel {
       headerId: json['headerId'] as String? ?? '',
       runInstanceId: json['runInstanceId'] as String? ?? '',
       coachNo: json['coachNo'] as String? ?? '',
-      janitorId: json['janitorId'] as String? ?? '',
+      workerId: json['workerId'] as String? ?? '',
       taskType: json['taskType'] as String? ?? '',
       scheduledTime: json['scheduledTime'] as String? ?? '',
       toiletStatus: json['toiletStatus'] as String?,
@@ -87,7 +87,7 @@ class TaskDetailModel {
       'headerId': headerId,
       'runInstanceId': runInstanceId,
       'coachNo': coachNo,
-      'janitorId': janitorId,
+      'workerId': workerId,
       'taskType': taskType,
       'scheduledTime': scheduledTime,
       if (toiletStatus != null) 'toiletStatus': toiletStatus,
@@ -115,7 +115,7 @@ class TaskDetailModel {
     String? headerId,
     String? runInstanceId,
     String? coachNo,
-    String? janitorId,
+    String? workerId,
     String? taskType,
     String? scheduledTime,
     String? toiletStatus,
@@ -140,7 +140,7 @@ class TaskDetailModel {
       headerId: headerId ?? this.headerId,
       runInstanceId: runInstanceId ?? this.runInstanceId,
       coachNo: coachNo ?? this.coachNo,
-      janitorId: janitorId ?? this.janitorId,
+      workerId: workerId ?? this.workerId,
       taskType: taskType ?? this.taskType,
       scheduledTime: scheduledTime ?? this.scheduledTime,
       toiletStatus: toiletStatus ?? this.toiletStatus,
