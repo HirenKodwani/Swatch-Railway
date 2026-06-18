@@ -1042,40 +1042,43 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                                       color: Colors.black87,
                                     ),
                                   ),
-                                  if (coach.workerId != null)
-                                    Row(
-                                      children: [
-                                        Text('Worker: ${coach.workerName}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        InkWell(
-                                          onTap: () => _assignWorkerFlow(instance, index),
-                                          child: const Icon(Icons.edit, size: 14, color: kRailwayBlue),
-                                        )
-                                      ],
-                                    )
-                                  else
-                                    InkWell(
-                                      onTap: () => _assignWorkerFlow(instance, index),
-                                      child: Row(
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
                                         children: [
-                                          Text(
-                                            'No worker assigned',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.orange[700],
-                                              fontStyle: FontStyle.italic,
+                                          if (coach.workerId != null)
+                                            Text('Worker: ${coach.workerName}',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                            )
+                                          else
+                                            Text('No worker assigned',
+                                              style: TextStyle(fontSize: 11, color: Colors.orange[700], fontStyle: FontStyle.italic),
                                             ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.add_circle, size: 14, color: Colors.orange),
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            onTap: () => _assignWorkerFlow(instance, index),
+                                            child: const Icon(Icons.edit, size: 14, color: kRailwayBlue),
+                                          )
                                         ],
                                       ),
-                                    ),
+                                      if (coach.attendantId != null && _isAcCoach(coach.coachType))
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text('Attendant: ${coach.attendantName ?? 'Assigned'}',
+                                            style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                          ),
+                                        ),
+                                      if (coach.tasks != null && coach.tasks!.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text('Tasks: ${coach.tasks!.join(', ')}',
+                                            style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),

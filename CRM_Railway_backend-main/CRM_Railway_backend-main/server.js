@@ -3401,6 +3401,15 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
 
     if (coaches && Array.isArray(coaches)) {
       
+      // AC coach prefix check for attendant validation
+      const isACCoach = (coachType) => {
+        if (!coachType) return false;
+        const upper = coachType.toUpperCase();
+        return ['A', 'B', 'H', 'M', 'C', 'E', 'AC', 'A1', 'B1', 'H1', 'M1', 'C1', 'E1',
+                '2AC', '3AC', '1AC', 'AC', '2A', '3A', '1A', 'EA', 'EC', 'AB', 'HA', 'MA']
+          .includes(upper) || /^[ABHMC]\d*$/.test(upper);
+      };
+
       const coachesWithNames = await Promise.all(coaches.map(async (c) => {
         let workerName = "Unknown Worker";
         
@@ -3411,11 +3420,29 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
           }
         }
 
+        // Resolve attendant name if attendantId provided
+        let attendantName = c.attendantName || null;
+        if (c.attendantId && !attendantName) {
+          const attDoc = await db.collection('users').doc(c.attendantId).get();
+          if (attDoc.exists) {
+            attendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
+          }
+        }
+
+        // Validate: attendant only allowed on AC coaches
+        if (c.attendantId && !isACCoach(c.coachType)) {
+          throw new Error(`Attendant cannot be assigned to Non-AC coach ${c.coachPosition || c.coachNo}. Attendants only allowed on AC coaches.`);
+        }
+
         return {
           coachPosition: c.coachPosition || null,
+          coachNo: c.coachNo || null,
           coachType: c.coachType || null,
           workerId: c.workerId || null,
-          workerName: workerName
+          workerName: workerName,
+          attendantId: c.attendantId || null,
+          attendantName: attendantName,
+          tasks: c.tasks || []
         };
       }));
 
@@ -3896,6 +3923,43 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
       error: 'Failed to fetch all run instances', 
       details: error.message 
     });
+  }
+});
+
+// GET /api/v1/obhs-run/:runId — Run instance with nested janitor/attendant/tasks format
+app.get('/api/v1/obhs-run/:runId', verifyToken, async (req, res) => {
+  try {
+    const { runId } = req.params;
+    const doc = await db.collection('RunInstance').doc(runId).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Run instance not found' });
+
+    const data = doc.data();
+    const coaches = (data.coaches || []).map(c => ({
+      coachNo: c.coachPosition || c.coachNo || null,
+      isAc: c.coachType ? ['A', 'B', 'H', 'M', 'C', 'E', 'AC', 'A1']
+        .some(prefix => c.coachType.toUpperCase().startsWith(prefix)) : false,
+      janitor: c.workerId ? { workerId: c.workerId, name: c.workerName || 'Unknown' } : null,
+      attendant: c.attendantId ? { workerId: c.attendantId, name: c.attendantName || 'Unknown' } : null,
+      tasks: c.tasks || []
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        runInstanceId: runId,
+        trainNo: data.trainNo,
+        trainName: data.trainName,
+        status: data.status,
+        coaches,
+        actualDeparture: data.actualDeparture,
+        scheduledArrival: data.scheduledArrival,
+        zone: data.zone, division: data.division, depot: data.depot,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch run instance', details: error.message });
   }
 });
 
@@ -14242,6 +14306,81 @@ app.post('/api/v2/tasks/not-applicable', verifyToken, async (req, res) => {
   }
 });
 
+// Supervisor edit task instance (reassign worker, reschedule, update fields)
+app.put('/api/v2/tasks/:taskInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId } = req.params;
+    const allowedRoles = ['CS', 'CTS', 'CA', 'CM'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CS/CTS/CA/CM can edit tasks' });
+    }
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    const updates = { ...req.body };
+
+    // Remove protected fields that cannot be edited by supervisor
+    delete updates.taskId;
+    delete updates.runInstanceId;
+    delete updates.isParentTask;
+    delete updates.parentTaskId;
+    delete updates.childTaskIds;
+    delete updates.createdAt;
+
+    // If reassigning worker, resolve worker name
+    if (updates.workerId && updates.workerId !== oldData.workerId) {
+      if (!updates.workerName) {
+        try {
+          const workerDoc = await db.collection('users').doc(updates.workerId).get();
+          if (workerDoc.exists) {
+            updates.workerName = workerDoc.data().fullName || workerDoc.data().name || 'Unknown';
+          }
+        } catch (_) { updates.workerName = 'Unknown'; }
+      }
+    }
+
+    updates.updatedAt = new Date().toISOString();
+    updates.editedBy = req.user.uid;
+    updates.editedByName = req.user.fullName;
+    updates.editedAt = updates.updatedAt;
+
+    await ref.update(updates);
+
+    // Also update child tasks if worker reassigned on a parent task
+    if (oldData.isParentTask && (updates.workerId || updates.workerName || updates.workerRole)) {
+      const children = oldData.childTaskIds || [];
+      const childBatch = db.batch();
+      for (const cId of children) {
+        const childRef = db.collection('task_instances').doc(cId);
+        childBatch.update(childRef, {
+          ...(updates.workerId && { workerId: updates.workerId }),
+          ...(updates.workerName && { workerName: updates.workerName }),
+          ...(updates.workerRole && { workerRole: updates.workerRole }),
+          ...(updates.scheduledTime && { scheduledTime: updates.scheduledTime }),
+          ...(updates.coachNo && { coachNo: updates.coachNo }),
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await childBatch.commit();
+    }
+
+    await logAudit({
+      action: 'TASK_EDITED', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: oldData, newValue: { ...oldData, ...updates },
+      details: `Supervisor ${req.user.fullName} edited task ${taskInstanceId}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task updated', taskInstanceId });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to edit task', details: error.message });
+  }
+});
+
 // Helper: Update parent task status when child completes
 async function updateParentTaskStatus(parentTaskId) {
   try {
@@ -14469,19 +14608,26 @@ app.get('/api/v2/worker/my-tasks', verifyToken, async (req, res) => {
     const workerId = req.user.uid;
     const { status: filterStatus } = req.query;
 
-    // Find active journey for this worker
+    // Find active journey for this worker (as janitor or attendant)
     const runsSnap = await db.collection('RunInstance')
       .where('status', '==', 'Active')
       .get();
 
     let myRun = null;
     let myCoaches = [];
+    let myCoachTasks = null; // per-coach task filter array
     runsSnap.forEach(doc => {
       const d = doc.data();
-      const assigned = (d.coaches || []).filter(c => c.workerId === workerId);
+      const assigned = (d.coaches || []).filter(c => c.workerId === workerId || c.attendantId === workerId);
       if (assigned.length > 0) {
         myRun = { ...d, runInstanceId: doc.id };
         myCoaches = assigned.map(c => c.coachPosition || c.coachNo);
+        // Collect per-coach task filters
+        myCoachTasks = assigned.reduce((acc, c) => {
+          const cn = c.coachPosition || c.coachNo;
+          if (c.tasks && c.tasks.length > 0) acc[cn] = c.tasks.map(t => t.toLowerCase());
+          return acc;
+        }, {});
       }
     });
 
@@ -14491,14 +14637,32 @@ app.get('/api/v2/worker/my-tasks', verifyToken, async (req, res) => {
 
     let taskQuery = db.collection('task_instances')
       .where('runInstanceId', '==', myRun.runInstanceId)
-      .where('workerId', '==', workerId)
       .where('isParentTask', '==', false);
 
-    if (filterStatus) taskQuery = taskQuery.where('status', '==', filterStatus);
+    // If worker is the janitor (primary workerId)
+    const janitorCoaches = myRun.coaches.filter(c => c.workerId === workerId).map(c => c.coachPosition || c.coachNo);
+    // If worker is the attendant (secondary)
+    const attendantCoaches = myRun.coaches.filter(c => c.attendantId === workerId).map(c => c.coachPosition || c.coachNo);
+    const assignedCoachNos = [...new Set([...janitorCoaches, ...attendantCoaches])];
 
     const taskSnap = await taskQuery.get();
-    const tasks = [];
+    let tasks = [];
     taskSnap.forEach(doc => tasks.push(doc.data()));
+
+    // Filter by assigned coaches
+    tasks = tasks.filter(t => assignedCoachNos.includes(t.coachNo));
+
+    // Apply per-coach task filtering if defined
+    if (myCoachTasks) {
+      tasks = tasks.filter(t => {
+        const allowed = myCoachTasks[t.coachNo];
+        if (!allowed) return true; // no filter for this coach
+        const taskName = (t.taskName || t.taskMasterCode || '').toLowerCase();
+        return allowed.some(keyword => taskName.includes(keyword));
+      });
+    }
+
+    if (filterStatus) tasks = tasks.filter(t => t.status === filterStatus);
 
     res.status(200).json({
       success: true,

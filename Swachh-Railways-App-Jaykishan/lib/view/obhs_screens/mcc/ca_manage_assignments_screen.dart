@@ -1,62 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:crm_train/model/user_model.dart';
+import 'package:crm_train/model/run_instance_model.dart';
+import 'package:crm_train/model/railway_worker_model.dart';
+import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class CaManageAssignmentsScreen extends StatefulWidget {
   final UserModel user;
+  final String? runInstanceId;
+  final RunInstanceModel? initialInstance;
 
-  const CaManageAssignmentsScreen({super.key, required this.user});
+  const CaManageAssignmentsScreen({
+    super.key,
+    required this.user,
+    this.runInstanceId,
+    this.initialInstance,
+  });
 
   @override
   State<CaManageAssignmentsScreen> createState() => _CaManageAssignmentsScreenState();
 }
 
 class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
-  // Placeholder data for coaches
-  final List<Map<String, dynamic>> coaches = [
-    {
-      'coach': 'A1',
-      'janitor': 'Amit Singh',
-      'attendant': 'Rahul V',
-      'tasks': ['Toilet Cleaning', 'Aisle Mopping', 'Garbage Collection', 'Linen Distribution']
-    },
-    {
-      'coach': 'B1',
-      'janitor': 'Amit Singh',
-      'attendant': 'Not Assigned',
-      'tasks': ['Toilet Cleaning', 'Aisle Mopping', 'Garbage Collection', 'Linen Distribution']
-    },
-    {
-      'coach': 'S1',
-      'janitor': 'Suresh D',
-      'attendant': null, // Not applicable for non-AC
-      'tasks': ['Toilet Cleaning', 'Aisle Mopping', 'Garbage Collection']
-    },
-    {
-      'coach': 'S2',
-      'janitor': 'Not Assigned',
-      'attendant': null,
-      'tasks': ['Toilet Cleaning', 'Aisle Mopping', 'Garbage Collection']
-    },
-  ];
+  List<CoachAssignment> coaches = [];
+  List<RailwayWorkerModel> workers = [];
+  bool isLoading = true;
+  String? errorMessage;
+  RunInstanceModel? currentInstance;
 
-  // Dummy worker lists
-  final List<String> janitors = ['Amit Singh', 'Suresh D', 'Manoj V', 'Not Assigned'];
-  final List<String> attendants = ['Rahul V', 'Karan P', 'Not Assigned'];
-  
-  // Standard task catalog
   final List<String> allTasks = [
     'Toilet Cleaning',
     'Aisle Mopping',
     'Garbage Collection',
     'Window Cleaning',
     'Mirror Cleaning',
-    'Linen Distribution' // AC only usually, but let admin toggle
+    'Linen Distribution'
   ];
 
   bool _isAcCoach(String coachName) {
-    // Basic logic: AC coaches typically start with A, B, H, M, C, E.
-    // Non-AC are usually S (Sleeper), D (Second Seating), UR/GS.
     final upper = coachName.toUpperCase();
     return upper.startsWith('A') || 
            upper.startsWith('B') || 
@@ -67,35 +48,101 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      setState(() { isLoading = true; errorMessage = null; });
+
+      final fetchedWorkers = await OBHSRepository.getWorkers();
+      RunInstanceModel? instance;
+
+      if (widget.initialInstance != null) {
+        instance = widget.initialInstance;
+      } else {
+        final allRuns = await OBHSRepository.getAllRunInstances();
+        if (widget.runInstanceId != null) {
+          instance = allRuns.cast<RunInstanceModel?>().firstWhere(
+            (r) => r?.runInstanceId == widget.runInstanceId || r?.id == widget.runInstanceId,
+            orElse: () => null,
+          );
+        } else {
+          // Auto-pick first active or PLANNED instance
+          instance = allRuns.cast<RunInstanceModel?>().firstWhere(
+            (r) => r?.status == 'Active' || r?.status == 'PLANNED' || r?.status == 'ALLOCATED' || r?.status == 'READY',
+            orElse: () => allRuns.isNotEmpty ? allRuns.first : null,
+          );
+        }
+      }
+
+      if (instance == null) {
+        setState(() {
+          errorMessage = 'Run instance not found.';
+          isLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        currentInstance = instance;
+        coaches = List.from(instance!.coaches);
+        workers = fetchedWorkers;
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Failed to load data: $e';
+        isLoading = false;
+      });
+    }
+  }
+
+  List<RailwayWorkerModel> get _janitors =>
+      workers.where((w) => w.role == 'janitor' || w.userType == 'worker').toList();
+
+  List<RailwayWorkerModel> get _attendants =>
+      workers.where((w) => w.role == 'attendant' || w.userType == 'worker').toList();
+
+  String _workerName(String? workerId) {
+    if (workerId == null) return 'Not Assigned';
+    final match = workers.cast<RailwayWorkerModel?>().firstWhere(
+      (w) => w?.uid == workerId, orElse: () => null);
+    return match?.fullName ?? 'Unknown';
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
           'Manage Tasks & Assignments',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: kRailwayBlue,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Column(
-        children: [
-          _buildTrainHeader(),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: coaches.length,
-              itemBuilder: (context, index) {
-                return _buildCoachAssignmentCard(coaches[index]);
-              },
-            ),
-          ),
-        ],
-      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : errorMessage != null
+              ? Center(child: Text(errorMessage!, style: const TextStyle(color: kErrorRed)))
+              : Column(
+                  children: [
+                    _buildTrainHeader(),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: coaches.length,
+                        itemBuilder: (context, index) =>
+                            _buildCoachAssignmentCard(coaches[index], index),
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 
@@ -103,9 +150,9 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: kRailwayBlue,
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(20),
           bottomRight: Radius.circular(20),
         ),
@@ -113,29 +160,25 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Train: 12456 - ExpressB',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+          Text(
+            'Train: ${currentInstance?.trainNo ?? 'N/A'} - ${currentInstance?.trainName ?? ''}',
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
             'Assign Janitors to all coaches and Attendants to AC coaches. Edit specific tasks required for each coach.',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 13,
-            ),
+            style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCoachAssignmentCard(Map<String, dynamic> coachData) {
-    final bool isAc = _isAcCoach(coachData['coach']);
+  Widget _buildCoachAssignmentCard(CoachAssignment coach, int index) {
+    final coachLabel = coach.coachPosition.toString();
+    final bool isAc = _isAcCoach(coach.coachType);
+    final janitorName = _workerName(coach.workerId);
+    final attendantName = coach.attendantId != null ? _workerName(coach.attendantId) : null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -158,12 +201,8 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        coachData['coach'],
-                        style: const TextStyle(
-                          color: kRailwayBlue,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        coach.coachType.isEmpty ? 'C$coachLabel' : '${coach.coachType}$coachLabel',
+                        style: const TextStyle(color: kRailwayBlue, fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -175,10 +214,8 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.blue[200]!),
                         ),
-                        child: Text(
-                          'AC Coach',
-                          style: TextStyle(fontSize: 10, color: Colors.blue[800], fontWeight: FontWeight.bold),
-                        ),
+                        child: Text('AC Coach',
+                            style: TextStyle(fontSize: 10, color: Colors.blue[800], fontWeight: FontWeight.bold)),
                       )
                     else
                       Container(
@@ -188,16 +225,14 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.orange[200]!),
                         ),
-                        child: Text(
-                          'Non-AC',
-                          style: TextStyle(fontSize: 10, color: Colors.orange[800], fontWeight: FontWeight.bold),
-                        ),
+                        child: Text('Non-AC',
+                            style: TextStyle(fontSize: 10, color: Colors.orange[800], fontWeight: FontWeight.bold)),
                       ),
                   ],
                 ),
                 IconButton(
                   icon: const Icon(Icons.edit, color: kRailwayBlue),
-                  onPressed: () => _openEditDialog(coachData),
+                  onPressed: () => _openEditDialog(index),
                   tooltip: 'Edit Tasks & Assignment',
                 ),
               ],
@@ -211,10 +246,10 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Janitor: ${coachData['janitor']}',
+                    'Janitor: $janitorName',
                     style: TextStyle(
-                      fontWeight: coachData['janitor'] == 'Not Assigned' ? FontWeight.normal : FontWeight.bold,
-                      color: coachData['janitor'] == 'Not Assigned' ? kErrorRed : Colors.black87,
+                      fontWeight: coach.workerId == null ? FontWeight.normal : FontWeight.bold,
+                      color: coach.workerId == null ? kErrorRed : Colors.black87,
                     ),
                   ),
                 ),
@@ -227,14 +262,12 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isAc 
-                      ? 'Attendant: ${coachData['attendant']}' 
-                      : 'Attendant: Not Applicable (Non-AC)',
+                    isAc
+                        ? 'Attendant: ${attendantName ?? "Not Assigned"}'
+                        : 'Attendant: Not Applicable (Non-AC)',
                     style: TextStyle(
-                      fontWeight: isAc && coachData['attendant'] != 'Not Assigned' ? FontWeight.bold : FontWeight.normal,
-                      color: !isAc 
-                          ? Colors.grey 
-                          : (coachData['attendant'] == 'Not Assigned' ? kWarningOrange : Colors.black87),
+                      fontWeight: isAc && attendantName != null ? FontWeight.bold : FontWeight.normal,
+                      color: !isAc ? Colors.grey : (attendantName == null ? kWarningOrange : Colors.black87),
                     ),
                   ),
                 ),
@@ -246,7 +279,7 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: (coachData['tasks'] as List<String>).map((t) {
+              children: (coach.tasks ?? allTasks).map((t) {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -264,13 +297,13 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
     );
   }
 
-  void _openEditDialog(Map<String, dynamic> coachData) {
-    final bool isAc = _isAcCoach(coachData['coach']);
-    
-    // Create local copies for the dialog state
-    String tempJanitor = coachData['janitor'];
-    String? tempAttendant = coachData['attendant'];
-    List<String> tempTasks = List.from(coachData['tasks']);
+  void _openEditDialog(int index) {
+    final coach = coaches[index];
+    final bool isAc = _isAcCoach(coach.coachType);
+
+    String? tempJanitorId = coach.workerId;
+    String? tempAttendantId = coach.attendantId;
+    List<String> tempTasks = List.from(coach.tasks ?? allTasks);
 
     showDialog(
       context: context,
@@ -278,7 +311,7 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: Text('Edit Coach ${coachData['coach']}'),
+              title: Text('Edit Coach ${coach.coachPosition}'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: SingleChildScrollView(
@@ -288,20 +321,20 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                     children: [
                       const Text('Assign Janitor', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: tempJanitor,
-                        decoration: const InputDecoration(border: OutlineInputBorder()),
-                        items: janitors.map((j) => DropdownMenuItem(value: j, child: Text(j))).toList(),
-                        onChanged: (val) {
-                          if (val != null) setStateDialog(() => tempJanitor = val);
-                        },
+                      DropdownButtonFormField<RailwayWorkerModel>(
+                        value: _janitors.cast<RailwayWorkerModel?>().firstWhere(
+                            (w) => w?.uid == tempJanitorId, orElse: () => null),
+                        decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                        items: _janitors.map((w) =>
+                            DropdownMenuItem(value: w, child: Text(w.fullName))).toList(),
+                        onChanged: (val) => setStateDialog(() => tempJanitorId = val?.uid),
+                        hint: const Text('Select Janitor'),
                       ),
                       const SizedBox(height: 20),
-                      
                       Row(
                         children: [
                           const Text('Assign Attendant', style: TextStyle(fontWeight: FontWeight.bold)),
-                          if (!isAc) 
+                          if (!isAc)
                             const Padding(
                               padding: EdgeInsets.only(left: 8.0),
                               child: Text('(AC Only)', style: TextStyle(color: kErrorRed, fontSize: 12)),
@@ -309,23 +342,23 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: tempAttendant,
+                      DropdownButtonFormField<RailwayWorkerModel>(
+                        value: _attendants.cast<RailwayWorkerModel?>().firstWhere(
+                            (w) => w?.uid == tempAttendantId, orElse: () => null),
                         decoration: InputDecoration(
                           border: const OutlineInputBorder(),
                           fillColor: isAc ? Colors.white : Colors.grey[200],
                           filled: !isAc,
                         ),
-                        items: isAc 
-                            ? attendants.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList()
-                            : const [DropdownMenuItem(value: null, child: Text('Not Applicable'))],
-                        onChanged: isAc ? (val) {
-                          setStateDialog(() => tempAttendant = val);
-                        } : null,
+                        items: isAc
+                            ? _attendants.map((w) =>
+                                DropdownMenuItem(value: w, child: Text(w.fullName))).toList()
+                            : [],
+                        onChanged: isAc ? (val) => setStateDialog(() => tempAttendantId = val?.uid) : null,
+                        hint: Text(isAc ? 'Select Attendant' : 'Not Applicable'),
                         disabledHint: const Text('Non-AC Coach'),
                       ),
                       const SizedBox(height: 20),
-                      
                       const Text('Edit Coach Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Container(
@@ -364,24 +397,58 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                   child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    // Save logic
-                    setState(() {
-                      coachData['janitor'] = tempJanitor;
-                      coachData['attendant'] = tempAttendant;
-                      coachData['tasks'] = tempTasks;
-                    });
+                  onPressed: () async {
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Updated ${coachData['coach']} successfully'), backgroundColor: kSuccessGreen),
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(child: CircularProgressIndicator()),
                     );
+
+                    try {
+                      final updatedCoaches = List<CoachAssignment>.from(coaches);
+                      updatedCoaches[index] = updatedCoaches[index].copyWith(
+                        workerId: tempJanitorId,
+                        workerName: tempJanitorId != null
+                            ? _workerName(tempJanitorId)
+                            : null,
+                        attendantId: isAc ? tempAttendantId : null,
+                        attendantName: isAc && tempAttendantId != null
+                            ? _workerName(tempAttendantId)
+                            : null,
+                        tasks: tempTasks,
+                      );
+
+                      if (currentInstance?.runInstanceId != null) {
+                        await OBHSRepository.updateRunInstance(
+                          runInstanceId: currentInstance!.runInstanceId!,
+                          coaches: updatedCoaches,
+                        );
+                      }
+
+                      if (!mounted) return;
+                      Navigator.pop(context); // close loading
+                      setState(() => coaches = updatedCoaches);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Updated Coach ${coach.coachPosition} successfully'),
+                          backgroundColor: kSuccessGreen,
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+                      );
+                    }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue),
                   child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
-          }
+          },
         );
       },
     );
