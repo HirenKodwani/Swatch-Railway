@@ -139,12 +139,18 @@ class CoachAssignment {
   final String coachType;
   final String? workerId;
   final String? workerName;
+  final String? attendantId;
+  final String? attendantName;
+  final List<String>? tasks;
 
   CoachAssignment({
     required this.coachPosition,
     required this.coachType,
     this.workerId,
     this.workerName,
+    this.attendantId,
+    this.attendantName,
+    this.tasks,
   });
 
   factory CoachAssignment.fromJson(Map<String, dynamic> json) {
@@ -153,6 +159,9 @@ class CoachAssignment {
       coachType: json['coachType'] as String? ?? '',
       workerId: json['workerId'] as String?,
       workerName: json['workerName'] as String?,
+      attendantId: json['attendantId'] as String?,
+      attendantName: json['attendantName'] as String?,
+      tasks: (json['tasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
     );
   }
 
@@ -161,6 +170,10 @@ class CoachAssignment {
       'coachPosition': coachPosition,
       'coachType': coachType,
       if (workerId != null && workerId!.isNotEmpty) 'workerId': workerId,
+      if (workerName != null && workerName!.isNotEmpty) 'workerName': workerName,
+      if (attendantId != null && attendantId!.isNotEmpty) 'attendantId': attendantId,
+      if (attendantName != null && attendantName!.isNotEmpty) 'attendantName': attendantName,
+      if (tasks != null) 'tasks': tasks,
     };
   }
 
@@ -169,12 +182,18 @@ class CoachAssignment {
     String? coachType,
     String? workerId,
     String? workerName,
+    String? attendantId,
+    String? attendantName,
+    List<String>? tasks,
   }) {
     return CoachAssignment(
       coachPosition: coachPosition ?? this.coachPosition,
       coachType: coachType ?? this.coachType,
       workerId: workerId ?? this.workerId,
       workerName: workerName ?? this.workerName,
+      attendantId: attendantId ?? this.attendantId,
+      attendantName: attendantName ?? this.attendantName,
+      tasks: tasks ?? this.tasks,
     );
   }
 }

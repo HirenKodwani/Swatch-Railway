@@ -3,9 +3,19 @@ import 'package:crm_train/model/user_model.dart';
 
 import '../view/common_railways/main_nav_screen.dart';
 import '../view/common_workers/worker_mobile_nav_bar.dart';
+import '../view/obhs_screens/mcc/obhs_mcc_router.dart';
 
 void navigateUser(BuildContext context, UserModel user) {
-  if (user.role == 'Railway Worker') {
+  final mccRoles = ['CM', 'CA', 'CTS', 'CS', 'Janitor', 'Attendant'];
+
+  if (mccRoles.contains(user.role)) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ObhsMccRouter(user: user),
+      ),
+    );
+  } else if (user.role == 'Railway Worker') {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(

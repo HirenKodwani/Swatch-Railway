@@ -334,6 +334,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage>
           ),
           const SizedBox(height: 8),
           TextFormField(
+            key: ValueKey(isEmail ? 'email_input' : 'mobile_input'),
             controller: _inputCtrl,
             keyboardType:
             isEmail ? TextInputType.emailAddress : TextInputType.phone,

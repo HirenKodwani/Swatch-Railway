@@ -16,7 +16,9 @@ class OBHSReportExcelGenerator {
   static const _darkBlue = '#1A3E8C';
   static const _greenBg = '#1A7A4A';
   static const _lightGray = '#F5F5F5';
+  static const _altRow = '#EEF2FA';
   static const _white = '#FFFFFF';
+  static const _goldAccent = '#C8A400';
 
   static final _nowFmt = DateFormat('dd-MMM-yyyy | hh:mm a');
 
@@ -71,6 +73,16 @@ class OBHSReportExcelGenerator {
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
   }
 
+  static xlsio.Style _altDataStyle(xlsio.Workbook wb, String id) {
+    return wb.styles.add('ads_$id')
+      ..backColor = _altRow
+      ..fontSize = 9
+      ..hAlign = xlsio.HAlignType.center
+      ..vAlign = xlsio.VAlignType.center
+      ..wrapText = true
+      ..borders.all.lineStyle = xlsio.LineStyle.thin;
+  }
+
   static xlsio.Style _greenStyle(xlsio.Workbook wb, String id) {
     return wb.styles.add('gs_$id')
       ..backColor = _greenBg
@@ -80,6 +92,17 @@ class OBHSReportExcelGenerator {
       ..hAlign = xlsio.HAlignType.center
       ..vAlign = xlsio.VAlignType.center
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
+  }
+
+  static xlsio.Style _footerStyle(xlsio.Workbook wb, String id) {
+    return wb.styles.add('fs_$id')
+      ..backColor = _navyBlue
+      ..fontColor = _goldAccent
+      ..bold = false
+      ..fontSize = 8
+      ..italic = true
+      ..hAlign = xlsio.HAlignType.center
+      ..vAlign = xlsio.VAlignType.center;
   }
 
   /// Write section header spanning full width (cols 1–8).
@@ -117,28 +140,91 @@ class OBHSReportExcelGenerator {
 
   static void _setColWidths(xlsio.Worksheet s) {
     for (int c = 1; c <= 8; c++) {
-      s.getRangeByIndex(1, c).columnWidth = c <= 2 ? 18 : 14;
+      s.getRangeByIndex(1, c).columnWidth = c <= 2 ? 22 : 16;
     }
   }
 
-  static Future<int> _addLogoAndTitle(xlsio.Worksheet s, int row, String title, String subtitle, xlsio.Style style) async {
-    s.getRangeByIndex(row, 1, row, 8).merge();
+  /// Adds a proper branded header block:
+  ///   Row 1: Logo image (col A) | Title text (col B-H)
+  ///   Row 2: Subtitle / generation timestamp (full width)
+  ///   Row 3: Status badge (right aligned)
+  static Future<int> _addLogoAndTitle(
+      xlsio.Worksheet s, int row, String title, String subtitle, xlsio.Style style,
+      {String statusBadge = 'OFFICIAL REPORT'}) async {
+    // ── Row 1: logo column + title ──────────────────────────────────────────
+    // Logo cell (column 1 only, taller row)
     s.getRangeByIndex(row, 1).cellStyle = style;
-    s.getRangeByIndex(row, 1).rowHeight = 40;
-    
+    s.getRangeByIndex(row, 1).rowHeight = 50;
+
     try {
       final ByteData bytes = await rootBundle.load('assets/images/image.png');
       final Uint8List byteList = bytes.buffer.asUint8List();
       final xlsio.Picture picture = s.pictures.addStream(row, 1, byteList);
-      picture.height = 36;
-      picture.width = 36;
-      // Offset slightly from top left
-    } catch (e) {
-      // Ignore if logo not found
-    }
+      picture.height = 44;
+      picture.width = 44;
+    } catch (_) {/* logo not found — skip */}
 
-    s.getRangeByIndex(row, 1).setText('          $title\n          $subtitle');
-    return row + 1;
+    // Title spanning columns 2-8
+    s.getRangeByIndex(row, 2, row, 8).merge();
+    final titleStyle = s.workbook.styles.add('ts_${title.hashCode.abs()}');
+    titleStyle.backColor = _navyBlue;
+    titleStyle.fontColor = _white;
+    titleStyle.bold = true;
+    titleStyle.fontSize = 14;
+    titleStyle.hAlign = xlsio.HAlignType.left;
+    titleStyle.vAlign = xlsio.VAlignType.center;
+    s.getRangeByIndex(row, 2).cellStyle = titleStyle;
+    s.getRangeByIndex(row, 2).setText('  Indian Railways – OBHS Enterprise Monitoring');
+    row++;
+
+    // ── Row 2: full-width subtitle ─────────────────────────────────────────
+    s.getRangeByIndex(row, 1, row, 8).merge();
+    final subStyle = s.workbook.styles.add('sub_${subtitle.hashCode.abs()}');
+    subStyle.backColor = _darkBlue;
+    subStyle.fontColor = _white;
+    subStyle.bold = true;
+    subStyle.fontSize = 11;
+    subStyle.hAlign = xlsio.HAlignType.center;
+    subStyle.vAlign = xlsio.VAlignType.center;
+    s.getRangeByIndex(row, 1).cellStyle = subStyle;
+    s.getRangeByIndex(row, 1).setText(title);
+    s.getRangeByIndex(row, 1).rowHeight = 28;
+    row++;
+
+    // ── Row 3: generated-on info (left) + status badge (right) ────────────
+    s.getRangeByIndex(row, 1, row, 5).merge();
+    final genStyle = s.workbook.styles.add('gen_${row}_${subtitle.hashCode.abs()}');
+    genStyle.fontSize = 8;
+    genStyle.italic = true;
+    genStyle.hAlign = xlsio.HAlignType.left;
+    genStyle.vAlign = xlsio.VAlignType.center;
+    s.getRangeByIndex(row, 1).cellStyle = genStyle;
+    s.getRangeByIndex(row, 1).setText('  $subtitle');
+
+    s.getRangeByIndex(row, 6, row, 8).merge();
+    final badgeStyle = s.workbook.styles.add('badge_${row}_${statusBadge.hashCode.abs()}');
+    badgeStyle.backColor = _goldAccent;
+    badgeStyle.fontColor = _navyBlue;
+    badgeStyle.bold = true;
+    badgeStyle.fontSize = 9;
+    badgeStyle.hAlign = xlsio.HAlignType.center;
+    badgeStyle.vAlign = xlsio.VAlignType.center;
+    badgeStyle.borders.all.lineStyle = xlsio.LineStyle.thin;
+    s.getRangeByIndex(row, 6).cellStyle = badgeStyle;
+    s.getRangeByIndex(row, 6).setText(statusBadge);
+    s.getRangeByIndex(row, 1).rowHeight = 18;
+    row++;
+
+    return row;
+  }
+
+  /// Writes a styled footer at the given row.
+  static void _addFooter(xlsio.Worksheet s, int row, xlsio.Style footerStyle, String reportId) {
+    s.getRangeByIndex(row, 1, row, 8).merge();
+    s.getRangeByIndex(row, 1).cellStyle = footerStyle;
+    s.getRangeByIndex(row, 1).setText(
+        '  Report ID: $reportId   |   Indian Railways – OBHS Enterprise Monitoring System   |   Generated: ${DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now())}');
+    s.getRangeByIndex(row, 1).rowHeight = 18;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -164,7 +250,8 @@ class OBHSReportExcelGenerator {
     int row = 1;
 
     // === Title ===
-    row = await _addLogoAndTitle(s, row, 'OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT', 'Generated On: ${_nowFmt.format(DateTime.now())}', gs);
+    row = await _addLogoAndTitle(s, row, 'OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT',
+        'Generated On: ${_nowFmt.format(DateTime.now())}', gs, statusBadge: 'OPERATIONAL AUDIT');
     row += 2;
 
     for (int idx = 0; idx < runInstances.length; idx++) {
@@ -203,8 +290,10 @@ class OBHSReportExcelGenerator {
       }
       row++;
 
-      for (final coach in coaches) {
+      for (int i = 0; i < coaches.length; i++) {
+        final coach = coaches[i];
         final cm = coach as Map<String, dynamic>;
+        final rowStyle = i.isEven ? ds : _altDataStyle(wb, 'tr_alt$i');
         final cells = [
           cm['coachPosition']?.toString() ?? '1',
           cm['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'C1',
@@ -217,7 +306,7 @@ class OBHSReportExcelGenerator {
         ];
         for (int c = 0; c < cells.length; c++) {
           s.getRangeByIndex(row, c + 1).setText(cells[c]);
-          s.getRangeByIndex(row, c + 1).cellStyle = ds;
+          s.getRangeByIndex(row, c + 1).cellStyle = rowStyle;
         }
         row++;
       }
@@ -271,10 +360,9 @@ class OBHSReportExcelGenerator {
           'Generated On', _nowFmt.format(DateTime.now()), ls, vs);
       row += 2;
 
-      s.getRangeByIndex(row, 1, row, 8).merge();
-      s.getRangeByIndex(row, 1).setText(
-          'Report ID: OBHS-RUN-${run['runInstanceId'] ?? idx}   |   Indian Railways – OBHS Enterprise Monitoring System');
-      s.getRangeByIndex(row, 1).cellStyle = ds;
+      // ── Footer ──────────────────────────────────────────────────────────────────
+      _addFooter(s, row, _footerStyle(wb, 'tr_foot${run['runInstanceId'] ?? idx}'),
+          'OBHS-RUN-${run['runInstanceId'] ?? idx}');
       row += 3;
     }
 
@@ -305,7 +393,10 @@ class OBHSReportExcelGenerator {
     int row = 1;
 
     // Title
-    row = await _addLogoAndTitle(s, row, 'OBHS ATTENDANCE & EVIDENCE AUDIT REPORT', 'Attendance Verification  |  GPS Validation  |  Evidence Compliance', gs);
+    row = await _addLogoAndTitle(s, row,
+        'OBHS ATTENDANCE & EVIDENCE AUDIT REPORT',
+        'Attendance Verification  |  GPS Validation  |  Evidence Compliance',
+        gs, statusBadge: 'VERIFIED');
     row += 2;
 
     for (final run in runInstances) {
@@ -357,7 +448,9 @@ class OBHSReportExcelGenerator {
         s.getRangeByIndex(row, 1).cellStyle = ds;
         row++;
       } else {
-        for (final att in runAttendance) {
+        for (int i = 0; i < runAttendance.length; i++) {
+          final att = runAttendance[i];
+          final rowStyle = i.isEven ? ds : _altDataStyle(wb, 'at_alt$i');
           final cells = [
             att['type']?.toString() ?? att['attendanceType']?.toString() ?? 'Start',
             att['attendanceTime']?.toString() ?? '06:00 AM',
@@ -370,7 +463,7 @@ class OBHSReportExcelGenerator {
           ];
           for (int c = 0; c < cells.length; c++) {
             s.getRangeByIndex(row, c + 1).setText(cells[c]);
-            s.getRangeByIndex(row, c + 1).cellStyle = ds;
+            s.getRangeByIndex(row, c + 1).cellStyle = rowStyle;
           }
           row++;
         }
@@ -425,7 +518,10 @@ class OBHSReportExcelGenerator {
           'NOTE: This is a system generated report and digitally validated. All timestamps are in IST. Data accuracy is based on system records. Unauthorized modification is strictly prohibited.');
       s.getRangeByIndex(row, 1).cellStyle = ds;
       s.getRangeByIndex(row, 1).rowHeight = 30;
-      row += 3;
+
+      _addFooter(s, row + 2, _footerStyle(wb, 'at_foot${runId}'),
+          'OBHS-ATT-${runId}');
+      row += 5;
     }
 
     return _save(wb, savePath);
@@ -454,7 +550,10 @@ class OBHSReportExcelGenerator {
 
     int row = 1;
 
-    row = await _addLogoAndTitle(s, row, 'OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT', 'Operational Audit  |  Task Execution  |  Evidence Verification', gs);
+    row = await _addLogoAndTitle(s, row,
+        'OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT',
+        'Operational Audit  |  Task Execution  |  Evidence Verification',
+        gs, statusBadge: 'ACTIVITY AUDIT');
     row += 2;
 
     for (final run in runInstances) {
@@ -522,7 +621,9 @@ class OBHSReportExcelGenerator {
           s.getRangeByIndex(row, 1).cellStyle = ds;
           row++;
         } else {
-          for (final task in workerTasks) {
+          for (int i = 0; i < workerTasks.length; i++) {
+            final task = workerTasks[i];
+            final rowStyle = i.isEven ? ds : _altDataStyle(wb, 'wa_alt$i');
             final cells = [
               task['taskId']?.toString() ?? 'TASK-8493',
               task['taskCategory']?.toString() ?? task['taskTitle']?.toString() ?? 'General Cleaning',
@@ -535,7 +636,7 @@ class OBHSReportExcelGenerator {
             ];
             for (int c = 0; c < cells.length; c++) {
               s.getRangeByIndex(row, c + 1).setText(cells[c]);
-              s.getRangeByIndex(row, c + 1).cellStyle = ds;
+              s.getRangeByIndex(row, c + 1).cellStyle = rowStyle;
             }
             row++;
           }
@@ -584,7 +685,9 @@ class OBHSReportExcelGenerator {
         row = _kvRow(s, row, 'Report Approved By',
             'Divisional Operations Manager', 'Generated On',
             _nowFmt.format(DateTime.now()), ls, vs);
-        row += 3;
+        _addFooter(s, row + 1, _footerStyle(wb, 'wa_foot${workerId}'),
+            'OBHS-WAR-${workerId}-${runId}');
+        row += 4;
       }
     }
 
@@ -614,7 +717,10 @@ class OBHSReportExcelGenerator {
 
     int row = 1;
 
-    row = await _addLogoAndTitle(s, row, 'OBHS WORKER COMPLAINT & ISSUE TRACKING REPORT', 'Worker Complaint Registration  |  Issue Tracking  |  Resolution Monitoring', gs);
+    row = await _addLogoAndTitle(s, row,
+        'OBHS WORKER COMPLAINT & ISSUE TRACKING REPORT',
+        'Worker Complaint Registration  |  Issue Tracking  |  Resolution Monitoring',
+        gs, statusBadge: 'ISSUE TRACKER');
     row += 2;
 
     for (final run in runInstances) {
@@ -742,7 +848,9 @@ class OBHSReportExcelGenerator {
             'Railway Electrical Dept.', ls, vs);
         row = _kvRow(s, row, 'Report Verified By', 'OBHS Monitoring System',
             'Generated On', _nowFmt.format(DateTime.now()), ls, vs);
-        row += 3;
+        _addFooter(s, row + 1, _footerStyle(wb, 'cr_foot${cmp['complaintId'] ?? row}'),
+            'OBHS-CMP-${cmp['complaintId'] ?? row}');
+        row += 4;
       }
     }
 
