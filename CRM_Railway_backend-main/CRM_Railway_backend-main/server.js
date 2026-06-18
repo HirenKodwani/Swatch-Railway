@@ -3518,7 +3518,7 @@ app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, 
     
     await runInstanceRef.update({
       actualDeparture: departureTime,
-      status: 'ACTIVE',
+      status: 'Active',
       journeyStartedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -3526,7 +3526,7 @@ app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, 
     // Log timeline entry
     await appendJourneyTimeline(runInstanceRef, {
       fromState: currentData.status,
-      toState: 'ACTIVE',
+      toState: 'Active',
       actorId: req.user.uid,
       actorName: req.user.fullName,
       actorRole: req.user.role,
@@ -3545,7 +3545,7 @@ app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, 
       message: 'Journey activated successfully',
       runInstanceId,
       actualDeparture: departureTime,
-      status: 'ACTIVE'
+      status: 'Active'
     });
 
   } catch (error) {

@@ -41,14 +41,21 @@ class OBHSJourneyTimelineWidget extends StatelessWidget {
     return stateIcons[state] ?? Icons.help_outline;
   }
 
+  String _normalizeState(String state) {
+    if (state == 'Active') return 'ACTIVE';
+    if (state == 'Completed') return 'ARRIVED';
+    return state;
+  }
+
   String _stateLabel(String state) {
-    return RunInstanceModel.stateLabels[state] ?? state;
+    final normalized = _normalizeState(state);
+    return RunInstanceModel.stateLabels[normalized] ?? state;
   }
 
   @override
   Widget build(BuildContext context) {
     final timeline = runInstance.journeyTimeline;
-    final currentState = runInstance.status;
+    final currentState = runInstance.normalizedStatus;
     final canAdvance = runInstance.canTransitionTo(
       RunInstanceModel.validTransitions[currentState]?.first ?? ''
     );
@@ -156,6 +163,8 @@ class OBHSJourneyTimelineWidget extends StatelessWidget {
   }
 
   Widget _buildTimelineItem(JourneyTimelineEntry entry, bool isLast) {
+    final normalizedToState = _normalizeState(entry.toState);
+    final normalizedFromState = entry.fromState != null ? _normalizeState(entry.fromState!) : null;
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,7 +177,7 @@ class OBHSJourneyTimelineWidget extends StatelessWidget {
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: _stateColor(entry.toState),
+                    color: _stateColor(normalizedToState),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -191,11 +200,11 @@ class OBHSJourneyTimelineWidget extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        _stateLabel(entry.toState),
+                        _stateLabel(normalizedToState),
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: _stateColor(entry.toState),
+                          color: _stateColor(normalizedToState),
                         ),
                       ),
                       const Spacer(),
@@ -208,11 +217,11 @@ class OBHSJourneyTimelineWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (entry.fromState != null)
+                  if (normalizedFromState != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        'from ${_stateLabel(entry.fromState!)}',
+                        'from ${_stateLabel(normalizedFromState)}',
                         style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ),

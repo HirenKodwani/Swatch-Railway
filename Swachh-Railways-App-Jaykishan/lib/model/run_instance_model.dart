@@ -50,11 +50,17 @@ class RunInstanceModel {
     'CLOSED': [],
   };
 
-  bool canTransitionTo(String targetState) {
-    return validTransitions[status]?.contains(targetState) ?? false;
+  String get normalizedStatus {
+    if (status == 'Active') return 'ACTIVE';
+    if (status == 'Completed') return 'ARRIVED';
+    return status;
   }
 
-  String get stateLabel => stateLabels[status] ?? status;
+  bool canTransitionTo(String targetState) {
+    return validTransitions[normalizedStatus]?.contains(targetState) ?? false;
+  }
+
+  String get stateLabel => stateLabels[status] ?? stateLabels[normalizedStatus] ?? status;
 
   RunInstanceModel({
     this.id,
