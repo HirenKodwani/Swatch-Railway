@@ -427,6 +427,8 @@ class WorkerRepository {
     required String beforePhoto,
     required String afterPhoto,
     required String comment,
+    double? gpsLatitude,
+    double? gpsLongitude,
   }) async {
     try {
       final token = await _getToken();
@@ -450,6 +452,8 @@ class WorkerRepository {
             'beforePhoto': beforePhoto,
             'afterPhoto': afterPhoto,
             'comment': comment,
+            'gpsLatitude': gpsLatitude?.toString() ?? '',
+            'gpsLongitude': gpsLongitude?.toString() ?? '',
             'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
           }),
         ),
@@ -540,6 +544,40 @@ class WorkerRepository {
           'complaintId': 'CMP-${DateTime.now().millisecondsSinceEpoch}',
         });
         return result;
+      } else if (response.statusCode == 401) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(
+          ApiErrorHandler.getErrorMessage(response.body, response.statusCode),
+        );
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
+  /// GET /api/obhs/worker/active-run — Returns worker's active run + coach assignments
+  static Future<Map<String, dynamic>> getActiveRun() async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/api/obhs/worker/active-run'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      debugPrint('Active run status: ${response.statusCode}');
+      debugPrint('Active run body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
       } else if (response.statusCode == 401) {
         throw Exception('AUTH_ERROR');
       } else {

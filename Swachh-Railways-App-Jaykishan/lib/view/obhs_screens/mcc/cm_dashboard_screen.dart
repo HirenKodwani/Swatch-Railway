@@ -39,7 +39,7 @@ class _CmDashboardScreenState extends State<CmDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],

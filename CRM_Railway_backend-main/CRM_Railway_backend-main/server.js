@@ -15662,6 +15662,58 @@ app.get('/api/v2/journey/timeline/:runInstanceId', verifyToken, async (req, res)
   }
 });
 
+// =======================================================
+// == WORKER ASSIGNMENTS (MCC Flow)
+// =======================================================
+
+// GET /api/obhs/worker/active-run — Get worker's active run with assigned coaches
+app.get('/api/obhs/worker/active-run', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const allRuns = await db.collection('RunInstance')
+      .where('status', 'in', ['ALLOCATED', 'ACTIVE', 'READY'])
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    let runDoc = null;
+    allRuns.forEach(doc => {
+      const coaches = doc.data().coaches || [];
+      if (coaches.some(c => c.workerId === uid)) {
+        runDoc = doc;
+      }
+    });
+
+    if (!runDoc) {
+      return res.status(200).json({ success: true, hasAssignment: false, run: null });
+    }
+    const runData = { id: runDoc.id, ...runDoc.data() };
+    const myCoaches = (runData.coaches || []).filter(c => c.workerId === uid);
+
+    res.status(200).json({
+      success: true,
+      hasAssignment: true,
+      run: {
+        runInstanceId: runData.id,
+        trainNo: runData.trainNo || runData.trainNumber || 'N/A',
+        trainName: runData.trainName || runData.name || '',
+        status: runData.status,
+        departureDate: runData.departureDate || '',
+        departureTime: runData.departureTime || '',
+      },
+      coaches: myCoaches.map(c => ({
+        coachNo: c.coachPosition || c.coachNo || c.id || 'N/A',
+        coachType: c.coachType || 'general',
+        workerId: c.workerId,
+        workerName: c.workerName || c.name || '',
+        workerRole: c.workerRole || 'janitor'
+      }))
+    });
+  } catch (error) {
+    console.error('(WorkerActiveRun) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch worker assignment', details: error.message });
+  }
+});
+
 // ─── SEED ON STARTUP ──────────────────────────────────────────────────────
 seedTaskMasters();
 
