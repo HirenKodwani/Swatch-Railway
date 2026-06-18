@@ -284,7 +284,8 @@ class WorkerRepository {
       }
 
       http.Response? lastResponse;
-      for (final fieldName in ['image', 'file', 'photo', 'media']) {
+      // Only try the field names currently supported by the backend: 'image' and 'file'
+      for (final fieldName in ['image', 'file']) {
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('$baseUrl/api/media/upload'),
@@ -299,29 +300,35 @@ class WorkerRepository {
           ),
         );
 
-        debugPrint('Media upload field: $fieldName');
-        final streamedResponse = await request.send().timeout(
-          const Duration(seconds: 60),
-          onTimeout: () => throw Exception('Request timeout'),
-        );
-        final response = await http.Response.fromStream(streamedResponse);
-        lastResponse = response;
-        debugPrint('Media upload status: ${response.statusCode}');
-        debugPrint('Media upload body: ${response.body}');
+        try {
+          final streamedResponse = await request.send().timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw Exception('Upload timeout'),
+          );
+          final response = await http.Response.fromStream(streamedResponse);
+          lastResponse = response;
 
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-          final url = _extractMediaUrl(decoded);
-          if (url != null && url.isNotEmpty) return url;
-          throw Exception('Media uploaded but image URL was not returned.');
-        }
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+            final url = _extractMediaUrl(decoded);
+            if (url != null && url.isNotEmpty) return url;
+          }
 
-        if (response.statusCode == 401) {
-          final message = ApiErrorHandler.getErrorMessage(response.body, response.statusCode);
-          if (message.contains('Session expired') || message.contains('AUTH_ERROR')) {
+          // If auth error, fail immediately
+          if (response.statusCode == 401) {
             throw Exception('AUTH_ERROR');
           }
-          throw Exception(message);
+
+          // If it's a 4xx or 5xx error, don't keep trying other keys if we already tried 'image'
+          if (response.statusCode >= 400) {
+            final msg = ApiErrorHandler.getErrorMessage(response.body, response.statusCode);
+            throw Exception(msg);
+          }
+        } catch (e) {
+          if (e.toString().contains('AUTH_ERROR') || !e.toString().contains('Invalid field')) {
+            rethrow;
+          }
+          // Continue to 'file' if 'image' failed with a specific "Invalid field" type error
         }
       }
 

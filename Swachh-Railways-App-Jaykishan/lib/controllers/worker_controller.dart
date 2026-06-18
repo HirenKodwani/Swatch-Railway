@@ -734,6 +734,9 @@ class WorkerController extends GetxController {
         imageUrl: imageUrl,
         latitude: position.latitude,
         longitude: position.longitude,
+      ).timeout(
+        const Duration(seconds: 40),
+        onTimeout: () => throw Exception('Attendance server timeout. Please check your internet and try again.'),
       );
 
       final isSuccess =
