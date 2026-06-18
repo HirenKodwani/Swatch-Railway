@@ -327,7 +327,7 @@ class OBHSReportExcelGenerator {
         ['Total Coaches', coaches.length.toString()],
         ['Total Workers Assigned',
             coaches.where((c) => (c as Map)['janitorId'] != null).length.toString()],
-        ['Attendance Compliance', '98%'],
+        ['Overall Rating Score', run['weightedScore']?.toString() ?? '-'],
         ['Task Completion Rate', '96%'],
         ['Complaint Resolution Rate', '94%'],
         ['Evidence Upload Success', '99%'],
@@ -663,7 +663,7 @@ class OBHSReportExcelGenerator {
           ['Task Completion', total > 0 ? '${(completed / total * 100).toStringAsFixed(0)}%' : '0%'],
           ['Evidence Upload Success', total > 0 ? '${(withEvidence / total * 100).toStringAsFixed(0)}%' : '0%'],
           ['Missing Evidence', (total - withEvidence).toString()],
-          ['Passenger Rating', '-'],
+          ['Passenger Rating', cm['passengerRating']?.toString() ?? '-'],
           ['Inspection Compliance', '98%'],
         ];
 

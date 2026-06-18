@@ -106,7 +106,7 @@ class _WorkerRatingScreenState extends State<WorkerRatingScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: widget.isOfficialMode ? 6 : 3, vsync: this);
     _loadRatings();
   }
 
@@ -181,16 +181,18 @@ class _WorkerRatingScreenState extends State<WorkerRatingScreen>
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
-          isScrollable: true,
+          isScrollable: widget.isOfficialMode,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           tabs: [
-            Tab(text: 'Summary'),
+            const Tab(text: 'Summary'),
             Tab(text: 'Passenger (${_passengerRatings.length})'),
             Tab(text: 'Official (${_officialRatings.length})'),
-            Tab(text: 'TTE (${_tteRatings.length})'),
-            Tab(text: 'PSME (${_psmeRatings.length})'),
-            Tab(text: 'Supervisor/Admin (${_supervisorRatings.length})'),
+            if (widget.isOfficialMode) ...[
+              Tab(text: 'TTE (${_tteRatings.length})'),
+              Tab(text: 'PSME (${_psmeRatings.length})'),
+              Tab(text: 'Supervisor/Admin (${_supervisorRatings.length})'),
+            ],
           ],
         ),
       ),
@@ -202,9 +204,11 @@ class _WorkerRatingScreenState extends State<WorkerRatingScreen>
             _buildSummaryTab(),
             _buildRatingList(_passengerRatings, 'Passenger'),
             _buildRatingList(_officialRatings, 'Official'),
-            _buildRatingList(_tteRatings, 'TTE'),
-            _buildRatingList(_psmeRatings, 'PSME'),
-            _buildRatingList(_supervisorRatings, 'Supervisor/Admin'),
+            if (widget.isOfficialMode) ...[
+              _buildRatingList(_tteRatings, 'TTE'),
+              _buildRatingList(_psmeRatings, 'PSME'),
+              _buildRatingList(_supervisorRatings, 'Supervisor/Admin'),
+            ],
           ],
         ),
       floatingActionButton: FloatingActionButton.extended(
@@ -307,31 +311,8 @@ class _WorkerRatingScreenState extends State<WorkerRatingScreen>
                   ],
                 ),
                 _buildStarRow(weighted, size: 18, color: Colors.amber),
-                const SizedBox(height: 4),
-                Text('${_ratings.length} total reviews · Passenger 40% · Official 25% · Supervisor/Admin 20% · TTE 10% · PSME 5%', style: const TextStyle(color: Colors.white60, fontSize: 10)),
               ],
             ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // ── Rater-Type Breakdown Cards (Passenger first, highest weight) ──
-          _buildRaterScoreCard('Passenger', passengerAvg, Colors.blue, _passengerRatings.length, '40%'),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildRaterScoreCard('Official', officialAvg, Colors.indigo, _officialRatings.length, '25%')),
-              const SizedBox(width: 10),
-              Expanded(child: _buildRaterScoreCard('Supervisor/Admin', supervisorAvg, Colors.deepPurple, _supervisorRatings.length, '20%')),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _buildRaterScoreCard('TTE', tteAvg, Colors.teal, _tteRatings.length, '10%')),
-              const SizedBox(width: 10),
-              Expanded(child: _buildRaterScoreCard('PSME', psmeAvg, Colors.orange, _psmeRatings.length, '5%')),
-            ],
           ),
 
           const SizedBox(height: 20),

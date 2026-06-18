@@ -16,6 +16,7 @@ import '../../../utills/app_colors.dart';
 import '../widgets/rolevise_dropdowns.dart';
 import '../report_excel_format/obhs_report_excel.dart';
 import '../../../services/pdf_report_service.dart';
+import '../../../repositories/worker_repo.dart';
 import 'package:printing/printing.dart';
 class CommonReportScreen extends StatefulWidget {
   final int initialIndex;
@@ -2946,8 +2947,9 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                 icon: const Icon(Icons.table_chart, color: Colors.white),
                 label: const Text('Excel', style: TextStyle(color: Colors.white)),
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
+                  await _injectRatings(runInstances.cast<Map<String, dynamic>>());
                   _downloadOBHSExcel(runInstances);
                 },
               ),
@@ -2955,8 +2957,9 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                 icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
                 label: const Text('PDF', style: TextStyle(color: Colors.white)),
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
+                  await _injectRatings(runInstances.cast<Map<String, dynamic>>());
                   _downloadOBHSPdf(runInstances);
                 },
               ),
@@ -2969,6 +2972,56 @@ class _CommonReportScreenState extends State<CommonReportScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
+    }
+  }
+
+  Future<void> _injectRatings(List<Map<String, dynamic>> runs) async {
+    setState(() => isDownloading = true);
+    for (final run in runs) {
+      final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? '';
+      if (runId.isNotEmpty) {
+        try {
+          final res = await WorkerRepository.getFeedbackSummary(runInstanceId: runId);
+          final feedbacks = res['recentFeedbacks'] ?? res['data'] ?? [];
+          
+          double avgForType(String type) {
+            final list = feedbacks.where((f) => f['raterType'] == type).toList();
+            if (list.isEmpty) return 0;
+            final sum = list.fold<double>(0, (s, f) => s + ((f['overallRating'] as num?)?.toDouble() ?? 0));
+            return sum / list.length;
+          }
+          int countForType(String type) => feedbacks.where((f) => f['raterType'] == type).length;
+          
+          final passengerAvg = avgForType('Passenger');
+          final officialAvg = avgForType('Official');
+          final supervisorAvg = avgForType('Supervisor/Admin');
+          final tteAvg = avgForType('TTE');
+          final psmeAvg = avgForType('PSME');
+
+          double totalWeight = 0, totalScore = 0;
+          if (countForType('Passenger') > 0) { totalScore += passengerAvg * 0.40; totalWeight += 0.40; }
+          if (countForType('Official') > 0) { totalScore += officialAvg * 0.25; totalWeight += 0.25; }
+          if (countForType('Supervisor/Admin') > 0) { totalScore += supervisorAvg * 0.20; totalWeight += 0.20; }
+          if (countForType('TTE') > 0) { totalScore += tteAvg * 0.10; totalWeight += 0.10; }
+          if (countForType('PSME') > 0) { totalScore += psmeAvg * 0.05; totalWeight += 0.05; }
+          
+          run['weightedScore'] = totalWeight > 0 ? (totalScore / totalWeight).toStringAsFixed(2) : '-';
+
+          for (var c in (run['coaches'] as List<dynamic>? ?? [])) {
+            final cm = c as Map<String, dynamic>;
+            final coachNo = cm['coachNo'] ?? cm['coachPosition']?.toString();
+            final cFeedbacks = feedbacks.where((f) => f['coachNo'] == coachNo && f['raterType'] == 'Passenger').toList();
+            if (cFeedbacks.isNotEmpty) {
+              final sum = cFeedbacks.fold<double>(0, (s, f) => s + ((f['overallRating'] as num?)?.toDouble() ?? 0));
+              cm['passengerRating'] = (sum / cFeedbacks.length).toStringAsFixed(1);
+            } else {
+              cm['passengerRating'] = '-';
+            }
+          }
+        } catch (e) {
+          run['weightedScore'] = '-';
+        }
+      }
     }
   }
 

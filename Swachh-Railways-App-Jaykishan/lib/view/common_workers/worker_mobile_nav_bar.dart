@@ -68,6 +68,7 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
       WorkerTaskScreen(),
       WorkerAttendanceScreen(),
       WorkerComplaintsScreen(),
+      const WorkerRatingScreen(isOfficialMode: false),
     ];
   }
 
@@ -94,6 +95,12 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.report_rounded),
         title: "Complaints",
+        activeColorPrimary: kRailwayBlue,
+        inactiveColorPrimary: Colors.grey,
+      ),
+      PersistentBottomNavBarItem(
+        icon: const Icon(Icons.star_rounded),
+        title: "Ratings",
         activeColorPrimary: kRailwayBlue,
         inactiveColorPrimary: Colors.grey,
       ),

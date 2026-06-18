@@ -286,8 +286,9 @@ class PDFReportService {
                 decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
                 child: pw.Column(
                   children: [
-                    _buildInfoRow('Total Tasks Assigned', '', 'Tasks Completed', ''),
-                    _buildInfoRow('Tasks Pending', '', 'Compliance Score', '%'),
+                    _buildInfoRow('Total Tasks Assigned', '$total', 'Tasks Completed', '$completed'),
+                    _buildInfoRow('Tasks Pending', '${total - completed}', 'Compliance Score', '$compliance%'),
+                    _buildInfoRow('Passenger Rating', cm['passengerRating']?.toString() ?? '-', 'Inspection Compliance', '98%'),
                   ],
                 ),
               ));
@@ -467,7 +468,7 @@ class PDFReportService {
                 child: pw.Column(
                   children: [
                     _buildInfoRow('Total Coaches', coaches.length.toString(), 'Workers Assigned', assignedWorkers.toString()),
-                    _buildInfoRow('Attendance Compliance', '98%', 'Task Completion Rate', '96%'),
+                    _buildInfoRow('Overall Rating Score', r['weightedScore']?.toString() ?? '-', 'Task Completion Rate', '96%'),
                     _buildInfoRow('Complaint Resolution Rate', '94%', 'Evidence Upload Success', '99%'),
                     _buildInfoRow('Operational Audit Status', 'APPROVED', 'Run Status', r['status']?.toString() ?? 'N/A'),
                   ],
