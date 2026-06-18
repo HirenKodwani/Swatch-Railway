@@ -16,7 +16,8 @@ import path from 'path';
 dotenv.config();
 import axios from 'axios';
 import { RekognitionClient, CompareFacesCommand } from "@aws-sdk/client-rekognition";
-
+import sharp from 'sharp';
+import * as evidence from './evidence_manager.js';
 
 const TWO_FACTOR_API_KEY = process.env.TWOF_API_KEY;
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
@@ -5825,6 +5826,19 @@ cron.schedule('55 23 * * *', async () => {
   }
 });
 
+// Evidence archive cron: runs daily at 2 AM
+cron.schedule('0 2 * * *', async () => {
+  console.log('--- Running Evidence Archive Cron ---');
+  try {
+    const result = await evidence.archiveOldRecords(db, bucket, 7);
+    console.log(`Archived ${result.archived} records older than ${result.daysOld} days`);
+    const longResult = await evidence.moveToLongTerm(db, 30);
+    console.log(`Moved ${longResult.moved} records to long-term storage`);
+  } catch (error) {
+    console.error('Evidence archive cron failed:', error);
+  }
+});
+
 setInterval(() => {
   checkAndApprove('coachForms');
   checkAndApprove('premisesForms');
@@ -11532,7 +11546,914 @@ app.post('/api/obhs/complaints/auto-route', verifyToken, async (req, res) => {
   }
 });
 
+// =======================================================
+// == EVIDENCE MANAGEMENT SYSTEM
+// =======================================================
+
+// GET /api/evidence/types — List supported evidence types (no auth required for this metadata)
+app.get('/api/evidence/types', (req, res) => {
+  res.json({
+    success: true,
+    types: evidence.evidenceUtils.EVIDENCE_TYPES
+  });
+});
+
+// POST /api/evidence/upload — Upload evidence with WEBP conversion, thumbnail, dedup
+app.post('/api/evidence/upload', verifyToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const {
+      trainNumber, coach, taskId, taskType, evidenceType,
+      contractor, runInstanceId, complaintId, attendanceId,
+      gpsLat, gpsLng, remarks
+    } = req.body;
+
+    const user = req.user;
+    const division = user.division || 'Unknown';
+    const date = new Date().toISOString().split('T')[0];
+
+    // Duplicate check
+    const fileHash = evidence.computeFileHash(req.file.buffer);
+    const existing = await evidence.findDuplicateByHash(db, fileHash);
+    if (existing) {
+      return res.status(200).json({
+        success: true,
+        duplicate: true,
+        evidenceId: existing.id,
+        message: 'Duplicate image detected. Returning existing record.',
+        ...existing
+      });
+    }
+
+    // Process image (WEBP + thumbnail + compression)
+    const processed = await evidence.processImage(req.file.buffer);
+
+    // Build storage path: Division/Train/Date/Coach/Task/EvidenceType/
+    const filename = `${uuidv4()}_${Date.now()}`;
+    const storageRef = evidence.buildStoragePath(
+      division, trainNumber || 'UNKNOWN', date,
+      coach || 'GENERAL', taskId || 'no-task', evidenceType || 'Before', filename
+    );
+
+    // Upload to Firebase Storage
+    const storageResult = await evidence.uploadToStorage(bucket, storageRef, processed);
+
+    // Create metadata document
+    const meta = evidence.buildEvidenceMetadata({
+      storageRef,
+      trainNumber,
+      coach,
+      taskId,
+      taskType,
+      evidenceType: evidenceType || 'Before',
+      uploadedBy: user.uid,
+      uploadedByName: user.fullName || user.name,
+      uploadedByRole: user.role,
+      division,
+      contractor,
+      runInstanceId,
+      fileHash,
+      complaintId,
+      attendanceId,
+      gpsLat,
+      gpsLng,
+      remarks,
+      originalSize: processed.originalSize,
+      compressedSize: processed.compressedSize,
+      thumbnailSize: processed.thumbnailSize,
+      compressionRatio: processed.compressionRatio,
+      width: processed.width,
+      height: processed.height,
+      originalFormat: processed.originalFormat,
+      webpUrl: storageResult.webpUrl,
+      thumbUrl: storageResult.thumbUrl,
+      webpPath: storageResult.webpPath,
+      thumbPath: storageResult.thumbPath
+    });
+
+    const docRef = await db.collection('evidence_metadata').add(meta);
+    await evidence.logAudit(db, 'EVIDENCE_UPLOADED', {
+      evidenceId: docRef.id, userId: user.uid, userName: user.fullName,
+      userRole: user.role, trainNumber, coach, taskId, complaintId,
+      details: `Uploaded ${evidenceType || 'Before'} evidence (${(processed.compressionRatio)}% compression)`
+    });
+
+    res.status(201).json({
+      success: true,
+      evidenceId: docRef.id,
+      webpUrl: storageResult.webpUrl,
+      thumbUrl: storageResult.thumbUrl,
+      originalSize: processed.originalSize,
+      compressedSize: processed.compressedSize,
+      compressionRatio: processed.compressionRatio,
+      width: processed.width,
+      height: processed.height,
+      message: 'Evidence uploaded and compressed successfully'
+    });
+
+  } catch (error) {
+    console.error('Evidence upload error:', error);
+    res.status(500).json({ error: 'Failed to upload evidence', details: error.message });
+  }
+});
+
+// POST /api/evidence/upload/base64 — Upload base64-encoded evidence
+app.post('/api/evidence/upload/base64', verifyToken, async (req, res) => {
+  try {
+    const { image, ...metadata } = req.body;
+    if (!image) return res.status(400).json({ error: 'No image data provided' });
+
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Create a fake file object
+    req.file = { buffer, mimetype: 'image/png', originalname: `evidence_${Date.now()}.png` };
+    req.body = metadata;
+
+    // Forward to the main upload handler logic
+    const handler = app._router.stack.find(l => l.route?.path === '/api/evidence/upload' && l.route.methods?.post);
+    if (handler) {
+      return handler.route.stack[0].handle(req, res);
+    }
+    throw new Error('Upload handler not found');
+  } catch (error) {
+    console.error('Base64 evidence upload error:', error);
+    res.status(500).json({ error: 'Failed to process base64 evidence', details: error.message });
+  }
+});
+
+// GET /api/evidence/:id — Get single evidence record (active/archive/long-term)
+app.get('/api/evidence/:id', verifyToken, async (req, res) => {
+  try {
+    const record = await evidence.getEvidenceById(db, req.params.id);
+    if (!record) return res.status(404).json({ error: 'Evidence not found' });
+
+    await evidence.logAudit(db, 'EVIDENCE_VIEWED', {
+      evidenceId: req.params.id, userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, trainNumber: record.trainNumber,
+      details: 'Evidence record viewed'
+    });
+
+    res.json({ success: true, evidence: record });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch evidence', details: error.message });
+  }
+});
+
+// PUT /api/evidence/:id — Update evidence metadata (edit remarks, etc.)
+app.put('/api/evidence/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const allowed = ['remarks', 'gpsLat', 'gpsLng', 'evidenceType'];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+
+    const doc = await db.collection('evidence_metadata').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Evidence not found' });
+
+    await doc.ref.update(updates);
+    await evidence.logAudit(db, 'EVIDENCE_UPDATED', {
+      evidenceId: id, userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, details: `Updated fields: ${Object.keys(updates).join(', ')}`
+    });
+
+    res.json({ success: true, message: 'Evidence updated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update evidence', details: error.message });
+  }
+});
+
+// DELETE /api/evidence/:id — Soft delete evidence
+app.delete('/api/evidence/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await db.collection('evidence_metadata').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Evidence not found' });
+
+    await doc.ref.update({
+      deleted: true,
+      deletedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await evidence.logAudit(db, 'EVIDENCE_DELETED', {
+      evidenceId: id, userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, details: 'Evidence soft-deleted'
+    });
+
+    res.json({ success: true, message: 'Evidence deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete evidence', details: error.message });
+  }
+});
+
+// GET /api/evidence/search — Search evidence across active/archive
+app.get('/api/evidence/search', verifyToken, async (req, res) => {
+  try {
+    const params = {
+      trainNumber: req.query.trainNumber,
+      coach: req.query.coach,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      contractor: req.query.contractor,
+      worker: req.query.worker,
+      supervisor: req.query.supervisor,
+      taskType: req.query.taskType,
+      evidenceType: req.query.evidenceType,
+      complaintId: req.query.complaintId,
+      runInstanceId: req.query.runInstanceId,
+      storageTier: req.query.storageTier,
+      uploadedBy: req.query.uploadedBy,
+      limit: parseInt(req.query.limit) || 50,
+      offset: parseInt(req.query.offset) || 0
+    };
+
+    const results = await evidence.searchEvidence(db, params);
+
+    await evidence.logAudit(db, 'EVIDENCE_SEARCHED', {
+      userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role,
+      details: `Search: train=${params.trainNumber || '*'}, coach=${params.coach || '*'}, type=${params.evidenceType || '*'}`
+    });
+
+    res.json({ success: true, ...results });
+  } catch (error) {
+    res.status(500).json({ error: 'Search failed', details: error.message });
+  }
+});
+
+// POST /api/evidence/:id/archive — Manually archive evidence
+app.post('/api/evidence/:id/archive', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await db.collection('evidence_metadata').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Evidence not found in active storage' });
+
+    const data = doc.data();
+    await db.collection('archive_evidence').doc(id).set({
+      ...data, storageTier: evidence.STORAGE_TIER.ARCHIVE,
+      archivedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    await doc.ref.update({
+      storageTier: evidence.STORAGE_TIER.ARCHIVE,
+      archivedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await evidence.logAudit(db, 'EVIDENCE_ARCHIVED_MANUAL', {
+      evidenceId: id, userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, details: 'Manually archived'
+    });
+
+    res.json({ success: true, message: 'Evidence archived' });
+  } catch (error) {
+    res.status(500).json({ error: 'Archive failed', details: error.message });
+  }
+});
+
+// POST /api/evidence/:id/restore — Restore from archive/long-term
+app.post('/api/evidence/:id/restore', verifyToken, async (req, res) => {
+  try {
+    const result = await evidence.restoreFromArchive(db, req.params.id);
+    await evidence.logAudit(db, 'EVIDENCE_RESTORED_MANUAL', {
+      evidenceId: req.params.id, userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, details: `Restored from ${result.tier}`
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: 'Restore failed', details: error.message });
+  }
+});
+
+// =======================================================
+// == STORAGE ANALYTICS
+// =======================================================
+
+// GET /api/storage/analytics — Storage usage, trends, forecast
+app.get('/api/storage/analytics', verifyToken, async (req, res) => {
+  try {
+    const analytics = await evidence.getStorageAnalytics(db);
+    res.json({ success: true, ...analytics });
+  } catch (error) {
+    res.status(500).json({ error: 'Analytics failed', details: error.message });
+  }
+});
+
+// GET /api/storage/per-train — Image count per train
+app.get('/api/storage/per-train', verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection('evidence_metadata')
+      .where('deleted', '==', false).get();
+    const trainCounts = {};
+    snap.docs.forEach(doc => {
+      const t = doc.data().trainNumber || 'UNKNOWN';
+      trainCounts[t] = (trainCounts[t] || 0) + 1;
+    });
+    const sorted = Object.entries(trainCounts)
+      .map(([train, count]) => ({ train, count }))
+      .sort((a, b) => b.count - a.count);
+    res.json({ success: true, trains: sorted });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed', details: error.message });
+  }
+});
+
+// GET /api/storage/per-contractor — Storage per contractor
+app.get('/api/storage/per-contractor', verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection('evidence_metadata')
+      .where('deleted', '==', false).get();
+    const contractorStats = {};
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      const c = d.contractor || 'Unknown';
+      if (!contractorStats[c]) contractorStats[c] = { count: 0, totalBytes: 0 };
+      contractorStats[c].count++;
+      contractorStats[c].totalBytes += d.compressedSize || d.originalSize || 0;
+    });
+    res.json({ success: true, contractors: contractorStats });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed', details: error.message });
+  }
+});
+
+// GET /api/storage/daily-upload-count — Daily upload counts
+app.get('/api/storage/daily-upload-count', verifyToken, async (req, res) => {
+  try {
+    const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+    const snap = await db.collection('evidence_metadata')
+      .where('deleted', '==', false).get();
+    const dailyCounts = {};
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      if (d.uploadedAt?.toDate) {
+        const day = d.uploadedAt.toDate().toISOString().split('T')[0];
+        if (day >= from) dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+      }
+    });
+    res.json({ success: true, from, daily: dailyCounts });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed', details: error.message });
+  }
+});
+
+// =======================================================
+// == AUDIT TRAIL
+// =======================================================
+
+// GET /api/audit/evidence — Evidence audit log
+app.get('/api/audit/evidence', verifyToken, async (req, res) => {
+  try {
+    const { evidenceId, action, userId, limit = 50 } = req.query;
+    let query = db.collection('audit_evidence').orderBy('timestamp', 'desc').limit(parseInt(limit));
+
+    if (evidenceId) query = query.where('evidenceId', '==', evidenceId);
+    if (action) query = query.where('action', '==', action);
+    if (userId) query = query.where('userId', '==', userId);
+
+    const snap = await query.get();
+    const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    res.json({ success: true, count: logs.length, logs });
+  } catch (error) {
+    res.status(500).json({ error: 'Audit fetch failed', details: error.message });
+  }
+});
+
+// =======================================================
+// == REPORTING ENGINE
+// =======================================================
+
+// POST /api/reports/generate — Generate PDF report
+app.post('/api/reports/generate', verifyToken, async (req, res) => {
+  try {
+    const reportData = {
+      title: req.body.title || 'EVIDENCE REPORT',
+      generatedBy: req.user.fullName || req.user.name,
+      trainNumber: req.body.trainNumber,
+      coach: req.body.coach,
+      contractor: req.body.contractor,
+      periodStart: req.body.periodStart,
+      periodEnd: req.body.periodEnd,
+      sections: req.body.sections || [],
+      images: req.body.images || []
+    };
+
+    const pdfBuffer = await evidence.generatePDFReport(reportData);
+
+    // Store report record
+    const reportRef = db.collection('report_history').doc();
+    await reportRef.set({
+      reportId: reportRef.id,
+      title: reportData.title,
+      type: req.body.reportType || 'custom',
+      generatedBy: req.user.uid,
+      generatedByName: req.user.fullName,
+      generatedByRole: req.user.role,
+      trainNumber: reportData.trainNumber || null,
+      coach: reportData.coach || null,
+      contractor: reportData.contractor || null,
+      periodStart: reportData.periodStart || null,
+      periodEnd: reportData.periodEnd || null,
+      fileSize: pdfBuffer.length,
+      generatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await evidence.logAudit(db, 'REPORT_GENERATED', {
+      userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, trainNumber: reportData.trainNumber,
+      details: `Generated report: ${reportData.title}`
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${reportData.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    res.status(500).json({ error: 'Report generation failed', details: error.message });
+  }
+});
+
+// POST /api/reports/email — Send email report with role-based routing
+app.post('/api/reports/email', verifyToken, async (req, res) => {
+  try {
+    const {
+      reportType, subject, bodyHtml, sections, images,
+      periodStart, periodEnd, trainNumber, coach, contractor,
+      to, cc, bcc
+    } = req.body;
+
+    const sgMail = (await import('@sendgrid/mail')).default;
+    if (process.env.SENDGRID_API_KEY) {
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    }
+
+    // Determine recipients based on role
+    const recipients = to && to.length > 0
+      ? to
+      : evidence.getRecipientsForRole(req.user.role, { email: req.user.email });
+
+    // Generate PDF and attach
+    const pdfBuffer = await evidence.generatePDFReport({
+      title: subject || `${reportType} Report`,
+      generatedBy: req.user.fullName,
+      trainNumber, coach, contractor,
+      periodStart, periodEnd,
+      sections: sections || [],
+      images: images || []
+    });
+
+    const msg = {
+      to: recipients,
+      cc: cc || [],
+      bcc: bcc || [],
+      from: process.env.EMAIL_FROM || 'noreply@swachhrailways.com',
+      subject: subject || `${reportType.toUpperCase()} Report - ${new Date().toISOString().split('T')[0]}`,
+      html: bodyHtml || `<p>Please find attached the ${reportType} report.</p>`,
+      attachments: [{
+        content: pdfBuffer.toString('base64'),
+        filename: `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`,
+        type: 'application/pdf',
+        disposition: 'attachment'
+      }]
+    };
+
+    let sendResult = { messageId: 'simulated' };
+    if (process.env.SENDGRID_API_KEY) {
+      sendResult = await sgMail.send(msg);
+    }
+
+    // Store email history
+    const emailRef = db.collection('email_history').doc();
+    await emailRef.set({
+      emailId: emailRef.id,
+      reportType,
+      subject: msg.subject,
+      to: msg.to,
+      cc: msg.cc,
+      sentBy: req.user.uid,
+      sentByName: req.user.fullName,
+      sentByRole: req.user.role,
+      pdfSize: pdfBuffer.length,
+      sendgridMessageId: sendResult.messageId || sendResult[0]?.statusCode || 'simulated',
+      sentAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await evidence.logAudit(db, 'REPORT_EMAILED', {
+      userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role, trainNumber,
+      details: `Emailed ${reportType} report to ${recipients.join(', ')}`
+    });
+
+    res.json({
+      success: true,
+      message: 'Report emailed successfully',
+      emailId: emailRef.id,
+      recipients,
+      pdfSize: pdfBuffer.length
+    });
+
+  } catch (error) {
+    console.error('Email report error:', error);
+    res.status(500).json({ error: 'Failed to send email report', details: error.message });
+  }
+});
+
+// GET /api/reports/history — Report generation history
+app.get('/api/reports/history', verifyToken, async (req, res) => {
+  try {
+    const { limit = 50, type, trainNumber } = req.query;
+    let query = db.collection('report_history').orderBy('generatedAt', 'desc').limit(parseInt(limit));
+
+    if (type) query = query.where('type', '==', type);
+    if (trainNumber) query = query.where('trainNumber', '==', trainNumber);
+
+    const snap = await query.get();
+    const reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    res.json({ success: true, count: reports.length, reports });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch report history', details: error.message });
+  }
+});
+
+// GET /api/reports/email-history — Email sending history
+app.get('/api/reports/email-history', verifyToken, async (req, res) => {
+  try {
+    const { limit = 50 } = req.query;
+    const snap = await db.collection('email_history')
+      .orderBy('sentAt', 'desc')
+      .limit(parseInt(limit))
+      .get();
+    const emails = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ success: true, count: emails.length, emails });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed', details: error.message });
+  }
+});
+
+// =======================================================
+// == SCHEDULED REPORTS (Daily / Weekly / Monthly)
+// =======================================================
+
+// POST /api/reports/generate/daily — Generate daily train report
+app.post('/api/reports/generate/daily', verifyToken, async (req, res) => {
+  try {
+    const { trainNumber, runInstanceId } = req.body;
+    if (!trainNumber) return res.status(400).json({ error: 'trainNumber required' });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Gather task data
+    const tasksSnap = await db.collection('obhs_task_instances')
+      .where('trainNumber', '==', trainNumber)
+      .where('date', '==', today)
+      .get();
+
+    const tasks = tasksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const completed = tasks.filter(t => t.status === 'completed');
+    const pending = tasks.filter(t => t.status === 'pending' || t.status === 'assigned');
+    const escalated = tasks.filter(t => t.status === 'escalated');
+
+    // Gather complaint data
+    const complaintsSnap = await db.collection('obhs_complaints')
+      .where('trainNumber', '==', trainNumber)
+      .where('date', '==', today)
+      .get();
+    const complaints = complaintsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Gather evidence data
+    const evidenceSnap = await db.collection('evidence_metadata')
+      .where('trainNumber', '==', trainNumber)
+      .where('deleted', '==', false)
+      .get();
+    const evidenceDocs = evidenceSnap.docs.map(d => d.data());
+
+    // Gather supervisor approvals
+    const approvalsSnap = await db.collection('task_approvals')
+      .where('trainNumber', '==', trainNumber)
+      .where('date', '==', today)
+      .get();
+
+    const sections = [
+      {
+        heading: 'Task Summary',
+        colWidths: [150, 80, 80, 80, 80],
+        headers: ['Metric', 'Count'],
+        fields: ['label', 'value'],
+        items: [
+          { label: 'Tasks Generated', value: tasks.length },
+          { label: 'Tasks Completed', value: completed.length },
+          { label: 'Pending Tasks', value: pending.length },
+          { label: 'Escalations', value: escalated.length }
+        ]
+      },
+      {
+        heading: 'Complaint Summary',
+        colWidths: [150, 80, 80, 80, 80],
+        headers: ['Metric', 'Count'],
+        fields: ['label', 'value'],
+        items: [
+          { label: 'Total Complaints', value: complaints.length },
+          { label: 'Images Uploaded', value: evidenceDocs.length }
+        ]
+      },
+      {
+        heading: 'Evidence Summary',
+        colWidths: [150, 80, 80, 80, 80],
+        headers: ['Evidence Type', 'Count'],
+        fields: ['type', 'count'],
+        items: Object.entries(
+          evidenceDocs.reduce((acc, e) => {
+            acc[e.evidenceType] = (acc[e.evidenceType] || 0) + 1;
+            return acc;
+          }, {})
+        ).map(([type, count]) => ({ type, count }))
+      }
+    ];
+
+    const pdfBuffer = await evidence.generatePDFReport({
+      title: `DAILY TRAIN REPORT - ${trainNumber}`,
+      generatedBy: req.user.fullName,
+      trainNumber,
+      periodStart: today,
+      periodEnd: today,
+      sections
+    });
+
+    // Store report
+    const reportRef = db.collection('report_history').doc();
+    await reportRef.set({
+      reportId: reportRef.id,
+      title: `Daily Report - ${trainNumber}`,
+      type: 'daily',
+      generatedBy: req.user.uid,
+      generatedByName: req.user.fullName,
+      trainNumber,
+      periodStart: today,
+      periodEnd: today,
+      summary: {
+        totalTasks: tasks.length,
+        completedTasks: completed.length,
+        pendingTasks: pending.length,
+        escalations: escalated.length,
+        complaints: complaints.length,
+        images: evidenceDocs.length
+      },
+      generatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="DAILY_${trainNumber}_${today}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    res.status(500).json({ error: 'Daily report failed', details: error.message });
+  }
+});
+
+// POST /api/reports/generate/weekly — Generate weekly contractor report
+app.post('/api/reports/generate/weekly', verifyToken, async (req, res) => {
+  try {
+    const { contractor } = req.body;
+    if (!contractor) return res.status(400).json({ error: 'contractor required' });
+
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - 7 * 86400000);
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+
+    // Gather evidence
+    const evidenceSnap = await db.collection('evidence_metadata')
+      .where('contractor', '==', contractor)
+      .where('deleted', '==', false)
+      .get();
+    const evidenceDocs = evidenceSnap.docs.map(d => d.data());
+
+    // Gather complaints
+    const complaintsSnap = await db.collection('obhs_complaints')
+      .where('contractorId', '==', contractor)
+      .get();
+    const complaints = complaintsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Gather attendance
+    const attendanceSnap = await db.collection('attendance_records')
+      .where('contractorId', '==', contractor)
+      .where('date', '>=', startStr)
+      .where('date', '<=', endStr)
+      .get();
+    const attendance = attendanceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const presentCount = attendance.filter(a => a.status === 'present').length;
+    const attendanceCompliance = attendance.length > 0
+      ? ((presentCount / attendance.length) * 100).toFixed(1)
+      : 'N/A';
+
+    // Evidence compliance
+    const tasksSnap = await db.collection('obhs_task_instances')
+      .where('contractorId', '==', contractor)
+      .get();
+    const tasks = tasksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const completedTasks = tasks.filter(t => t.status === 'completed');
+    const completionPct = tasks.length > 0
+      ? ((completedTasks.length / tasks.length) * 100).toFixed(1)
+      : 'N/A';
+
+    const sections = [
+      {
+        heading: 'Weekly Performance Summary',
+        items: [
+          { label: 'Contractor', value: contractor },
+          { label: 'Period', value: `${startStr} to ${endStr}` },
+          { label: 'Completion %', value: `${completionPct}%` },
+          { label: 'Attendance Compliance', value: `${attendanceCompliance}%` },
+          { label: 'Evidence Uploaded', value: evidenceDocs.length },
+          { label: 'Complaints', value: complaints.length }
+        ].map(i => ({ label: i.label, value: String(i.value) }))
+      }
+    ];
+
+    const pdfBuffer = await evidence.generatePDFReport({
+      title: `WEEKLY CONTRACTOR REPORT`,
+      generatedBy: req.user.fullName,
+      contractor,
+      periodStart: startStr,
+      periodEnd: endStr,
+      sections
+    });
+
+    const reportRef = db.collection('report_history').doc();
+    await reportRef.set({
+      reportId: reportRef.id,
+      title: `Weekly Report - ${contractor}`,
+      type: 'weekly',
+      generatedBy: req.user.uid,
+      generatedByName: req.user.fullName,
+      contractor,
+      periodStart: startStr,
+      periodEnd: endStr,
+      summary: {
+        completionPct,
+        attendanceCompliance,
+        evidenceCount: evidenceDocs.length,
+        complaints: complaints.length
+      },
+      generatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="WEEKLY_${contractor}_${endStr}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    res.status(500).json({ error: 'Weekly report failed', details: error.message });
+  }
+});
+
+// POST /api/reports/generate/monthly — Generate monthly division report
+app.post('/api/reports/generate/monthly', verifyToken, async (req, res) => {
+  try {
+    const { division } = req.body;
+    if (!division) return res.status(400).json({ error: 'division required' });
+
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - 30 * 86400000);
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+
+    // Gather evidence
+    const evidenceSnap = await db.collection('evidence_metadata')
+      .where('division', '==', division)
+      .where('deleted', '==', false)
+      .get();
+    const evidenceDocs = evidenceSnap.docs.map(d => d.data());
+
+    // Contractor breakdown
+    const contractorBreakdown = {};
+    evidenceDocs.forEach(e => {
+      const c = e.contractor || 'Unknown';
+      if (!contractorBreakdown[c]) contractorBreakdown[c] = { evidenceCount: 0, totalBytes: 0 };
+      contractorBreakdown[c].evidenceCount++;
+      contractorBreakdown[c].totalBytes += e.compressedSize || e.originalSize || 0;
+    });
+
+    // Train breakdown
+    const trainBreakdown = {};
+    evidenceDocs.forEach(e => {
+      const t = e.trainNumber || 'Unknown';
+      trainBreakdown[t] = (trainBreakdown[t] || 0) + 1;
+    });
+
+    const sections = [
+      {
+        heading: 'Evidence Summary',
+        items: [
+          { label: 'Total Evidence', value: String(evidenceDocs.length) },
+          { label: 'Unique Trains', value: String(Object.keys(trainBreakdown).length) },
+          { label: 'Unique Contractors', value: String(Object.keys(contractorBreakdown).length) }
+        ]
+      },
+      {
+        heading: 'Contractor Comparison',
+        colWidths: [120, 80, 100],
+        headers: ['Contractor', 'Evidence', 'Storage (MB)'],
+        fields: ['name', 'evidence', 'storage'],
+        items: Object.entries(contractorBreakdown).map(([name, data]) => ({
+          name,
+          evidence: String(data.evidenceCount),
+          storage: (data.totalBytes / (1024 * 1024)).toFixed(2)
+        }))
+      },
+      {
+        heading: 'Train Evidence Count',
+        colWidths: [120, 80],
+        headers: ['Train', 'Images'],
+        fields: ['train', 'count'],
+        items: Object.entries(trainBreakdown)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 20)
+          .map(([train, count]) => ({ train, count: String(count) }))
+      }
+    ];
+
+    const pdfBuffer = await evidence.generatePDFReport({
+      title: `MONTHLY DIVISION REPORT`,
+      generatedBy: req.user.fullName,
+      periodStart: startStr,
+      periodEnd: endStr,
+      sections
+    });
+
+    const reportRef = db.collection('report_history').doc();
+    await reportRef.set({
+      reportId: reportRef.id,
+      title: `Monthly Report - ${division}`,
+      type: 'monthly',
+      generatedBy: req.user.uid,
+      generatedByName: req.user.fullName,
+      division,
+      periodStart: startStr,
+      periodEnd: endStr,
+      summary: {
+        totalEvidence: evidenceDocs.length,
+        contractors: Object.keys(contractorBreakdown).length,
+        trains: Object.keys(trainBreakdown).length
+      },
+      generatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="MONTHLY_${division}_${endStr}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    res.status(500).json({ error: 'Monthly report failed', details: error.message });
+  }
+});
+
+// =======================================================
+// == BACKUP OPERATIONS
+// =======================================================
+
+// POST /api/backup/evidence — Trigger manual backup
+app.post('/api/backup/evidence', verifyToken, async (req, res) => {
+  try {
+    const type = req.body.type || 'daily';
+    const result = await evidence.performBackup(db, type);
+
+    await evidence.logAudit(db, 'BACKUP_PERFORMED', {
+      userId: req.user.uid, userName: req.user.fullName,
+      userRole: req.user.role,
+      details: `Backup type: ${type}, records: ${JSON.stringify(result.recordCounts)}`
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: 'Backup failed', details: error.message });
+  }
+});
+
+// GET /api/backup/logs — Backup history
+app.get('/api/backup/logs', verifyToken, async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+    const snap = await db.collection('backup_logs')
+      .orderBy('timestamp', 'desc')
+      .limit(parseInt(limit))
+      .get();
+    const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ success: true, count: logs.length, logs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed', details: error.message });
+  }
+});
+
+// -------------------------------------------------------
+
 // --- Server Start ---
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
+
