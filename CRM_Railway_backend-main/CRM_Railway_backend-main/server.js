@@ -1631,12 +1631,18 @@ app.get('/api/worker/statistics', verifyToken, async (req, res) => {
     try {
       const attendanceSnapshot = await db.collection('obhs_attendance')
         .where('workerId', '==', uid)
-        .where('date', '==', today)
         .get();
-      const types = new Set();
-      attendanceSnapshot.forEach(doc => types.add(doc.data().type));
-      const expected = 3; // start, mid, end
-      attendancePercentage = Math.round((types.size / expected) * 100);
+      let markedCount = 0;
+      attendanceSnapshot.forEach(doc => {
+        const d = doc.data();
+        const docDate = d.createdAt ? d.createdAt.split('T')[0] : '';
+        if (docDate !== today) return;
+        if (d.isStartMarked) markedCount++;
+        if (d.isMidMarked) markedCount++;
+        if (d.isEndMarked) markedCount++;
+      });
+      const expected = 3;
+      attendancePercentage = Math.round((markedCount / expected) * 100);
     } catch (_) { /* ignore */ }
 
     // 4. Complaints count for this worker
@@ -16506,6 +16512,58 @@ app.get('/api/v2/journeys', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('(JourneysList) Error:', error);
     res.status(500).json({ error: 'Failed to list journeys', details: error.message });
+  }
+});
+
+// =======================================================
+// == WORKER ASSIGNMENTS (MCC Flow)
+// =======================================================
+
+// GET /api/obhs/worker/active-run — Get worker's active run with assigned coaches
+app.get('/api/obhs/worker/active-run', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const allRuns = await db.collection('RunInstance')
+      .where('status', 'in', ['ALLOCATED', 'ACTIVE', 'READY'])
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    let runDoc = null;
+    allRuns.forEach(doc => {
+      const coaches = doc.data().coaches || [];
+      if (coaches.some(c => c.workerId === uid)) {
+        runDoc = doc;
+      }
+    });
+
+    if (!runDoc) {
+      return res.status(200).json({ success: true, hasAssignment: false, run: null });
+    }
+    const runData = { id: runDoc.id, ...runDoc.data() };
+    const myCoaches = (runData.coaches || []).filter(c => c.workerId === uid);
+
+    res.status(200).json({
+      success: true,
+      hasAssignment: true,
+      run: {
+        runInstanceId: runData.id,
+        trainNo: runData.trainNo || runData.trainNumber || 'N/A',
+        trainName: runData.trainName || runData.name || '',
+        status: runData.status,
+        departureDate: runData.departureDate || '',
+        departureTime: runData.departureTime || '',
+      },
+      coaches: myCoaches.map(c => ({
+        coachNo: c.coachPosition || c.coachNo || c.id || 'N/A',
+        coachType: c.coachType || 'general',
+        workerId: c.workerId,
+        workerName: c.workerName || c.name || '',
+        workerRole: c.workerRole || 'janitor'
+      }))
+    });
+  } catch (error) {
+    console.error('(WorkerActiveRun) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch worker assignment', details: error.message });
   }
 });
 
