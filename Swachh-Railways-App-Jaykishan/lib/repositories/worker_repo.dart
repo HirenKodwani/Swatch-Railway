@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crm_train/services/firebase_obhs_service.dart';
 import 'package:http_parser/http_parser.dart';
@@ -458,7 +459,7 @@ class WorkerRepository {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final result = jsonDecode(response.body) as Map<String, dynamic>;
         // ── Mirror to Firestore ────────────────────────────────────────────
-        FirebaseOBHSService.saveTask({
+        unawaited(FirebaseOBHSService.saveTask({
           'runInstanceId': runInstanceId,
           'taskCategory': taskType,
           'taskTitle': taskType,
@@ -471,7 +472,7 @@ class WorkerRepository {
           'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
           'status': 'Completed',
           'taskId': 'TSK-${DateTime.now().millisecondsSinceEpoch}',
-        });
+        }));
         return result;
       } else if (response.statusCode == 401) {
         throw Exception('AUTH_ERROR');
@@ -528,7 +529,7 @@ class WorkerRepository {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final result = jsonDecode(response.body) as Map<String, dynamic>;
         // ── Mirror to Firestore ────────────────────────────────────────────
-        FirebaseOBHSService.saveComplaint({
+        unawaited(FirebaseOBHSService.saveComplaint({
           'runInstanceId': runInstanceId,
           'coachNo': coachNo,
           'category': category,
@@ -538,7 +539,7 @@ class WorkerRepository {
           'priority': 'NORMAL',
           'createdAt': DateTime.now().toIso8601String(),
           'complaintId': 'CMP-${DateTime.now().millisecondsSinceEpoch}',
-        });
+        }));
         return result;
       } else if (response.statusCode == 401) {
         throw Exception('AUTH_ERROR');
@@ -850,8 +851,11 @@ class WorkerRepository {
         ),
       );
 
-      if (response.statusCode == 200 || response.statusCode == 400) {
+      if (response.statusCode == 200) {
         return jsonDecode(response.body);
+      } else if (response.statusCode == 400) {
+        final body = jsonDecode(response.body);
+        throw Exception(body['error'] ?? 'Face verification failed');
       } else if (response.statusCode == 401) {
         throw Exception('AUTH_ERROR');
       } else {

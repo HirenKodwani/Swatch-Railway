@@ -21,6 +21,40 @@ class RunInstanceModel {
   final String? actualArrival;
   final String? journeyStartTime;
   final String? journeyEndTime;
+  final int delayMinutes;
+  final List<JourneyTimelineEntry> journeyTimeline;
+
+  static const Map<String, String> stateLabels = {
+    'PLANNED': 'Planned',
+    'ALLOCATED': 'Workers Allocated',
+    'READY': 'Ready for Departure',
+    'ACTIVE': 'Journey Active',
+    'DELAYED': 'Delayed',
+    'ARRIVED': 'Arrived at Destination',
+    'CLOSED': 'Journey Closed',
+    'Active': 'Journey Active',
+    'Completed': 'Completed',
+  };
+
+  static const List<String> validStates = [
+    'PLANNED', 'ALLOCATED', 'READY', 'ACTIVE', 'DELAYED', 'ARRIVED', 'CLOSED'
+  ];
+
+  static const Map<String, List<String>> validTransitions = {
+    'PLANNED': ['ALLOCATED'],
+    'ALLOCATED': ['READY'],
+    'READY': ['ACTIVE'],
+    'ACTIVE': ['DELAYED', 'ARRIVED'],
+    'DELAYED': ['ACTIVE', 'ARRIVED'],
+    'ARRIVED': ['CLOSED'],
+    'CLOSED': [],
+  };
+
+  bool canTransitionTo(String targetState) {
+    return validTransitions[status]?.contains(targetState) ?? false;
+  }
+
+  String get stateLabel => stateLabels[status] ?? status;
 
   RunInstanceModel({
     this.id,
@@ -39,12 +73,14 @@ class RunInstanceModel {
     this.updatedBy,
     this.updatedByName,
     this.departureDate,
-    this.status = 'Active',
+    this.status = 'PLANNED',
     this.scheduledDeparture,
     this.actualDeparture,
     this.actualArrival,
     this.journeyStartTime,
     this.journeyEndTime,
+    this.delayMinutes = 0,
+    this.journeyTimeline = const [],
   });
 
   factory RunInstanceModel.fromJson(Map<String, dynamic> json) {
@@ -74,12 +110,17 @@ class RunInstanceModel {
           : null,
       updatedBy: json['updatedBy'] as String?,
       updatedByName: json['updatedByName'] as String?,
-      status: json['status'] as String? ?? 'Active',
+      status: json['status'] as String? ?? 'PLANNED',
       scheduledDeparture: json['scheduledDeparture'] as String?,
       actualDeparture: json['actualDeparture'] as String?,
       actualArrival: json['actualArrival'] as String?,
       journeyStartTime: json['journeyStartTime'] as String?,
       journeyEndTime: json['journeyEndTime'] as String?,
+      delayMinutes: json['delayMinutes'] as int? ?? 0,
+      journeyTimeline: (json['journeyTimeline'] as List<dynamic>?)
+              ?.map((e) => JourneyTimelineEntry.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 
@@ -110,6 +151,8 @@ class RunInstanceModel {
       if (actualArrival != null) 'actualArrival': actualArrival,
       if (journeyStartTime != null) 'journeyStartTime': journeyStartTime,
       if (journeyEndTime != null) 'journeyEndTime': journeyEndTime,
+      'delayMinutes': delayMinutes,
+      'journeyTimeline': journeyTimeline.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -136,6 +179,8 @@ class RunInstanceModel {
     String? actualArrival,
     String? journeyStartTime,
     String? journeyEndTime,
+    int? delayMinutes,
+    List<JourneyTimelineEntry>? journeyTimeline,
   }) {
     return RunInstanceModel(
       id: id ?? this.id,
@@ -160,7 +205,67 @@ class RunInstanceModel {
       actualArrival: actualArrival ?? this.actualArrival,
       journeyStartTime: journeyStartTime ?? this.journeyStartTime,
       journeyEndTime: journeyEndTime ?? this.journeyEndTime,
+      delayMinutes: delayMinutes ?? this.delayMinutes,
+      journeyTimeline: journeyTimeline ?? this.journeyTimeline,
     );
+  }
+}
+
+class JourneyTimelineEntry {
+  final String? fromState;
+  final String toState;
+  final String timestamp;
+  final String? actorId;
+  final String? actorName;
+  final String? actorRole;
+  final String? remarks;
+
+  JourneyTimelineEntry({
+    this.fromState,
+    required this.toState,
+    required this.timestamp,
+    this.actorId,
+    this.actorName,
+    this.actorRole,
+    this.remarks,
+  });
+
+  factory JourneyTimelineEntry.fromJson(Map<String, dynamic> json) {
+    return JourneyTimelineEntry(
+      fromState: json['fromState'] as String?,
+      toState: json['toState'] as String? ?? json['state'] as String? ?? '',
+      timestamp: json['timestamp'] as String? ?? DateTime.now().toIso8601String(),
+      actorId: json['actorId'] as String?,
+      actorName: json['actorName'] as String?,
+      actorRole: json['actorRole'] as String?,
+      remarks: json['remarks'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (fromState != null) 'fromState': fromState,
+      'toState': toState,
+      'timestamp': timestamp,
+      if (actorId != null) 'actorId': actorId,
+      if (actorName != null) 'actorName': actorName,
+      if (actorRole != null) 'actorRole': actorRole,
+      if (remarks != null) 'remarks': remarks,
+    };
+  }
+
+  DateTime get dateTime => DateTime.parse(timestamp);
+
+  String get formattedTime {
+    final dt = dateTime;
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String get formattedDate {
+    final dt = dateTime;
+    return '${dt.day}/${dt.month}/${dt.year}';
   }
 }
 
@@ -169,6 +274,7 @@ class CoachAssignment {
   final String coachType;
   final String? workerId;
   final String? workerName;
+  final String? workerRole;
   final String? attendantId;
   final String? attendantName;
   final List<String>? tasks;
@@ -178,6 +284,7 @@ class CoachAssignment {
     required this.coachType,
     this.workerId,
     this.workerName,
+    this.workerRole,
     this.attendantId,
     this.attendantName,
     this.tasks,
@@ -189,6 +296,7 @@ class CoachAssignment {
       coachType: json['coachType'] as String? ?? '',
       workerId: json['workerId'] as String?,
       workerName: json['workerName'] as String?,
+      workerRole: json['workerRole'] as String?,
       attendantId: json['attendantId'] as String?,
       attendantName: json['attendantName'] as String?,
       tasks: (json['tasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
@@ -201,6 +309,7 @@ class CoachAssignment {
       'coachType': coachType,
       if (workerId != null && workerId!.isNotEmpty) 'workerId': workerId,
       if (workerName != null && workerName!.isNotEmpty) 'workerName': workerName,
+      if (workerRole != null && workerRole!.isNotEmpty) 'workerRole': workerRole,
       if (attendantId != null && attendantId!.isNotEmpty) 'attendantId': attendantId,
       if (attendantName != null && attendantName!.isNotEmpty) 'attendantName': attendantName,
       if (tasks != null) 'tasks': tasks,
@@ -212,6 +321,7 @@ class CoachAssignment {
     String? coachType,
     String? workerId,
     String? workerName,
+    String? workerRole,
     String? attendantId,
     String? attendantName,
     List<String>? tasks,
@@ -221,6 +331,7 @@ class CoachAssignment {
       coachType: coachType ?? this.coachType,
       workerId: workerId ?? this.workerId,
       workerName: workerName ?? this.workerName,
+      workerRole: workerRole ?? this.workerRole,
       attendantId: attendantId ?? this.attendantId,
       attendantName: attendantName ?? this.attendantName,
       tasks: tasks ?? this.tasks,

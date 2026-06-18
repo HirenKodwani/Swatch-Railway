@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/services/firebase_obhs_service.dart';
@@ -7,6 +8,58 @@ import '../helper/api_error_handler.dart';
 import '../model/run_instance_model.dart';
 import '../model/railway_worker_model.dart';
 import '../model/train_model.dart';
+
+class JourneyAdvanceResult {
+  final bool success;
+  final String message;
+  final String? runInstanceId;
+  final String? previousState;
+  final String? currentState;
+
+  JourneyAdvanceResult({
+    required this.success,
+    required this.message,
+    this.runInstanceId,
+    this.previousState,
+    this.currentState,
+  });
+
+  factory JourneyAdvanceResult.fromJson(Map<String, dynamic> json) {
+    return JourneyAdvanceResult(
+      success: json['success'] as bool? ?? false,
+      message: json['message'] as String? ?? '',
+      runInstanceId: json['runInstanceId'] as String?,
+      previousState: json['previousState'] as String?,
+      currentState: json['currentState'] as String?,
+    );
+  }
+}
+
+class JourneyTimelineResult {
+  final bool success;
+  final String? runInstanceId;
+  final List<JourneyTimelineEntry> timeline;
+  final Map<String, dynamic>? metrics;
+
+  JourneyTimelineResult({
+    required this.success,
+    this.runInstanceId,
+    this.timeline = const [],
+    this.metrics,
+  });
+
+  factory JourneyTimelineResult.fromJson(Map<String, dynamic> json) {
+    return JourneyTimelineResult(
+      success: json['success'] as bool? ?? false,
+      runInstanceId: json['runInstanceId'] as String?,
+      timeline: (json['timeline'] as List<dynamic>?)
+              ?.map((e) => JourneyTimelineEntry.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      metrics: json['metrics'] as Map<String, dynamic>?,
+    );
+  }
+}
 
 class OBHSRepository {
 
@@ -197,7 +250,7 @@ class OBHSRepository {
         final created = RunInstanceModel.fromJson(instanceData as Map<String, dynamic>);
 
         // ── Mirror to Firestore so reports can query it ──────────────────────
-        FirebaseOBHSService.saveRunInstance({
+        unawaited(FirebaseOBHSService.saveRunInstance({
           'runInstanceId': created.runInstanceId ?? created.instanceId,
           'instanceId': created.instanceId,
           'trainNo': created.trainNo,
@@ -213,7 +266,7 @@ class OBHSRepository {
           'coaches': created.coaches.map((c) => c.toJson()).toList(),
           'createdBy': created.createdBy,
           'createdByName': created.createdByName,
-        });
+        }));
         return created;
       } else if (response.statusCode == 401 || response.statusCode == 403) {
         throw Exception('AUTH_ERROR');
@@ -445,6 +498,124 @@ class OBHSRepository {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return data['data'] as List<dynamic>? ?? [];
+      } else if (response.statusCode == 401) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
+  // ─── JOURNEY LIFECYCLE METHODS ────────────────────────────────────────
+
+  static Future<JourneyAdvanceResult> advanceJourney(
+    String runInstanceId, {
+    String? toState,
+    String? actualDeparture,
+    String? actualArrival,
+    int? delayMinutes,
+    String? remarks,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final body = <String, dynamic>{};
+      if (toState != null) body['toState'] = toState;
+      if (actualDeparture != null) body['actualDeparture'] = actualDeparture;
+      if (actualArrival != null) body['actualArrival'] = actualArrival;
+      if (delayMinutes != null) body['delayMinutes'] = delayMinutes;
+      if (remarks != null) body['remarks'] = remarks;
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/api/v2/journey/$runInstanceId/advance'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(body),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return JourneyAdvanceResult.fromJson(data);
+      } else if (response.statusCode == 401) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
+  static Future<JourneyTimelineResult> getJourneyTimeline(String runInstanceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/api/v2/journey/$runInstanceId/timeline'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return JourneyTimelineResult.fromJson(data);
+      } else if (response.statusCode == 401) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
+  static Future<List<RunInstanceModel>> getJourneys({
+    String? status,
+    String? trainNo,
+    String? date,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final params = <String, String>{};
+      if (status != null) params['status'] = status;
+      if (trainNo != null) params['trainNo'] = trainNo;
+      if (date != null) params['date'] = date;
+      final queryString = params.isNotEmpty ? '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}' : '';
+
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/api/v2/journeys$queryString'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final journeys = (data['journeys'] as List<dynamic>?)
+                ?.map((j) => RunInstanceModel.fromJson(j as Map<String, dynamic>))
+                .toList() ??
+            [];
+        return journeys;
       } else if (response.statusCode == 401) {
         throw Exception('AUTH_ERROR');
       } else {

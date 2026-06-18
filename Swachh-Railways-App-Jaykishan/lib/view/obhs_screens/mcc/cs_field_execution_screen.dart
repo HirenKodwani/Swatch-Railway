@@ -45,7 +45,7 @@ class _CsFieldExecutionScreenState extends State<CsFieldExecutionScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],

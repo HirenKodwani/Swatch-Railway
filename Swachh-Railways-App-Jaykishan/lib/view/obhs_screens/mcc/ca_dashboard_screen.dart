@@ -43,7 +43,7 @@ class _CaDashboardScreenState extends State<CaDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],

@@ -3512,9 +3512,19 @@ app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, 
     
     await runInstanceRef.update({
       actualDeparture: departureTime,
-      status: 'Active',
+      status: 'ACTIVE',
       journeyStartedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
+    });
+
+    // Log timeline entry
+    await appendJourneyTimeline(runInstanceRef, {
+      fromState: currentData.status,
+      toState: 'ACTIVE',
+      actorId: req.user.uid,
+      actorName: req.user.fullName,
+      actorRole: req.user.role,
+      remarks: `Actual departure: ${departureTime}`
     });
 
     // ─── Rule-driven task generation on actual departure ───
@@ -3529,7 +3539,7 @@ app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, 
       message: 'Journey activated successfully',
       runInstanceId,
       actualDeparture: departureTime,
-      status: 'Active'
+      status: 'ACTIVE'
     });
 
   } catch (error) {
@@ -3558,17 +3568,18 @@ app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, 
     }
 
     const currentData = doc.data();
-    if (currentData.status !== 'Active') {
+    const currentStatus = currentData.status;
+    if (!['Active', 'ACTIVE', 'DELAYED'].includes(currentStatus)) {
       return res.status(400).send({
         error: 'Invalid State Transition',
-        details: `Cannot complete a journey with status '${currentData.status}'. Must be 'Active'.`
+        details: `Cannot complete a journey with status '${currentStatus}'. Must be 'Active' or 'DELAYED'.`
       });
     }
 
     const arrivalTime = actualArrival || new Date().toISOString();
     const updateData = {
       actualArrival: arrivalTime,
-      status: 'Completed',
+      status: 'ARRIVED',
       journeyCompletedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -3578,6 +3589,16 @@ app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, 
     }
 
     await runInstanceRef.update(updateData);
+
+    // Log timeline entry
+    await appendJourneyTimeline(runInstanceRef, {
+      fromState: currentStatus,
+      toState: 'ARRIVED',
+      actorId: req.user.uid,
+      actorName: req.user.fullName,
+      actorRole: req.user.role,
+      remarks: `Actual arrival: ${arrivalTime}${delayMinutes ? ` (${delayMinutes}min delay)` : ''}`
+    });
 
     // Generate journey closure tasks
     await generateClosureTasks(runInstanceId, arrivalTime, currentData);
@@ -3589,15 +3610,15 @@ app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, 
       actorId: req.user.uid,
       actorRole: req.user.role,
       actorName: req.user.fullName,
-      newValue: { actualArrival: arrivalTime, status: 'Completed' },
-      details: `Journey completed at ${arrivalTime}${delayMinutes ? ` with ${delayMinutes}min delay` : ''}`
+      newValue: { actualArrival: arrivalTime, status: 'ARRIVED' },
+      details: `Journey arrived at ${arrivalTime}${delayMinutes ? ` with ${delayMinutes}min delay` : ''}`
     });
 
     res.status(200).send({
       message: 'Journey completed successfully',
       runInstanceId,
       actualArrival: arrivalTime,
-      status: 'Completed'
+      status: 'ARRIVED'
     });
 
   } catch (error) {
@@ -14123,53 +14144,79 @@ async function autoCloseParentTask(detailRef, detailDoc) {
   }
 }
 
-// ─── GENERATE CLOSURE TASKS ──────────────────────────────────────────────
+// ─── GENERATE CLOSURE TASKS (Parent-Child Model) ──────────────────────────
 async function generateClosureTasks(runInstanceId, arrivalTime, runData) {
   try {
     const batch = db.batch();
     let count = 0;
     const coaches = runData.coaches || [];
+    const arrivalDate = new Date(arrivalTime).toISOString().split('T')[0];
 
-    const closureTasks = [
-      { code: 'FINAL_INSPECTION', name: 'Final Coach Inspection', category: 'closure' },
-      { code: 'FINAL_GARBAGE', name: 'Final Garbage Clearance Verification', category: 'closure' },
-      { code: 'LOST_FOUND', name: 'Lost & Found Check', category: 'closure' },
-      { code: 'INVENTORY', name: 'Inventory & Consumable Reconciliation', category: 'closure' },
-      { code: 'CLOSURE_REPORT', name: 'Journey Closure Report', category: 'closure' }
+    const closureMasters = [
+      { code: 'FINAL_INSPECTION', name: 'Final Coach Inspection', cat: 'closure', priority: 1 },
+      { code: 'FINAL_GARBAGE', name: 'Final Garbage Clearance', cat: 'closure', priority: 1 },
+      { code: 'LOST_FOUND', name: 'Lost & Found Check', cat: 'closure', priority: 2 }
     ];
 
     for (const coach of coaches) {
       if (!coach.workerId) continue;
       const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
 
-      for (const task of closureTasks) {
-        const taskId = `${runInstanceId}_${task.code}_${coachNo}`;
-        const ref = db.collection('closure_tasks').doc(taskId);
-        batch.set(ref, {
-          taskId, runInstanceId, coachNo,
-          taskCode: task.code, taskName: task.name,
-          category: task.category,
-          workerId: coach.workerId, workerName: coach.workerName || 'Unknown',
-          status: 'PENDING',
+      for (const task of closureMasters) {
+        const parentId = `${runInstanceId}_${task.code}_${coachNo}`;
+        const parentRef = db.collection('task_instances').doc(parentId);
+        const childId = `${parentId}_child`;
+
+        batch.set(parentRef, {
+          taskId: parentId, runInstanceId, trainNo: runData.trainNo,
+          taskMasterCode: task.code, taskName: task.name,
+          category: task.cat, subCategory: 'closure',
+          coachNo, workerId: coach.workerId,
+          workerName: coach.workerName || 'Unknown',
+          workerRole: 'janitor',
+          scheduledTime: 'ARRIVAL', scheduledDate: arrivalDate,
+          status: 'PLANNED', priority: task.priority,
+          requiresSupervisorVerification: true, conflictGroup: 'closure',
+          isParentTask: true, childTaskIds: [childId],
+          checklistTemplate: [
+            { item: `${task.code.toLowerCase()}_done`, label: `${task.name} Completed`, required: true }
+          ],
           beforePhoto: null, afterPhoto: null,
           gpsLatitude: null, gpsLongitude: null,
-          supervisorVerified: false,
-          completedAt: null, createdAt: new Date().toISOString()
+          supervisorVerified: false, supervisorId: null, supervisorRemarks: null,
+          exceptionReason: null, checklistResponses: [],
+          completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
         });
-        count++;
+
+        batch.set(db.collection('task_instances').doc(childId), {
+          taskId: childId, parentTaskId: parentId, runInstanceId,
+          taskMasterCode: task.code, taskName: task.name,
+          category: task.cat, subCategory: 'closure',
+          coachNo, workerId: coach.workerId,
+          workerName: coach.workerName || 'Unknown', workerRole: 'janitor',
+          scheduledTime: 'ARRIVAL', scheduledDate: arrivalDate,
+          status: 'PLANNED', priority: task.priority,
+          isParentTask: false, checklistTemplate: [],
+          beforePhoto: null, afterPhoto: null,
+          gpsLatitude: null, gpsLongitude: null,
+          checklistResponses: [],
+          completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+
+        count += 2;
       }
     }
 
     if (count > 0) {
       await batch.commit();
-      console.log(`[Closure] Generated ${count} closure tasks for ${runInstanceId}`);
+      console.log(`[Closure] Generated ${count} closure task instances for ${runInstanceId}`);
     }
   } catch (err) {
     console.error('(GenerateClosure) Error:', err.message);
   }
 }
 
-// ─── SEED DEFAULT TASK MASTERS ────────────────────────────────────────────
+// ─── SEED RAILWAY BOARD TASK MASTERS ───────────────────────────────────────
 async function seedTaskMasters() {
   try {
     const existing = await db.collection('task_masters').limit(1).get();
@@ -14178,18 +14225,25 @@ async function seedTaskMasters() {
       return;
     }
 
+    const baseFields = {
+      requiresSupervisorVerification: false,
+      isComplaintDriven: false,
+      requiresPhotoEvidence: true,
+      minDurationMinutes: 30,
+      maxCoaches: 2,
+      active: true, isSystem: true
+    };
+
     const masters = [
-      // ── TOILET CLEANING (Janitor) ──
-      {
-        taskCode: 'TOILET_CLEAN_06', taskName: 'Toilet Cleaning 06:00',
+      // ════════════════════════════════════════════════════════════════
+      // PEAK MORNING (06:00-09:00) — Hourly: Toilet + Coach Scan
+      // ════════════════════════════════════════════════════════════════
+      ...['06:00','07:00','08:00'].map(t => ({
+        taskCode: `TOILET_CLEAN_${t.replace(':','')}`, taskName: `Toilet Cleaning ${t}`,
         category: 'cleaning', subCategory: 'toilet',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'toilet_cleaning',
-        frequencyRules: [
-          { startHour: 6, endHour: 9, intervalMinutes: 60, label: 'Peak Morning' }
-        ],
-        scheduledTime: '06:00',
+        priority: 2, conflictGroup: 'toilet_cleaning',
+        frequencyType: 'peak_hourly', scheduledTime: t,
         checklistTemplate: [
           { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
           { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
@@ -14197,358 +14251,413 @@ async function seedTaskMasters() {
           { item: 'floor_wiped', label: 'Floor Wiped', required: true },
           { item: 'deodorant_applied', label: 'Deodorant Applied', required: false }
         ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'TOILET_CLEAN_07', taskName: 'Toilet Cleaning 07:00',
-        category: 'cleaning', subCategory: 'toilet',
+        ...baseFields
+      })),
+      ...['06:00','07:00','08:00'].map(t => ({
+        taskCode: `COACH_SCAN_${t.replace(':','')}`, taskName: `Coach Scan ${t}`,
+        category: 'cleaning', subCategory: 'scan',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'toilet_cleaning',
-        frequencyRules: [
-          { startHour: 6, endHour: 9, intervalMinutes: 60, label: 'Peak Morning' }
-        ],
-        scheduledTime: '07:00',
+        priority: 2, conflictGroup: 'coach_scan',
+        frequencyType: 'peak_hourly', scheduledTime: t,
         checklistTemplate: [
-          { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
-          { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
-          { item: 'floor_wiped', label: 'Floor Wiped', required: true }
+          { item: 'seats_scanned', label: 'Seats Scanned for Litter', required: true },
+          { item: 'aisle_clear', label: 'Aisle Clear', required: true },
+          { item: 'dustbin_level', label: 'Dustbin Level Checked', required: true }
         ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'TOILET_CLEAN_08', taskName: 'Toilet Cleaning 08:00',
-        category: 'cleaning', subCategory: 'toilet',
+        ...baseFields
+      })),
+      // ════════════════════════════════════════════════════════════════
+      // NORMAL HOURS (09:00-20:00) — Every 2 Hours: Garbage, Dry/Wet Mop
+      // ════════════════════════════════════════════════════════════════
+      ...['09:00','11:00','13:00','15:00','17:00','19:00'].map(t => ({
+        taskCode: `GARBAGE_${t.replace(':','')}`, taskName: `Garbage Collection ${t}`,
+        category: 'garbage', subCategory: 'collection',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'toilet_cleaning',
-        frequencyRules: [
-          { startHour: 6, endHour: 9, intervalMinutes: 60, label: 'Peak Morning' }
-        ],
-        scheduledTime: '08:00',
+        priority: 4, conflictGroup: 'garbage',
+        frequencyType: 'two_hourly', scheduledTime: t,
         checklistTemplate: [
-          { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
-          { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
-          { item: 'floor_wiped', label: 'Floor Wiped', required: true }
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
+          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
+          { item: 'area_clean', label: 'Area Clean After Collection', required: true },
+          { item: 'segregation_done', label: 'Waste Segregation Done', required: true }
         ],
-        active: true, isSystem: true
-      },
-      // ── COACH CLEANING (Janitor) Normal hours every 2hr ──
-      {
-        taskCode: 'COACH_CLEAN_09', taskName: 'Coach Cleaning 09:00',
-        category: 'cleaning', subCategory: 'compartment',
+        ...baseFields
+      })),
+      ...['09:00','11:00','13:00','15:00','17:00','19:00'].map(t => ({
+        taskCode: `DRY_MOP_${t.replace(':','')}`, taskName: `Dry Mopping ${t}`,
+        category: 'cleaning', subCategory: 'dry_mop',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
-        ],
-        scheduledTime: '09:00',
+        priority: 3, conflictGroup: 'dry_mopping',
+        frequencyType: 'two_hourly', scheduledTime: t,
         checklistTemplate: [
           { item: 'floor_swept', label: 'Floor Swept', required: true },
           { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
           { item: 'windows_cleaned', label: 'Windows Cleaned', required: false }
         ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'COACH_CLEAN_11', taskName: 'Coach Cleaning 11:00',
+        ...baseFields
+      })),
+      ...['10:00','12:00','14:00','16:00','18:00'].map(t => ({
+        taskCode: `WET_MOP_${t.replace(':','')}`, taskName: `Wet Mopping ${t}`,
+        category: 'cleaning', subCategory: 'wet_mop',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, conflictGroup: 'wet_mopping',
+        frequencyType: 'two_hourly', scheduledTime: t,
+        checklistTemplate: [
+          { item: 'floor_mopped', label: 'Floor Mopped', required: true },
+          { item: 'disinfectant_used', label: 'Disinfectant Used', required: true },
+          { item: 'drying_done', label: 'Drying Done', required: false }
+        ],
+        ...baseFields
+      })),
+      // ════════════════════════════════════════════════════════════════
+      // PLATFORM VACUUM / VESTIBULE CLEAN
+      // ════════════════════════════════════════════════════════════════
+      ...['09:00','13:00','17:00'].map(t => ({
+        taskCode: `PLATFORM_VACUUM_${t.replace(':','')}`, taskName: `Platform Vacuum ${t}`,
+        category: 'cleaning', subCategory: 'platform',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, conflictGroup: 'platform_vacuum',
+        frequencyType: 'daily_thrice', scheduledTime: t,
+        checklistTemplate: [
+          { item: 'platform_swept', label: 'Platform Swept', required: true },
+          { item: 'platform_mopped', label: 'Platform Mopped', required: true },
+          { item: 'drain_clear', label: 'Drain Clear', required: true }
+        ],
+        ...baseFields
+      })),
+      ...['11:00','15:00','19:00'].map(t => ({
+        taskCode: `VESTIBULE_CLEAN_${t.replace(':','')}`, taskName: `Vestibule Cleaning ${t}`,
+        category: 'cleaning', subCategory: 'vestibule',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, conflictGroup: 'vestibule',
+        frequencyType: 'daily_thrice', scheduledTime: t,
+        checklistTemplate: [
+          { item: 'vestibule_swept', label: 'Vestibule Swept', required: true },
+          { item: 'vestibule_mopped', label: 'Vestibule Mopped', required: true },
+          { item: 'door_track_clean', label: 'Door Track Clean', required: true }
+        ],
+        ...baseFields
+      })),
+      // ════════════════════════════════════════════════════════════════
+      // EVENING PEAK (20:00-22:00) — Hourly: Coach + Toilet
+      // ════════════════════════════════════════════════════════════════
+      ...['20:00','21:00'].map(t => ({
+        taskCode: `COACH_CLEAN_${t.replace(':','')}`, taskName: `Coach Deep Clean ${t}`,
         category: 'cleaning', subCategory: 'compartment',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
-        ],
-        scheduledTime: '11:00',
+        priority: 2, conflictGroup: 'coach_cleaning',
+        frequencyType: 'peak_hourly', scheduledTime: t,
         checklistTemplate: [
           { item: 'floor_swept', label: 'Floor Swept', required: true },
           { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'COACH_CLEAN_13', taskName: 'Coach Cleaning 13:00',
-        category: 'cleaning', subCategory: 'compartment',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
-        ],
-        scheduledTime: '13:00',
-        checklistTemplate: [
-          { item: 'floor_swept', label: 'Floor Swept', required: true },
-          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'COACH_CLEAN_15', taskName: 'Coach Cleaning 15:00',
-        category: 'cleaning', subCategory: 'compartment',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
-        ],
-        scheduledTime: '15:00',
-        checklistTemplate: [
-          { item: 'floor_swept', label: 'Floor Swept', required: true },
-          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'COACH_CLEAN_17', taskName: 'Coach Cleaning 17:00',
-        category: 'cleaning', subCategory: 'compartment',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
-        ],
-        scheduledTime: '17:00',
-        checklistTemplate: [
-          { item: 'floor_swept', label: 'Floor Swept', required: true },
-          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'COACH_CLEAN_19', taskName: 'Coach Cleaning 19:00',
-        category: 'cleaning', subCategory: 'compartment',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
-        ],
-        scheduledTime: '19:00',
-        checklistTemplate: [
-          { item: 'floor_swept', label: 'Floor Swept', required: true },
-          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      // ── EVENING PEAK (Janitor) every 1hr ──
-      {
-        taskCode: 'COACH_CLEAN_20', taskName: 'Coach Cleaning 20:00',
-        category: 'cleaning', subCategory: 'compartment',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 20, endHour: 22, intervalMinutes: 60, label: 'Evening Peak' }
-        ],
-        scheduledTime: '20:00',
-        checklistTemplate: [
-          { item: 'floor_swept', label: 'Floor Swept', required: true },
-          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      {
-        taskCode: 'COACH_CLEAN_21', taskName: 'Coach Cleaning 21:00',
-        category: 'cleaning', subCategory: 'compartment',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
-        frequencyRules: [
-          { startHour: 20, endHour: 22, intervalMinutes: 60, label: 'Evening Peak' }
-        ],
-        scheduledTime: '21:00',
-        checklistTemplate: [
-          { item: 'floor_swept', label: 'Floor Swept', required: true },
-          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
-        ],
-        active: true, isSystem: true
-      },
-      // ── GARBAGE MANAGEMENT (Janitor) ──
-      {
-        taskCode: 'GARBAGE_07', taskName: 'Garbage Collection 07:00',
-        category: 'garbage', subCategory: 'collection',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 4, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'garbage',
-        frequencyRules: [], scheduledTime: '07:00',
-        checklistTemplate: [
           { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
-          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
-          { item: 'area_clean', label: 'Area Clean After Collection', required: true }
+          { item: 'berths_made', label: 'Berths Made', required: false }
         ],
-        active: true, isSystem: true
+        ...baseFields
+      })),
+      ...['20:00','21:00'].map(t => ({
+        taskCode: `TOILET_CLEAN_${t.replace(':','')}`, taskName: `Toilet Cleaning ${t}`,
+        category: 'cleaning', subCategory: 'toilet',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, conflictGroup: 'toilet_cleaning',
+        frequencyType: 'peak_hourly', scheduledTime: t,
+        checklistTemplate: [
+          { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
+          { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
+          { item: 'floor_wiped', label: 'Floor Wiped', required: true },
+          { item: 'deodorant_applied', label: 'Deodorant Applied', required: false }
+        ],
+        ...baseFields
+      })),
+      // ════════════════════════════════════════════════════════════════
+      // DAILY / JOURNEY-LEVEL TASKS
+      // ════════════════════════════════════════════════════════════════
+      {
+        taskCode: 'DEEP_CLEANING', taskName: 'Deep Coach Cleaning',
+        category: 'cleaning', subCategory: 'deep',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, conflictGroup: 'deep_cleaning',
+        frequencyType: 'daily', scheduledTime: '10:00',
+        minDurationMinutes: 60, maxCoaches: 1,
+        checklistTemplate: [
+          { item: 'seats_deep_cleaned', label: 'Upholstery Deep Cleaned', required: true },
+          { item: 'walls_wiped', label: 'Walls Wiped', required: true },
+          { item: 'windows_deep_cleaned', label: 'Windows Deep Cleaned', required: true },
+          { item: 'floor_scrubbed', label: 'Floor Scrubbed', required: true },
+          { item: 'blinds_cleaned', label: 'Blinds Cleaned', required: false }
+        ],
+        ...baseFields
       },
       {
-        taskCode: 'GARBAGE_13', taskName: 'Garbage Collection 13:00',
-        category: 'garbage', subCategory: 'collection',
+        taskCode: 'PEST_CONTROL', taskName: 'Pest Control Spray',
+        category: 'cleaning', subCategory: 'pest_control',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 4, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'garbage',
-        frequencyRules: [], scheduledTime: '13:00',
+        priority: 3, conflictGroup: 'pest_control',
+        frequencyType: 'daily', scheduledTime: '14:00',
+        minDurationMinutes: 30, maxCoaches: 1,
         checklistTemplate: [
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
-          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
-          { item: 'area_clean', label: 'Area Clean After Collection', required: true }
+          { item: 'insecticide_sprayed', label: 'Insecticide Sprayed', required: true },
+          { item: 'rodent_bait_placed', label: 'Rodent Bait Placed', required: false },
+          { item: 'area_ventilated', label: 'Area Ventilated After Spray', required: true }
         ],
-        active: true, isSystem: true
+        ...baseFields,
+        requiresPhotoEvidence: true,
+        requiresSupervisorVerification: true
       },
       {
-        taskCode: 'GARBAGE_19', taskName: 'Garbage Collection 19:00',
-        category: 'garbage', subCategory: 'collection',
-        assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 4, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'garbage',
-        frequencyRules: [], scheduledTime: '19:00',
+        taskCode: 'AC_FILTER_CLEAN', taskName: 'AC Filter Cleaning',
+        category: 'cleaning', subCategory: 'ac_filter',
+        assignedRole: 'janitor', applicableCoachTypes: ['ac'],
+        priority: 3, conflictGroup: 'ac_filter',
+        frequencyType: 'daily', scheduledTime: '06:30',
+        minDurationMinutes: 20, maxCoaches: 2,
         checklistTemplate: [
-          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
-          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
-          { item: 'area_clean', label: 'Area Clean After Collection', required: true }
+          { item: 'filter_removed', label: 'Filter Removed', required: true },
+          { item: 'filter_cleaned', label: 'Filter Cleaned', required: true },
+          { item: 'filter_replaced', label: 'Filter Replaced', required: true },
+          { item: 'ac_vent_clear', label: 'AC Vent Clear', required: true }
         ],
-        active: true, isSystem: true
+        ...baseFields,
+        requiresPhotoEvidence: true
       },
-      // ── WATER CHECK (Supervisor) ──
+      // ════════════════════════════════════════════════════════════════
+      // CS SUPERVISOR TASKS
+      // ════════════════════════════════════════════════════════════════
       {
         taskCode: 'WATER_CHECK_08', taskName: 'Morning Water Check 08:00',
         category: 'water', subCategory: 'check',
         assignedRole: 'CS', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: true,
-        isComplaintDriven: false, conflictGroup: 'water',
-        frequencyRules: [], scheduledTime: '08:00',
+        priority: 2, conflictGroup: 'water',
+        frequencyType: 'daily', scheduledTime: '08:00',
+        requiresSupervisorVerification: true, requiresPhotoEvidence: false,
+        maxCoaches: null, minDurationMinutes: 15,
         checklistTemplate: [
           { item: 'tank_level', label: 'Water Tank Level', required: true },
           { item: 'chiller_status', label: 'Water Chiller Status', required: true },
           { item: 'cooler_status', label: 'Cooler Status', required: false }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false
       },
       {
         taskCode: 'WATER_CHECK_16', taskName: 'Evening Water Check 16:00',
         category: 'water', subCategory: 'check',
         assignedRole: 'CS', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: true,
-        isComplaintDriven: false, conflictGroup: 'water',
-        frequencyRules: [], scheduledTime: '16:00',
+        priority: 2, conflictGroup: 'water',
+        frequencyType: 'daily', scheduledTime: '16:00',
+        requiresSupervisorVerification: true, requiresPhotoEvidence: false,
+        maxCoaches: null, minDurationMinutes: 15,
         checklistTemplate: [
           { item: 'tank_level', label: 'Water Tank Level', required: true },
           { item: 'chiller_status', label: 'Water Chiller Status', required: true },
           { item: 'cooler_status', label: 'Cooler Status', required: false }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false
       },
-      // ── SAFETY INSPECTION (Supervisor) ──
       {
-        taskCode: 'SAFETY_10', taskName: 'Morning Safety Inspection 10:00',
+        taskCode: 'SAFETY_INSPECTION_10', taskName: 'Morning Safety Inspection 10:00',
         category: 'safety', subCategory: 'inspection',
         assignedRole: 'CS', applicableCoachTypes: ['all'],
-        priority: 1, requiresSupervisorVerification: true,
-        isComplaintDriven: false, conflictGroup: 'safety',
-        frequencyRules: [], scheduledTime: '10:00',
+        priority: 1, conflictGroup: 'safety',
+        frequencyType: 'daily', scheduledTime: '10:00',
+        requiresSupervisorVerification: true, requiresPhotoEvidence: false,
+        maxCoaches: null, minDurationMinutes: 30,
         checklistTemplate: [
           { item: 'fire_extinguisher', label: 'Fire Extinguisher Status', required: true },
           { item: 'cctv', label: 'CCTV Functioning', required: true },
           { item: 'fsds', label: 'FSDS System', required: true },
           { item: 'emergency_equipment', label: 'Emergency Equipment', required: true }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false
       },
       {
-        taskCode: 'SAFETY_18', taskName: 'Evening Safety Inspection 18:00',
+        taskCode: 'SAFETY_INSPECTION_18', taskName: 'Evening Safety Inspection 18:00',
         category: 'safety', subCategory: 'inspection',
         assignedRole: 'CS', applicableCoachTypes: ['all'],
-        priority: 1, requiresSupervisorVerification: true,
-        isComplaintDriven: false, conflictGroup: 'safety',
-        frequencyRules: [], scheduledTime: '18:00',
+        priority: 1, conflictGroup: 'safety',
+        frequencyType: 'daily', scheduledTime: '18:00',
+        requiresSupervisorVerification: true, requiresPhotoEvidence: false,
+        maxCoaches: null, minDurationMinutes: 30,
         checklistTemplate: [
           { item: 'fire_extinguisher', label: 'Fire Extinguisher Status', required: true },
           { item: 'cctv', label: 'CCTV Functioning', required: true },
           { item: 'fsds', label: 'FSDS System', required: true },
           { item: 'emergency_equipment', label: 'Emergency Equipment', required: true }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false
       },
-      // ── PETTY REPAIR (Supervisor) ──
       {
-        taskCode: 'REPAIR_10', taskName: 'Morning Petty Repair Check 10:00',
+        taskCode: 'REPAIR_CHECK_10', taskName: 'Morning Petty Repair Check 10:00',
         category: 'repair', subCategory: 'inspection',
         assignedRole: 'CS', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: true,
-        isComplaintDriven: false, conflictGroup: 'repair',
-        frequencyRules: [], scheduledTime: '10:00',
+        priority: 2, conflictGroup: 'repair',
+        frequencyType: 'daily', scheduledTime: '10:00',
+        requiresSupervisorVerification: true, requiresPhotoEvidence: false,
+        maxCoaches: null, minDurationMinutes: 30,
         checklistTemplate: [
           { item: 'latches', label: 'Door Latches', required: true },
           { item: 'windows', label: 'Windows', required: true },
           { item: 'fans', label: 'Fans', required: true },
           { item: 'lights', label: 'Lights', required: true }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false
       },
       {
-        taskCode: 'REPAIR_18', taskName: 'Evening Petty Repair Check 18:00',
+        taskCode: 'REPAIR_CHECK_18', taskName: 'Evening Petty Repair Check 18:00',
         category: 'repair', subCategory: 'inspection',
         assignedRole: 'CS', applicableCoachTypes: ['all'],
-        priority: 2, requiresSupervisorVerification: true,
-        isComplaintDriven: false, conflictGroup: 'repair',
-        frequencyRules: [], scheduledTime: '18:00',
+        priority: 2, conflictGroup: 'repair',
+        frequencyType: 'daily', scheduledTime: '18:00',
+        requiresSupervisorVerification: true, requiresPhotoEvidence: false,
+        maxCoaches: null, minDurationMinutes: 30,
         checklistTemplate: [
           { item: 'latches', label: 'Door Latches', required: true },
           { item: 'windows', label: 'Windows', required: true },
           { item: 'fans', label: 'Fans', required: true },
           { item: 'lights', label: 'Lights', required: true }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false
       },
-      // ── ATTENDANT TASKS (AC Coaches Only) ──
+      // ════════════════════════════════════════════════════════════════
+      // ATTENDANT TASKS (AC Coaches Only)
+      // ════════════════════════════════════════════════════════════════
       {
-        taskCode: 'LINEN_DIST', taskName: 'Linen Distribution',
+        taskCode: 'LINEN_DISTRIBUTION', taskName: 'Linen Distribution',
         category: 'passenger_service', subCategory: 'linen',
         assignedRole: 'attendant', applicableCoachTypes: ['ac'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'linen',
-        frequencyRules: [], scheduledTime: '06:00',
+        priority: 3, conflictGroup: 'linen',
+        frequencyType: 'daily', scheduledTime: '06:00',
+        requiresPhotoEvidence: false, maxCoaches: null, minDurationMinutes: 30,
         checklistTemplate: [
           { item: 'bedroll', label: 'Bedroll Distributed', required: true },
           { item: 'blanket', label: 'Blanket Distributed', required: true },
           { item: 'pillow', label: 'Pillow Distributed', required: true },
           { item: 'towel', label: 'Towel Distributed', required: false }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false, requiresSupervisorVerification: false
       },
       {
-        taskCode: 'BEDROLL_COLLECT', taskName: 'Bedroll Collection',
+        taskCode: 'BEDROLL_COLLECTION', taskName: 'Bedroll Collection',
         category: 'passenger_service', subCategory: 'linen',
         assignedRole: 'attendant', applicableCoachTypes: ['ac'],
-        priority: 3, requiresSupervisorVerification: false,
-        isComplaintDriven: false, conflictGroup: 'linen',
-        frequencyRules: [], scheduledTime: '21:00',
+        priority: 3, conflictGroup: 'linen',
+        frequencyType: 'daily', scheduledTime: '21:00',
+        requiresPhotoEvidence: false, maxCoaches: null, minDurationMinutes: 30,
         checklistTemplate: [
           { item: 'bedroll_collected', label: 'Bedroll Collected', required: true },
           { item: 'count_verified', label: 'Count Verified', required: true }
         ],
-        active: true, isSystem: true
+        active: true, isSystem: true, isComplaintDriven: false, requiresSupervisorVerification: false
       },
-      // ── NIGHT TASKS (Complaint-driven only) ──
+      // ════════════════════════════════════════════════════════════════
+      // JOURNEY END CLOSURE TASKS
+      // ════════════════════════════════════════════════════════════════
+      {
+        taskCode: 'FINAL_INSPECTION', taskName: 'Final Coach Inspection',
+        category: 'closure', subCategory: 'inspection',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 1, conflictGroup: 'closure',
+        frequencyType: 'journey_end', scheduledTime: null,
+        requiresPhotoEvidence: true, maxCoaches: 2, minDurationMinutes: 15,
+        requiresSupervisorVerification: true,
+        checklistTemplate: [
+          { item: 'coach_clean_verified', label: 'Coach Cleanliness Verified', required: true },
+          { item: 'lights_off', label: 'Lights/Fans Off', required: true },
+          { item: 'doors_locked', label: 'Doors Locked', required: true },
+          { item: 'no_litter', label: 'No Litter Left Behind', required: true }
+        ],
+        active: true, isSystem: true, isComplaintDriven: false
+      },
+      {
+        taskCode: 'FINAL_GARBAGE', taskName: 'Final Garbage Clearance',
+        category: 'closure', subCategory: 'garbage',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 1, conflictGroup: 'closure',
+        frequencyType: 'journey_end', scheduledTime: null,
+        requiresPhotoEvidence: true, maxCoaches: 2, minDurationMinutes: 15,
+        checklistTemplate: [
+          { item: 'all_dustbins_emptied', label: 'All Dustbins Emptied', required: true },
+          { item: 'garbage_offloaded', label: 'Garbage Offloaded', required: true },
+          { item: 'platform_clean', label: 'Platform Area Clean', required: true }
+        ],
+        active: true, isSystem: true, isComplaintDriven: false, requiresSupervisorVerification: false
+      },
+      {
+        taskCode: 'LOST_FOUND', taskName: 'Lost & Found Check',
+        category: 'closure', subCategory: 'lost_found',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, conflictGroup: 'closure',
+        frequencyType: 'journey_end', scheduledTime: null,
+        requiresPhotoEvidence: false, maxCoaches: 2, minDurationMinutes: 10,
+        requiresSupervisorVerification: true,
+        checklistTemplate: [
+          { item: 'seats_checked', label: 'All Seats Checked', required: true },
+          { item: 'luggage_area_checked', label: 'Luggage Area Checked', required: true },
+          { item: 'items_logged', label: 'Found Items Logged', required: true }
+        ],
+        active: true, isSystem: true, isComplaintDriven: false
+      },
+      {
+        taskCode: 'LINEN_RECONCILE', taskName: 'Linen Reconciliation',
+        category: 'closure', subCategory: 'linen',
+        assignedRole: 'attendant', applicableCoachTypes: ['ac'],
+        priority: 2, conflictGroup: 'closure',
+        frequencyType: 'journey_end', scheduledTime: null,
+        requiresPhotoEvidence: false, maxCoaches: null, minDurationMinutes: 15,
+        requiresSupervisorVerification: true,
+        checklistTemplate: [
+          { item: 'linen_counted', label: 'Linen Counted', required: true },
+          { item: 'damage_noted', label: 'Damage/Stain Noted', required: false },
+          { item: 'shortage_reported', label: 'Shortage Reported', required: true }
+        ],
+        active: true, isSystem: true, isComplaintDriven: false
+      },
+      {
+        taskCode: 'PENDING_COMPLAINT_REVIEW', taskName: 'Pending Complaint Review',
+        category: 'closure', subCategory: 'complaint',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 1, conflictGroup: 'closure',
+        frequencyType: 'journey_end', scheduledTime: null,
+        requiresPhotoEvidence: false, maxCoaches: null, minDurationMinutes: 10,
+        requiresSupervisorVerification: true,
+        checklistTemplate: [
+          { item: 'complaints_reviewed', label: 'All Complaints Reviewed', required: true },
+          { item: 'unresolved_escalated', label: 'Unresolved Escalated', required: true },
+          { item: 'feedback_logged', label: 'Feedback Logged', required: true }
+        ],
+        active: true, isSystem: true, isComplaintDriven: false
+      },
+      {
+        taskCode: 'FINAL_REPORT', taskName: 'Journey Closure Report',
+        category: 'closure', subCategory: 'report',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 1, conflictGroup: 'closure',
+        frequencyType: 'journey_end', scheduledTime: null,
+        requiresPhotoEvidence: false, maxCoaches: null, minDurationMinutes: 20,
+        requiresSupervisorVerification: true,
+        checklistTemplate: [
+          { item: 'tasks_summary', label: 'Tasks Completion Summary', required: true },
+          { item: 'attendance_summary', label: 'Attendance Summary', required: true },
+          { item: 'complaints_summary', label: 'Complaints Summary', required: true },
+          { item: 'penalty_assessment', label: 'Penalty Assessment Done', required: true }
+        ],
+        active: true, isSystem: true, isComplaintDriven: false
+      },
+      // ════════════════════════════════════════════════════════════════
+      // NIGHT TASKS (Complaint-driven only, 22:00-06:00)
+      // ════════════════════════════════════════════════════════════════
       {
         taskCode: 'NIGHT_CLEAN_REQUEST', taskName: 'Night Cleaning (On Request)',
         category: 'cleaning', subCategory: 'night',
         assignedRole: 'janitor', applicableCoachTypes: ['all'],
-        priority: 4, requiresSupervisorVerification: false,
-        isComplaintDriven: true, conflictGroup: 'night_cleaning',
-        frequencyRules: [
-          { startHour: 22, endHour: 6, intervalMinutes: 0, label: 'Night Hours (Request Only)' }
-        ],
-        scheduledTime: null,
+        priority: 4, conflictGroup: 'night_cleaning',
+        frequencyType: 'on_request', scheduledTime: null,
+        isComplaintDriven: true, requiresPhotoEvidence: true,
+        maxCoaches: 1, minDurationMinutes: 20,
+        requiresSupervisorVerification: false,
         checklistTemplate: [
           { item: 'toilet_cleaned', label: 'Toilet Cleaned', required: true },
-          { item: 'area_wiped', label: 'Area Wiped', required: true }
+          { item: 'area_wiped', label: 'Area Wiped', required: true },
+          { item: 'deodorant_applied', label: 'Deodorant Applied', required: false }
         ],
         active: true, isSystem: true
       }
@@ -14560,13 +14669,13 @@ async function seedTaskMasters() {
       batch.set(ref, { ...master, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
     await batch.commit();
-    console.log(`[TaskMasters] Seeded ${masters.length} default task masters`);
+    console.log(`[TaskMasters] Seeded ${masters.length} Railway Board compliant task masters`);
   } catch (err) {
     console.error('(SeedTaskMasters) Error:', err.message);
   }
 }
 
-// ─── GENERATE TASKS FROM MASTERS (Rule-driven, called on activation) ─────
+// ─── GENERATE TASKS FROM MASTERS (Rule-driven, Railway Board compliant) ──
 async function generateTasksFromMasters(runData) {
   try {
     const mastersSnap = await db.collection('task_masters')
@@ -14590,83 +14699,162 @@ async function generateTasksFromMasters(runData) {
     const depHour = departureTime.getHours();
     const depMinutes = departureTime.getMinutes();
 
+    // Helper: get time slots for a master based on frequency type
+    function getTimeSlotsForMaster(master) {
+      if (master.frequencyType === 'journey_end' || master.frequencyType === 'on_request') return [];
+      if (master.scheduledTime) return [master.scheduledTime];
+
+      const slots = [];
+      const freq = master.frequencyType || 'peak_hourly';
+
+      if (freq === 'peak_hourly') {
+        // 06-09 and 20-22: hourly
+        for (let h = 6; h <= 8; h++) slots.push(`${h.toString().padStart(2,'0')}:00`);
+        for (let h = 20; h <= 21; h++) slots.push(`${h.toString().padStart(2,'0')}:00`);
+      } else if (freq === 'two_hourly') {
+        // 09-20: every 2 hours
+        for (let h = 9; h <= 19; h += 2) slots.push(`${h.toString().padStart(2,'0')}:00`);
+      } else if (freq === 'daily_thrice') {
+        // 3x per day
+        for (const h of [9, 13, 17]) slots.push(`${h.toString().padStart(2,'0')}:00`);
+      } else if (freq === 'daily') {
+        // Once daily at default time or now
+        slots.push(master.scheduledTime || '10:00');
+      }
+      return slots;
+    }
+
+    // Group coaches by workerId (1 janitor handles up to 2 coaches)
+    const workerCoachMap = {};
     for (const coach of (runData.coaches || [])) {
       if (!coach.workerId) continue;
-      const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
-      const workerId = coach.workerId;
-      const workerName = coach.workerName || 'Unknown';
-      const isAC = coach.coachType === 'AC' || coach.coachType === 'ac';
+      if (!workerCoachMap[coach.workerId]) workerCoachMap[coach.workerId] = [];
+      workerCoachMap[coach.workerId].push(coach);
+    }
+
+    for (const [workerId, assignedCoaches] of Object.entries(workerCoachMap)) {
+      const firstCoach = assignedCoaches[0];
+      const workerRole = firstCoach.workerRole || 'janitor';
+      const workerName = firstCoach.workerName || 'Unknown';
 
       for (const master of masters) {
-        // Check if this task applies to this coach type
-        if (!master.applicableCoachTypes.includes('all')) {
-          if (isAC && !master.applicableCoachTypes.includes('ac')) continue;
-          if (!isAC && !master.applicableCoachTypes.includes('non_ac')) continue;
-        }
-
-        // Check role match: task assigned to this worker's role
-        const workerRole = coach.workerRole || 'janitor';
+        // Check role match
         if (master.assignedRole !== workerRole && master.assignedRole !== 'all') continue;
 
-        // Build scheduled time from master or compute from frequency
-        const taskTime = master.scheduledTime;
-        if (!taskTime) continue;
-
-        const [th, tm] = taskTime.split(':').map(Number);
-        const taskHour = th;
-        const taskMinute = tm || 0;
-
-        // Skip tasks scheduled before actual departure (train hasn't left yet)
-        if (taskHour < depHour || (taskHour === depHour && taskMinute < depMinutes)) continue;
-
-        // Create task instance (parent)
-        const taskId = `${runId}_${master.taskCode}_${coachNo}`;
-        const taskRef = db.collection('task_instances').doc(taskId);
-        batch.set(taskRef, {
-          taskId, runInstanceId: runId, trainNo: runData.trainNo,
-          taskMasterCode: master.taskCode, taskName: master.taskName,
-          category: master.category, subCategory: master.subCategory,
-          coachNo, workerId, workerName, workerRole,
-          scheduledTime: taskTime, scheduledDate: departureDate,
-          status: 'PLANNED',
-          priority: master.priority,
-          requiresSupervisorVerification: master.requiresSupervisorVerification,
-          conflictGroup: master.conflictGroup,
-          checklistTemplate: master.checklistTemplate,
-          isParentTask: true, childTaskIds: [],
-          beforePhoto: null, afterPhoto: null,
-          gpsLatitude: null, gpsLongitude: null,
-          supervisorVerified: false,
-          supervisorId: null, supervisorRemarks: null,
-          exceptionReason: null,
-          checklistResponses: [],
-          completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        // Check if this task applies to any of the assigned coaches
+        const applicableCoaches = assignedCoaches.filter(coach => {
+          const isAC = coach.coachType === 'AC' || coach.coachType === 'ac';
+          if (master.applicableCoachTypes.includes('all')) return true;
+          if (isAC && master.applicableCoachTypes.includes('ac')) return true;
+          if (!isAC && master.applicableCoachTypes.includes('non_ac')) return true;
+          return false;
         });
+        if (applicableCoaches.length === 0) continue;
 
-        // Create child task for this specific coach
-        const childId = `${taskId}_child`;
-        const childRef = db.collection('task_instances').doc(childId);
-        batch.set(childRef, {
-          taskId: childId, parentTaskId: taskId, runInstanceId: runId,
-          taskMasterCode: master.taskCode, taskName: master.taskName,
-          category: master.category, subCategory: master.subCategory,
-          coachNo, workerId, workerName, workerRole,
-          scheduledTime: taskTime, scheduledDate: departureDate,
-          status: 'PLANNED', priority: master.priority,
-          isParentTask: false,
-          beforePhoto: null, afterPhoto: null,
-          gpsLatitude: null, gpsLongitude: null,
-          supervisorVerified: false,
-          supervisorId: null, supervisorRemarks: null,
-          exceptionReason: null,
-          checklistResponses: [],
-          completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-        });
+        // Skip non-journey_end tasks for ARRIVED/CLOSED journeys
+        if (['ARRIVED', 'CLOSED'].includes(runData.status) && master.frequencyType !== 'journey_end') continue;
+        if (master.frequencyType === 'journey_end' && runData.status !== 'ARRIVED') continue;
 
-        batch.update(taskRef, {
-          childTaskIds: admin.firestore.FieldValue.arrayUnion(childId)
-        });
-        count += 2; // parent + child
+        // Get time slots for this master
+        const timeSlots = getTimeSlotsForMaster(master);
+        if (timeSlots.length === 0 && master.frequencyType !== 'journey_end') continue;
+
+        // Journey-end tasks don't have time slots
+        if (master.frequencyType === 'journey_end') {
+          for (const coach of applicableCoaches) {
+            const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+            const parentId = `${runId}_${master.taskCode}_${coachNo}`;
+            const childId = `${parentId}_child`;
+
+            batch.set(db.collection('task_instances').doc(parentId), {
+              taskId: parentId, runInstanceId: runId, trainNo: runData.trainNo,
+              taskMasterCode: master.taskCode, taskName: master.taskName,
+              category: master.category, subCategory: master.subCategory,
+              coachNo, workerId, workerName, workerRole,
+              scheduledTime: 'ARRIVAL', scheduledDate: departureDate,
+              status: 'PLANNED', priority: master.priority,
+              requiresSupervisorVerification: master.requiresSupervisorVerification || false,
+              conflictGroup: master.conflictGroup,
+              checklistTemplate: master.checklistTemplate,
+              isParentTask: true, childTaskIds: [childId],
+              beforePhoto: null, afterPhoto: null,
+              gpsLatitude: null, gpsLongitude: null,
+              supervisorVerified: false, supervisorId: null, supervisorRemarks: null,
+              exceptionReason: null, checklistResponses: [],
+              requiresPhotoEvidence: master.requiresPhotoEvidence !== false,
+              minDurationMinutes: master.minDurationMinutes || 15,
+              completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+            });
+
+            batch.set(db.collection('task_instances').doc(childId), {
+              taskId: childId, parentTaskId: parentId, runInstanceId: runId,
+              taskMasterCode: master.taskCode, taskName: master.taskName,
+              category: master.category, subCategory: master.subCategory,
+              coachNo, workerId, workerName, workerRole,
+              scheduledTime: 'ARRIVAL', scheduledDate: departureDate,
+              status: 'PLANNED', priority: master.priority,
+              isParentTask: false,
+              beforePhoto: null, afterPhoto: null,
+              gpsLatitude: null, gpsLongitude: null,
+              supervisorVerified: false,
+              requiresPhotoEvidence: master.requiresPhotoEvidence !== false,
+              checklistResponses: [],
+              completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+            });
+            count += 2;
+          }
+          continue;
+        }
+
+        // Generate tasks for each time slot
+        for (const taskTime of timeSlots) {
+          const [th, tm] = taskTime.split(':').map(Number);
+          // Skip tasks before departure
+          if (th < depHour || (th === depHour && (tm || 0) < depMinutes)) continue;
+
+          for (const coach of applicableCoaches) {
+            const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+            const parentId = `${runId}_${master.taskCode}_${coachNo}_${taskTime.replace(':','')}`;
+            const childId = `${parentId}_child`;
+
+            batch.set(db.collection('task_instances').doc(parentId), {
+              taskId: parentId, runInstanceId: runId, trainNo: runData.trainNo,
+              taskMasterCode: master.taskCode, taskName: master.taskName,
+              category: master.category, subCategory: master.subCategory,
+              coachNo, workerId, workerName, workerRole,
+              scheduledTime: taskTime, scheduledDate: departureDate,
+              status: 'PLANNED', priority: master.priority,
+              requiresSupervisorVerification: master.requiresSupervisorVerification || false,
+              conflictGroup: master.conflictGroup,
+              checklistTemplate: master.checklistTemplate,
+              isParentTask: true, childTaskIds: [childId],
+              beforePhoto: null, afterPhoto: null,
+              gpsLatitude: null, gpsLongitude: null,
+              supervisorVerified: false, supervisorId: null, supervisorRemarks: null,
+              exceptionReason: null, checklistResponses: [],
+              requiresPhotoEvidence: master.requiresPhotoEvidence !== false,
+              minDurationMinutes: master.minDurationMinutes || 30,
+              completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+            });
+
+            batch.set(db.collection('task_instances').doc(childId), {
+              taskId: childId, parentTaskId: parentId, runInstanceId: runId,
+              taskMasterCode: master.taskCode, taskName: master.taskName,
+              category: master.category, subCategory: master.subCategory,
+              coachNo, workerId, workerName, workerRole,
+              scheduledTime: taskTime, scheduledDate: departureDate,
+              status: 'PLANNED', priority: master.priority,
+              isParentTask: false,
+              beforePhoto: null, afterPhoto: null,
+              gpsLatitude: null, gpsLongitude: null,
+              supervisorVerified: false,
+              requiresPhotoEvidence: master.requiresPhotoEvidence !== false,
+              checklistResponses: [],
+              completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+            });
+            count += 2;
+          }
+        }
       }
     }
 
@@ -15479,39 +15667,62 @@ app.get('/api/v2/audit-logs', verifyToken, async (req, res) => {
 
 // ─── JOURNEY CLOSURE TASK APIS ────────────────────────────────────────────
 
-// Get closure tasks
+// Get closure tasks (now stored in task_instances with category 'closure')
 app.get('/api/v2/closure-tasks/:runInstanceId', verifyToken, async (req, res) => {
   try {
     const { runInstanceId } = req.params;
-    const snap = await db.collection('closure_tasks')
+    // Query from task_instances where category is closure
+    const snap = await db.collection('task_instances')
       .where('runInstanceId', '==', runInstanceId)
+      .where('isParentTask', '==', true)
+      .where('category', '==', 'closure')
       .get();
     const tasks = [];
     snap.forEach(doc => tasks.push(doc.data()));
+    // Also check old closure_tasks collection for backward compat
+    if (tasks.length === 0) {
+      const oldSnap = await db.collection('closure_tasks')
+        .where('runInstanceId', '==', runInstanceId)
+        .get();
+      oldSnap.forEach(doc => tasks.push(doc.data()));
+    }
     res.status(200).json({ success: true, count: tasks.length, tasks });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch closure tasks', details: error.message });
   }
 });
 
-// Complete a closure task
+// Complete a closure task (supports both old and new)
 app.post('/api/v2/closure-tasks/complete', verifyToken, async (req, res) => {
   try {
     const { taskId, beforePhoto, afterPhoto, gpsLatitude, gpsLongitude } = req.body;
     if (!taskId) return res.status(400).json({ error: 'taskId required' });
 
-    const ref = db.collection('closure_tasks').doc(taskId);
-    const doc = await ref.get();
-    if (!doc.exists) return res.status(404).json({ error: 'Closure task not found' });
+    // First try task_instances (new system)
+    let ref = db.collection('task_instances').doc(taskId);
+    let doc = await ref.get();
+    if (!doc.exists) {
+      // Fallback to old closure_tasks
+      ref = db.collection('closure_tasks').doc(taskId);
+      doc = await ref.get();
+      if (!doc.exists) return res.status(404).json({ error: 'Closure task not found' });
+    }
 
+    const oldData = doc.data();
     await ref.update({
       status: 'COMPLETED',
-      beforePhoto: beforePhoto || null,
-      afterPhoto: afterPhoto || null,
-      gpsLatitude: gpsLatitude || null,
-      gpsLongitude: gpsLongitude || null,
-      completedAt: new Date().toISOString()
+      beforePhoto: beforePhoto || oldData.beforePhoto || null,
+      afterPhoto: afterPhoto || oldData.afterPhoto || null,
+      gpsLatitude: gpsLatitude || oldData.gpsLatitude || null,
+      gpsLongitude: gpsLongitude || oldData.gpsLongitude || null,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
+
+    // If child task, update parent
+    if (oldData.parentTaskId) {
+      await updateParentTaskStatus(oldData.parentTaskId);
+    }
 
     res.status(200).json({ success: true, message: 'Closure task completed', taskId });
   } catch (error) {
@@ -15653,6 +15864,648 @@ app.get('/api/v2/journey/timeline/:runInstanceId', verifyToken, async (req, res)
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get journey timeline', details: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == BACKWARD COMPATIBLE ALIASES & MISSING ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── MISSING: GET /api/obhs/tasks/headers → fetch parent task_instances as headers ───
+app.get('/api/obhs/tasks/headers', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snap = await db.collection('task_instances')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('isParentTask', '==', true)
+      .get();
+    const headers = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      headers.push({
+        headerId: d.taskInstanceId || doc.id,
+        runInstanceId: d.runInstanceId,
+        taskType: d.taskName || d.taskMasterCode || '',
+        scheduledTime: d.scheduledTime || '',
+        status: d.status || 'PLANNED',
+        childTaskIds: d.childTaskIds || [],
+        createdAt: d.createdAt || null,
+        updatedAt: d.updatedAt || null,
+      });
+    });
+    res.status(200).json({ success: true, count: headers.length, headers });
+  } catch (error) {
+    console.error('(TaskHeaders) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch task headers', details: error.message });
+  }
+});
+
+// ─── MISSING: GET /api/obhs/tasks/details/:headerId → fetch child tasks ───
+app.get('/api/obhs/tasks/details/:headerId', verifyToken, async (req, res) => {
+  try {
+    const { headerId } = req.params;
+    const snap = await db.collection('task_instances')
+      .where('parentTaskId', '==', headerId)
+      .get();
+    const details = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      details.push({
+        detailId: d.taskInstanceId || doc.id,
+        headerId: d.parentTaskId || headerId,
+        runInstanceId: d.runInstanceId,
+        coachNo: d.coachNo || '',
+        janitorId: d.assignedWorker || d.workerId || '',
+        taskType: d.taskName || d.taskMasterCode || '',
+        scheduledTime: d.scheduledTime || '',
+        status: d.status || 'PLANNED',
+        remarks: d.remarks || null,
+        completionTime: d.completionTime || null,
+        createdAt: d.createdAt || null,
+      });
+    });
+    // If no explicit child tasks, query by headerId as taskInstanceId (flat structure)
+    if (details.length === 0) {
+      const parentSnap = await db.collection('task_instances').doc(headerId).get();
+      if (parentSnap.exists) {
+        const d = parentSnap.data();
+        details.push({
+          detailId: d.taskInstanceId || headerId,
+          headerId: headerId,
+          runInstanceId: d.runInstanceId,
+          coachNo: d.coachNo || '',
+          janitorId: d.assignedWorker || d.workerId || '',
+          taskType: d.taskName || d.taskMasterCode || '',
+          scheduledTime: d.scheduledTime || '',
+          status: d.status || 'PLANNED',
+          remarks: d.remarks || null,
+          completionTime: d.completionTime || null,
+          createdAt: d.createdAt || null,
+        });
+      }
+    }
+    res.status(200).json({ success: true, count: details.length, details });
+  } catch (error) {
+    console.error('(TaskDetails) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch task details', details: error.message });
+  }
+});
+
+// ─── MISSING: GET /api/obhs/tasks/coach → fetch tasks by runInstanceId + coachNo ───
+app.get('/api/obhs/tasks/coach', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId, coachNo } = req.query;
+    if (!runInstanceId || !coachNo) {
+      return res.status(400).json({ error: 'runInstanceId and coachNo query parameters are required.' });
+    }
+    const snap = await db.collection('task_instances')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('coachNo', '==', coachNo)
+      .get();
+    const tasks = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      tasks.push({
+        detailId: d.taskInstanceId || doc.id,
+        headerId: d.parentTaskId || '',
+        runInstanceId: d.runInstanceId,
+        coachNo: d.coachNo || coachNo,
+        janitorId: d.assignedWorker || d.workerId || '',
+        taskType: d.taskName || d.taskMasterCode || '',
+        scheduledTime: d.scheduledTime || '',
+        toiletStatus: d.toiletStatus || null,
+        washBasinStatus: d.washBasinStatus || null,
+        dustbinStatus: d.dustbinStatus || null,
+        consumableStatus: d.consumableStatus || null,
+        beforePhoto: d.beforePhoto || null,
+        afterPhoto: d.afterPhoto || null,
+        gpsLatitude: d.gpsLatitude || null,
+        gpsLongitude: d.gpsLongitude || null,
+        employeeId: d.employeeId || null,
+        deviceId: d.deviceId || null,
+        mobileNumber: d.mobileNumber || null,
+        checklist: d.checklist || null,
+        status: d.status || 'PLANNED',
+        remarks: d.remarks || null,
+        completionTime: d.completionTime || null,
+        createdAt: d.createdAt || null,
+      });
+    });
+    res.status(200).json({ success: true, count: tasks.length, tasks });
+  } catch (error) {
+    console.error('(CoachTasks) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch coach tasks', details: error.message });
+  }
+});
+
+// ─── MISSING: GET /api/worker/tasks → returns worker tasks (mirrors v2/worker/my-tasks) ───
+app.get('/api/worker/tasks', verifyToken, async (req, res) => {
+  try {
+    const workerId = req.user.uid;
+    const runsSnap = await db.collection('RunInstance')
+      .where('status', '==', 'Active')
+      .get();
+    let myRun = null;
+    let myCoaches = [];
+    runsSnap.forEach(doc => {
+      const d = doc.data();
+      const assigned = (d.coaches || []).filter(c => c.workerId === workerId || c.attendantId === workerId);
+      if (assigned.length > 0) {
+        myRun = { ...d, runInstanceId: doc.id };
+        myCoaches = assigned.map(c => c.coachPosition || c.coachNo);
+      }
+    });
+    if (!myRun) {
+      return res.status(404).json({ success: false, error: 'No active journey found for this worker' });
+    }
+    const assignedCoachNos = [...new Set(myRun.coaches
+      .filter(c => c.workerId === workerId || c.attendantId === workerId)
+      .map(c => c.coachPosition || c.coachNo))];
+    const taskSnap = await db.collection('task_instances')
+      .where('runInstanceId', '==', myRun.runInstanceId)
+      .where('isParentTask', '==', false)
+      .get();
+    let tasks = [];
+    taskSnap.forEach(doc => tasks.push(doc.data()));
+    tasks = tasks.filter(t => assignedCoachNos.includes(t.coachNo));
+    res.status(200).json({
+      success: true,
+      journey: {
+        runInstanceId: myRun.runInstanceId,
+        trainNo: myRun.trainNo, trainName: myRun.trainName,
+        coaches: myCoaches,
+        actualDeparture: myRun.actualDeparture,
+        scheduledArrival: myRun.scheduledArrival
+      },
+      taskCount: tasks.length,
+      tasks
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch worker tasks', details: error.message });
+  }
+});
+
+// ─── ALIAS: GET /api/repairs → GET /api/obhs/petty-repairs ───
+app.get('/api/repairs', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('petty_repairs')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('inspectionTime')
+      .get();
+    const repairs = [];
+    snapshot.forEach(doc => repairs.push(doc.data()));
+    res.status(200).json({ success: true, count: repairs.length, repairs });
+  } catch (error) {
+    console.error('(PettyRepairs) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch petty repairs', details: error.message });
+  }
+});
+
+// ─── ALIAS: POST /api/repairs → POST /api/obhs/petty-repairs/submit ───
+app.post('/api/repairs', verifyToken, async (req, res) => {
+  try {
+    const { repairId, items, remarks } = req.body;
+    if (!repairId) {
+      return res.status(400).json({ error: 'repairId is required.' });
+    }
+    const ref = db.collection('petty_repairs').doc(repairId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Petty repair record not found.' });
+    }
+    const updateData = {
+      items: items || {},
+      status: items ? 'COMPLETED' : 'PENDING',
+      remarks: remarks || null,
+      updatedAt: new Date().toISOString()
+    };
+    await ref.update(updateData);
+    res.status(200).json({ success: true, message: 'Petty repair inspection submitted', repairId });
+  } catch (error) {
+    console.error('(RepairSubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit repair inspection', details: error.message });
+  }
+});
+
+// ─── ALIAS: POST /api/repairs/:repairId/escalate → POST /api/obhs/petty-repairs/escalate ───
+app.post('/api/repairs/:repairId/escalate', verifyToken, async (req, res) => {
+  try {
+    const { repairId } = req.params;
+    const { escalatedTo } = req.body;
+    if (!repairId) {
+      return res.status(400).json({ error: 'repairId is required.' });
+    }
+    const ref = db.collection('petty_repairs').doc(repairId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Petty repair record not found.' });
+    }
+    await ref.update({
+      isEscalated: true,
+      escalatedTo: escalatedTo || 'supervisor',
+      status: 'ESCALATED',
+      updatedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Repair escalated', repairId });
+  } catch (error) {
+    console.error('(RepairEscalate) Error:', error);
+    res.status(500).json({ error: 'Failed to escalate repair', details: error.message });
+  }
+});
+
+// ─── ALIAS: GET /api/water/checks → GET /api/obhs/water-checks ───
+app.get('/api/water/checks', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('water_checks')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('checkTime')
+      .get();
+    const checks = [];
+    snapshot.forEach(doc => checks.push(doc.data()));
+    res.status(200).json({ success: true, count: checks.length, checks });
+  } catch (error) {
+    console.error('(WaterChecks) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch water checks', details: error.message });
+  }
+});
+
+// ─── ALIAS: POST /api/water/checks → POST /api/obhs/water-checks/submit ───
+app.post('/api/water/checks', verifyToken, async (req, res) => {
+  try {
+    const { checkId, waterStatus, lowWaterAlert, wateringPointSchedule, photoUrl } = req.body;
+    if (!checkId || !waterStatus) {
+      return res.status(400).json({ error: 'checkId and waterStatus are required.' });
+    }
+    const validStatuses = ['full', 'low', 'empty'];
+    if (!validStatuses.includes(waterStatus)) {
+      return res.status(400).json({ error: 'Invalid waterStatus. Must be: full, low, or empty.' });
+    }
+    const ref = db.collection('water_checks').doc(checkId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Water check not found.' });
+    }
+    await ref.update({
+      waterStatus,
+      lowWaterAlert: lowWaterAlert || (waterStatus === 'empty') || (waterStatus === 'low'),
+      wateringPointSchedule: wateringPointSchedule || null,
+      photoUrl: photoUrl || null,
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Water check submitted', checkId });
+  } catch (error) {
+    console.error('(WaterSubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit water check', details: error.message });
+  }
+});
+
+// ─── ALIAS: GET /api/water/alerts → GET /api/obhs/water-checks/alerts ───
+app.get('/api/water/alerts', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('water_checks')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('lowWaterAlert', '==', true)
+      .get();
+    const alerts = [];
+    snapshot.forEach(doc => alerts.push(doc.data()));
+    res.status(200).json({ success: true, count: alerts.length, alerts });
+  } catch (error) {
+    console.error('(WaterAlerts) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch water alerts', details: error.message });
+  }
+});
+
+// ─── ALIAS: GET /api/safety/checks → GET /api/obhs/safety-checks ───
+app.get('/api/safety/checks', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('safety_checks')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('scheduledTime')
+      .get();
+    const checks = [];
+    snapshot.forEach(doc => checks.push(doc.data()));
+    res.status(200).json({ success: true, count: checks.length, checks });
+  } catch (error) {
+    console.error('(SafetyChecks) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch safety checks', details: error.message });
+  }
+});
+
+// ─── ALIAS: POST /api/safety/checks → POST /api/obhs/safety-checks/submit ───
+app.post('/api/safety/checks', verifyToken, async (req, res) => {
+  try {
+    const { checkId, fireExtinguisherStatus, fsdsStatus, cctvStatus, emergencyEquipmentStatus, photos, deficiencyReports, remarks } = req.body;
+    if (!checkId) {
+      return res.status(400).json({ error: 'checkId is required.' });
+    }
+    const ref = db.collection('safety_checks').doc(checkId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Safety check not found.' });
+    }
+    await ref.update({
+      fireExtinguisherStatus: fireExtinguisherStatus || null,
+      fsdsStatus: fsdsStatus || null,
+      cctvStatus: cctvStatus || null,
+      emergencyEquipmentStatus: emergencyEquipmentStatus || null,
+      photos: photos || [],
+      deficiencyReports: deficiencyReports || [],
+      status: 'COMPLETED',
+      remarks: remarks || null,
+      completedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Safety check submitted', checkId });
+  } catch (error) {
+    console.error('(SafetySubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit safety check', details: error.message });
+  }
+});
+
+// ─── ALIAS: POST /api/safety/checks/:checkId/deficiency → POST /api/obhs/safety-checks/report-deficiency ───
+app.post('/api/safety/checks/:checkId/deficiency', verifyToken, async (req, res) => {
+  try {
+    const { checkId } = req.params;
+    const { deficiencyReport, photoUrl } = req.body;
+    if (!checkId || !deficiencyReport) {
+      return res.status(400).json({ error: 'checkId and deficiencyReport are required.' });
+    }
+    const ref = db.collection('safety_checks').doc(checkId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Safety check not found.' });
+    }
+    await ref.update({
+      deficiencyReports: admin.firestore.FieldValue.arrayUnion({
+        report: deficiencyReport,
+        photoUrl: photoUrl || null,
+        reportedAt: new Date().toISOString(),
+        reportedBy: req.user.uid
+      })
+    });
+    res.status(200).json({ success: true, message: 'Deficiency reported', checkId });
+  } catch (error) {
+    console.error('(SafetyDeficiency) Error:', error);
+    res.status(500).json({ error: 'Failed to report deficiency', details: error.message });
+  }
+});
+
+// ─── MISSING: PATCH /api/obhs/tasks/detail/:detailId/status → update task status ───
+app.patch('/api/obhs/tasks/detail/:detailId/status', verifyToken, async (req, res) => {
+  try {
+    const { detailId } = req.params;
+    const { status, remarks } = req.body;
+    if (!detailId || !status) {
+      return res.status(400).json({ error: 'detailId (in URL) and status (in body) are required.' });
+    }
+    const ref = db.collection('task_instances').doc(detailId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Task detail not found.' });
+    }
+    const updateData = { status, updatedAt: new Date().toISOString() };
+    if (remarks !== undefined) updateData.remarks = remarks;
+    await ref.update(updateData);
+    res.status(200).json({ success: true, message: 'Task status updated', detailId, status });
+  } catch (error) {
+    console.error('(TaskDetailStatus) Error:', error);
+    res.status(500).json({ error: 'Failed to update task status', details: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == JOURNEY LIFECYCLE MANAGEMENT (Railway Board Reform)
+// ═══════════════════════════════════════════════════════════════════════════
+// States: PLANNED → ALLOCATED → READY → ACTIVE → DELAYED → ARRIVED → CLOSED
+// ═══════════════════════════════════════════════════════════════════════════
+
+const JOURNEY_STATES = {
+  PLANNED:  { order: 0, next: ['ALLOCATED'], label: 'Planned' },
+  ALLOCATED:{ order: 1, next: ['READY'], label: 'Workers Allocated' },
+  READY:    { order: 2, next: ['ACTIVE'], label: 'Ready for Departure' },
+  ACTIVE:   { order: 3, next: ['DELAYED', 'ARRIVED'], label: 'Journey Active' },
+  DELAYED:  { order: 4, next: ['ACTIVE', 'ARRIVED'], label: 'Delayed' },
+  ARRIVED:  { order: 5, next: ['CLOSED'], label: 'Arrived at Destination' },
+  CLOSED:   { order: 6, next: [], label: 'Journey Closed' }
+};
+
+// Post journey timeline entry to RunInstance
+async function appendJourneyTimeline(runInstanceRef, entry) {
+  try {
+    await runInstanceRef.update({
+      journeyTimeline: admin.firestore.FieldValue.arrayUnion({
+        ...entry,
+        timestamp: entry.timestamp || new Date().toISOString()
+      }),
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('(JourneyTimeline) Error:', err.message);
+  }
+}
+
+// Advance journey to next state
+app.post('/api/v2/journey/:runInstanceId/advance', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const { toState, actualDeparture, actualArrival, delayMinutes, remarks } = req.body;
+
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId is required' });
+    }
+
+    const ref = db.collection('RunInstance').doc(runInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Run instance not found' });
+    }
+
+    const runData = doc.data();
+    const currentState = runData.status || 'PLANNED';
+    const stateDef = JOURNEY_STATES[currentState];
+
+    if (!stateDef) {
+      return res.status(400).json({ error: `Unknown current state: ${currentState}` });
+    }
+
+    const targetState = toState || stateDef.next[0];
+    if (!stateDef.next.includes(targetState)) {
+      return res.status(400).json({
+        error: 'Invalid state transition',
+        details: `Cannot transition from ${currentState} to ${targetState}. Allowed: ${stateDef.next.join(', ')}`
+      });
+    }
+
+    const allowedRoles = ['CM', 'CA', 'CTS', 'CS'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CM/CA/CTS/CS can advance journey state' });
+    }
+
+    const updateData = { status: targetState, updatedAt: new Date().toISOString() };
+
+    if (targetState === 'ACTIVE' && actualDeparture) {
+      updateData.actualDeparture = actualDeparture;
+      updateData.journeyStartedAt = new Date().toISOString();
+    }
+    if (targetState === 'ARRIVED' && actualArrival) {
+      updateData.actualArrival = actualArrival;
+      updateData.journeyCompletedAt = new Date().toISOString();
+    }
+    if (targetState === 'DELAYED' && delayMinutes !== undefined) {
+      updateData.delayMinutes = delayMinutes;
+      updateData.delayReason = remarks || 'Operational delay';
+    }
+
+    await ref.update(updateData);
+
+    // Log to journey timeline
+    await appendJourneyTimeline(ref, {
+      fromState: currentState,
+      toState: targetState,
+      actorId: req.user.uid,
+      actorName: req.user.fullName,
+      actorRole: req.user.role,
+      remarks: remarks || null
+    });
+
+    // Trigger task generation on ACTIVE
+    if (targetState === 'ACTIVE') {
+      const updatedDoc = await ref.get();
+      await generateTaskInstancesForRun(updatedDoc.data());
+      await generatePreTerminalGarbageTasks(runInstanceId);
+      await generateTasksFromMasters(updatedDoc.data());
+    }
+
+    // Trigger closure tasks on ARRIVED
+    if (targetState === 'ARRIVED') {
+      const updatedDoc = await ref.get();
+      await generateClosureTasks(runInstanceId, actualArrival || new Date().toISOString(), updatedDoc.data());
+    }
+
+    await logAudit({
+      action: 'JOURNEY_ADVANCED', entityType: 'RunInstance',
+      entityId: runInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: currentState },
+      newValue: { status: targetState, ...updateData },
+      details: `Journey advanced: ${currentState} → ${targetState}${remarks ? ` (${remarks})` : ''}`
+    });
+
+    res.status(200).json({
+      success: true, message: `Journey advanced to ${targetState}`,
+      runInstanceId, previousState: currentState, currentState: targetState
+    });
+  } catch (error) {
+    console.error('(JourneyAdvance) Error:', error);
+    res.status(500).json({ error: 'Failed to advance journey', details: error.message });
+  }
+});
+
+// Get journey timeline
+app.get('/api/v2/journey/:runInstanceId/timeline', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const doc = await db.collection('RunInstance').doc(runInstanceId).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Run instance not found' });
+    }
+
+    const runData = doc.data();
+    const timeline = runData.journeyTimeline || [];
+
+    // Also compute derived metrics
+    const metrics = {
+      currentState: runData.status,
+      totalTransitions: timeline.length,
+      actualDeparture: runData.actualDeparture || null,
+      actualArrival: runData.actualArrival || null,
+      scheduledDeparture: runData.scheduledDeparture || null,
+      delayMinutes: runData.delayMinutes || 0,
+      journeyDuration: runData.actualDeparture && runData.actualArrival
+        ? (new Date(runData.actualArrival).getTime() - new Date(runData.actualDeparture).getTime()) / 60000
+        : null
+    };
+
+    res.status(200).json({ success: true, runInstanceId, timeline, metrics });
+  } catch (error) {
+    console.error('(JourneyTimeline) Error:', error);
+    res.status(500).json({ error: 'Failed to get journey timeline', details: error.message });
+  }
+});
+
+// Get all journeys with their current state (for dashboard)
+app.get('/api/v2/journeys', verifyToken, async (req, res) => {
+  try {
+    const { status, trainNo, date, zone, division } = req.query;
+    let query = db.collection('RunInstance');
+    const constraints = [];
+
+    if (status) {
+      const statuses = status.split(',');
+      if (statuses.length === 1) {
+        constraints.push(admin.firestore.where('status', '==', statuses[0]));
+      } else {
+        constraints.push(admin.firestore.where('status', 'in', statuses));
+      }
+    }
+    if (trainNo) constraints.push(admin.firestore.where('trainNo', '==', trainNo));
+    if (date) constraints.push(admin.firestore.where('departureDate', '==', date));
+    if (zone) constraints.push(admin.firestore.where('zone', '==', zone));
+    if (division) constraints.push(admin.firestore.where('division', '==', division));
+
+    let snap;
+    if (constraints.length > 0) {
+      let q = db.collection('RunInstance');
+      for (const c of constraints) q = q.where(c._fieldPath, c._op, c._value);
+      snap = await q.orderBy('createdAt', 'desc').limit(100).get();
+    } else {
+      snap = await db.collection('RunInstance')
+        .orderBy('createdAt', 'desc').limit(50).get();
+    }
+
+    const journeys = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      journeys.push({
+        runInstanceId: doc.id,
+        trainNo: d.trainNo,
+        trainName: d.trainName,
+        status: d.status,
+        departureDate: d.departureDate,
+        scheduledDeparture: d.scheduledDeparture,
+        actualDeparture: d.actualDeparture,
+        actualArrival: d.actualArrival,
+        delayMinutes: d.delayMinutes || 0,
+        numberOfCoaches: d.coaches ? d.coaches.length : 0,
+        stateLabel: (JOURNEY_STATES[d.status] || {}).label || d.status,
+        coachAttendance: d.coachAttendance || {},
+        createdAt: d.createdAt
+      });
+    });
+
+    res.status(200).json({ success: true, count: journeys.length, journeys });
+  } catch (error) {
+    console.error('(JourneysList) Error:', error);
+    res.status(500).json({ error: 'Failed to list journeys', details: error.message });
   }
 });
 

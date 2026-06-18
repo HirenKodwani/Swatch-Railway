@@ -46,7 +46,7 @@ class _AttendantLinenScreenState extends State<AttendantLinenScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],
