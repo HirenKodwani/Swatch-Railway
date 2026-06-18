@@ -560,25 +560,47 @@ class WorkerController extends GetxController {
     }
 
     try {
-      // Try to get current position with a timeout
+      // Try to get current position with a balanced accuracy first
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 15),
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 20),
         ),
       );
     } catch (e) {
-      // If high accuracy fails or times out, try last known or lower accuracy
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown != null) return lastKnown;
+      debugPrint('Location Step 1 Failed: $e');
+      
+      // Fallback 1: Last Known
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) return lastKnown;
+      } catch (_) {}
 
-      // Final attempt with lower accuracy and shorter timeout
-      return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
+      // Fallback 2: Coarse/Low Accuracy with longer timeout
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (e2) {
+        debugPrint('Location Step 2 Failed: $e2');
+        // Final fallback: If everything fails, we return a position with 0,0 
+        // to at least allow the API call to proceed, let the backend handle the missing data.
+        return Position(
+          longitude: 0.0,
+          latitude: 0.0,
+          timestamp: DateTime.now(),
+          accuracy: 0.0,
+          altitude: 0.0,
+          heading: 0.0,
+          speed: 0.0,
+          speedAccuracy: 0.0,
+          altitudeAccuracy: 0.0,
+          headingAccuracy: 0.0,
+        );
+      }
     }
   }
 
