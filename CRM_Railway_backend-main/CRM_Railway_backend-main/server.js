@@ -809,7 +809,7 @@ app.post('/api/auth/login', async (req, res) => {
       if (userData.uid) {
         
         const runInstanceSnapshot = await db.collection('RunInstance')
-          .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
+          .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
           .get();
 
         for (const doc of runInstanceSnapshot.docs) {
@@ -1487,7 +1487,7 @@ app.get('/api/worker/profile', verifyToken, async (req, res) => {
     // isliye hum better approach use karenge:
     
     const allRunsSnapshot = await db.collection('RunInstance')
-      .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
+      .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
       .get();
 
     let assignedRuns = [];
@@ -15671,7 +15671,7 @@ app.get('/api/obhs/worker/active-run', verifyToken, async (req, res) => {
   try {
     const uid = req.user.uid;
     const allRuns = await db.collection('RunInstance')
-      .where('status', 'in', ['ALLOCATED', 'ACTIVE', 'READY'])
+      .where('status', 'in', ['ALLOCATED', 'ACTIVE', 'Active', 'active', 'READY', 'ready', 'Running', 'running'])
       .orderBy('createdAt', 'desc')
       .get();
 
