@@ -240,8 +240,8 @@ class WorkerRepository {
         'runInstanceId': runInstanceId,
         'attendanceType': type,
         'imageUrl': imageUrl,
-        'latitude': (latitude ?? 19.0760).toString(),
-        'longitude': (longitude ?? 72.8777).toString(),
+        'latitude': latitude?.toString() ?? '',
+        'longitude': longitude?.toString() ?? '',
         'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
       };
 

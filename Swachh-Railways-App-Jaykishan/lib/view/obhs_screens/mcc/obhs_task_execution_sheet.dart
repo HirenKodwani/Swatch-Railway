@@ -85,10 +85,27 @@ class _ObhsTaskExecutionSheetState extends State<ObhsTaskExecutionSheet> {
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
         return null;
       }
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 15)),
-      );
-      return pos;
+      
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high, 
+            timeLimit: Duration(seconds: 15)
+          ),
+        );
+      } catch (e) {
+        // Fallback to last known position
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) return lastKnown;
+
+        // Fallback to low accuracy
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low, 
+            timeLimit: Duration(seconds: 10)
+          ),
+        );
+      }
     } catch (_) {
       return null;
     }
