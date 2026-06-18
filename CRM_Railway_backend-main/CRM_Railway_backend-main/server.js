@@ -1631,12 +1631,18 @@ app.get('/api/worker/statistics', verifyToken, async (req, res) => {
     try {
       const attendanceSnapshot = await db.collection('obhs_attendance')
         .where('workerId', '==', uid)
-        .where('date', '==', today)
         .get();
-      const types = new Set();
-      attendanceSnapshot.forEach(doc => types.add(doc.data().type));
-      const expected = 3; // start, mid, end
-      attendancePercentage = Math.round((types.size / expected) * 100);
+      let markedCount = 0;
+      attendanceSnapshot.forEach(doc => {
+        const d = doc.data();
+        const docDate = d.createdAt ? d.createdAt.split('T')[0] : '';
+        if (docDate !== today) return;
+        if (d.isStartMarked) markedCount++;
+        if (d.isMidMarked) markedCount++;
+        if (d.isEndMarked) markedCount++;
+      });
+      const expected = 3;
+      attendancePercentage = Math.round((markedCount / expected) * 100);
     } catch (_) { /* ignore */ }
 
     // 4. Complaints count for this worker
