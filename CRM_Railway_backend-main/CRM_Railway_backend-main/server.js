@@ -1554,7 +1554,7 @@ app.get('/api/worker/statistics', verifyToken, async (req, res) => {
 
     // 1. Find active run instance for this worker
     const runsSnapshot = await db.collection('RunInstance')
-      .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
+      .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
       .get();
 
     let activeRun = null;
@@ -9389,7 +9389,7 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
       console.log(`(Complaint) runInstanceId missing in request & token for worker ${workerId}. Fetching from DB...`);
       
       const runInstanceSnapshot = await db.collection('RunInstance')
-        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
+        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
         .get();
 
       for (const doc of runInstanceSnapshot.docs) {
@@ -9714,7 +9714,7 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
 
     if (!runInstanceId) {
       const runInstanceSnapshot = await db.collection('RunInstance')
-        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
+        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
         .get();
 
       for (const doc of runInstanceSnapshot.docs) {
