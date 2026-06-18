@@ -16,6 +16,11 @@ class RunInstanceModel {
   final String? updatedByName;
   final DateTime? departureDate;
   final String status;
+  final String? scheduledDeparture;
+  final String? actualDeparture;
+  final String? actualArrival;
+  final String? journeyStartTime;
+  final String? journeyEndTime;
 
   RunInstanceModel({
     this.id,
@@ -35,6 +40,11 @@ class RunInstanceModel {
     this.updatedByName,
     this.departureDate,
     this.status = 'Active',
+    this.scheduledDeparture,
+    this.actualDeparture,
+    this.actualArrival,
+    this.journeyStartTime,
+    this.journeyEndTime,
   });
 
   factory RunInstanceModel.fromJson(Map<String, dynamic> json) {
@@ -65,6 +75,11 @@ class RunInstanceModel {
       updatedBy: json['updatedBy'] as String?,
       updatedByName: json['updatedByName'] as String?,
       status: json['status'] as String? ?? 'Active',
+      scheduledDeparture: json['scheduledDeparture'] as String?,
+      actualDeparture: json['actualDeparture'] as String?,
+      actualArrival: json['actualArrival'] as String?,
+      journeyStartTime: json['journeyStartTime'] as String?,
+      journeyEndTime: json['journeyEndTime'] as String?,
     );
   }
 
@@ -90,6 +105,11 @@ class RunInstanceModel {
       if (updatedBy != null) 'updatedBy': updatedBy,
       if (updatedByName != null) 'updatedByName': updatedByName,
       'status': status,
+      if (scheduledDeparture != null) 'scheduledDeparture': scheduledDeparture,
+      if (actualDeparture != null) 'actualDeparture': actualDeparture,
+      if (actualArrival != null) 'actualArrival': actualArrival,
+      if (journeyStartTime != null) 'journeyStartTime': journeyStartTime,
+      if (journeyEndTime != null) 'journeyEndTime': journeyEndTime,
     };
   }
 
@@ -111,6 +131,11 @@ class RunInstanceModel {
     String? updatedBy,
     String? updatedByName,
     String? status,
+    String? scheduledDeparture,
+    String? actualDeparture,
+    String? actualArrival,
+    String? journeyStartTime,
+    String? journeyEndTime,
   }) {
     return RunInstanceModel(
       id: id ?? this.id,
@@ -130,6 +155,11 @@ class RunInstanceModel {
       updatedBy: updatedBy ?? this.updatedBy,
       updatedByName: updatedByName ?? this.updatedByName,
       status: status ?? this.status,
+      scheduledDeparture: scheduledDeparture ?? this.scheduledDeparture,
+      actualDeparture: actualDeparture ?? this.actualDeparture,
+      actualArrival: actualArrival ?? this.actualArrival,
+      journeyStartTime: journeyStartTime ?? this.journeyStartTime,
+      journeyEndTime: journeyEndTime ?? this.journeyEndTime,
     );
   }
 }
