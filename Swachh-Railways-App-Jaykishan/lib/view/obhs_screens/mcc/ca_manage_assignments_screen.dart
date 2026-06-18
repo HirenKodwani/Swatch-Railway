@@ -548,3 +548,5 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
       },
     );
   }
+
+}

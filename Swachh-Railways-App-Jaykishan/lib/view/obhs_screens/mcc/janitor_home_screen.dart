@@ -5,6 +5,9 @@ import 'package:crm_train/repositories/worker_repo.dart';
 import '../../../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
+import 'obhs_coach_checklist_screen.dart';
+import 'obhs_attendance_screen.dart';
+
 class JanitorHomeScreen extends StatefulWidget {
   final UserModel user;
   const JanitorHomeScreen({super.key, required this.user});
@@ -49,39 +52,20 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildWelcomeBanner(),
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'My Assigned Coaches',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-          if (myCoaches.isEmpty)
-            _buildEmptyState()
-          else
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: myCoaches.length,
-                itemBuilder: (context, index) {
-                  return _buildCoachTile(myCoaches[index]);
-                },
-              ),
-            ),
-        ],
+      body: RefreshIndicator(
+        onRefresh: _fetchAssignment,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _runData == null
+                    ? _buildEmptyState()
+                    : _buildContent(),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {},
@@ -128,7 +112,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildWelcomeBanner(),
+        _buildHeaderAndOverview(),
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text('My Assigned Coaches', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
@@ -150,32 +134,100 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
   Widget _buildHeaderAndOverview() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 30),
       decoration: const BoxDecoration(
         color: kRailwayBlue,
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Hello, ${widget.user.fullName}',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hello, ${widget.user.fullName}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Train: ${_runData?['trainNo'] ?? 'N/A'} ${_runData?['trainName'] ?? ''}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+              // Attendance Status Chip
+              InkWell(
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => ObhsAttendanceScreen(user: widget.user)));
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.greenAccent.withOpacity(0.5)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.fingerprint, color: Colors.greenAccent, size: 14),
+                      SizedBox(width: 4),
+                      Text('PRESENT', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildOverviewCard('Pending', '5', Icons.pending_actions, Colors.orange),
+              _buildOverviewCard('Completed', '1', Icons.check_circle, Colors.green),
+              _buildOverviewCard('Complaints', '0', Icons.report_problem, Colors.red),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewCard(String title, String count, IconData icon, Color color) {
+    return Container(
+      width: 100,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 28),
           const SizedBox(height: 8),
-          const Text(
-            'Train: 12456 - ExpressB',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
+          Text(
+            count,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.8)),
           ),
         ],
       ),
