@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:intl/intl.dart';
 
 class CoachCleaningReportExcelDownload extends StatelessWidget {
   const CoachCleaningReportExcelDownload({super.key});
@@ -11,7 +14,76 @@ class CoachCleaningReportExcelDownload extends StatelessWidget {
   Future<void> downloadExcelTemplate() async {
     final workbook = xlsio.Workbook();
     final sheet = workbook.worksheets[0];
+    sheet.name = 'Coach Cleaning Report';
 
+    // ── Branded Header ─────────────────────────────────────────────────────
+    // Row 1: Logo col + Railway title
+    sheet.getRangeByIndex(1, 1).rowHeight = 50;
+    try {
+      final ByteData bytes = await rootBundle.load('assets/images/image.png');
+      final Uint8List byteList = bytes.buffer.asUint8List();
+      final xlsio.Picture picture = sheet.pictures.addStream(1, 1, byteList);
+      picture.height = 44;
+      picture.width = 44;
+    } catch (_) {/* logo not found — skip */}
+
+    final logoColStyle = workbook.styles.add('logoColStyle')
+      ..backColor = '#0D2C6B'
+      ..fontColor = '#FFFFFF'
+      ..bold = true
+      ..fontSize = 14
+      ..hAlign = xlsio.HAlignType.center
+      ..vAlign = xlsio.VAlignType.center;
+    sheet.getRangeByIndex(1, 1).cellStyle = logoColStyle;
+
+    sheet.getRangeByIndex(1, 2, 1, 41).merge();
+    final railwayTitleStyle = workbook.styles.add('railwayTitleStyle')
+      ..backColor = '#0D2C6B'
+      ..fontColor = '#FFFFFF'
+      ..bold = true
+      ..fontSize = 14
+      ..hAlign = xlsio.HAlignType.left
+      ..vAlign = xlsio.VAlignType.center;
+    sheet.getRangeByIndex(1, 2).cellStyle = railwayTitleStyle;
+    sheet.getRangeByIndex(1, 2).setText('  Indian Railways – OBHS Enterprise Monitoring System');
+
+    // Row 2: Report title (full width)
+    sheet.getRangeByIndex(2, 1, 2, 41).merge();
+    final reportTitleStyle = workbook.styles.add('reportTitleStyle')
+      ..backColor = '#1A3E8C'
+      ..fontColor = '#FFFFFF'
+      ..bold = true
+      ..fontSize = 12
+      ..hAlign = xlsio.HAlignType.center
+      ..vAlign = xlsio.VAlignType.center;
+    sheet.getRangeByIndex(2, 1).cellStyle = reportTitleStyle;
+    sheet.getRangeByIndex(2, 1).setText('COACH CLEANING INSPECTION REPORT');
+    sheet.getRangeByIndex(2, 1).rowHeight = 26;
+
+    // Row 3: Generated on + badge
+    sheet.getRangeByIndex(3, 1, 3, 34).merge();
+    final genStyle = workbook.styles.add('genStyle')
+      ..fontSize = 8
+      ..italic = true
+      ..hAlign = xlsio.HAlignType.left
+      ..vAlign = xlsio.VAlignType.center;
+    sheet.getRangeByIndex(3, 1).cellStyle = genStyle;
+    sheet.getRangeByIndex(3, 1).setText('  Generated On: ${DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now())}');
+    sheet.getRangeByIndex(3, 35, 3, 41).merge();
+    final badgeStyle = workbook.styles.add('badgeStyle')
+      ..backColor = '#C8A400'
+      ..fontColor = '#0D2C6B'
+      ..bold = true
+      ..fontSize = 9
+      ..hAlign = xlsio.HAlignType.center
+      ..vAlign = xlsio.VAlignType.center;
+    sheet.getRangeByIndex(3, 35).cellStyle = badgeStyle;
+    sheet.getRangeByIndex(3, 35).setText('OFFICIAL REPORT');
+    sheet.getRangeByIndex(3, 1).rowHeight = 18;
+    // ── Blank separator row ───────────────────────────────────────────────
+    sheet.getRangeByIndex(4, 1).rowHeight = 8;
+    // Data headers start at row 5
+    // ──────────────────────────────────────────────────────────────────────
 
     final centerStyle = workbook.styles.add('centerStyle')
       ..hAlign = xlsio.HAlignType.center
@@ -21,7 +93,7 @@ class CoachCleaningReportExcelDownload extends StatelessWidget {
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
 
     final yellowHeader = workbook.styles.add('yellowHeader')
-      ..backColor = '#FFFFFF'
+      ..backColor = '#FFF3CD'
       ..bold = true
       ..hAlign = xlsio.HAlignType.center
       ..vAlign = xlsio.VAlignType.center
@@ -29,209 +101,196 @@ class CoachCleaningReportExcelDownload extends StatelessWidget {
 
     final purpleHeader = workbook.styles.add('purpleHeader')
       ..backColor = '#9966CC'
+      ..fontColor = '#FFFFFF'
       ..bold = true
       ..hAlign = xlsio.HAlignType.center
       ..vAlign = xlsio.VAlignType.center
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
 
     final lightBlueHeader = workbook.styles.add('lightBlueHeader')
-      ..backColor = '#ADD8E6'
+      ..backColor = '#CCE5FF'
       ..bold = true
       ..hAlign = xlsio.HAlignType.center
       ..vAlign = xlsio.VAlignType.center
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
 
     final whiteHeader = workbook.styles.add('whiteHeader')
-      ..backColor = '#FFFFFF'
+      ..backColor = '#F5F5F5'
       ..bold = true
       ..hAlign = xlsio.HAlignType.center
       ..vAlign = xlsio.VAlignType.center
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
 
 
-    sheet.getRangeByName('A1:A3').merge();
-    sheet.getRangeByName('A1').setText('Date');
-    sheet.getRangeByName('A1').cellStyle = whiteHeader;
+    // Data headers — offset by 4 rows for our branded header
+    final int headerOffset = 4; // rows 1-4 are the branded header
 
-    sheet.getRangeByName('B1:B3').merge();
-    sheet.getRangeByName('B1').setText('Train No.');
-    sheet.getRangeByName('B1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 1, headerOffset + 3, 1).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 1).setText('Date');
+    sheet.getRangeByIndex(headerOffset + 1, 1).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('C1:C3').merge();
-    sheet.getRangeByName('C1').setText('TYPE OF WORK\n(PRIMARY/\nSECONDARY/ RBPC WITH\nM/C / RBPC\nWITHOUT M/C');
-    sheet.getRangeByName('C1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 2, headerOffset + 3, 2).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 2).setText('Train No.');
+    sheet.getRangeByIndex(headerOffset + 1, 2).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('D1:D3').merge();
-    sheet.getRangeByName('D1').setText('WITH OR\nWITHOUT\nACWP');
-    sheet.getRangeByName('D1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 3, headerOffset + 3, 3).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 3).setText('TYPE OF WORK\n(PRIMARY/\nSECONDARY/ RBPC WITH\nM/C / RBPC\nWITHOUT M/C');
+    sheet.getRangeByIndex(headerOffset + 1, 3).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('E1:H1').merge();
-    sheet.getRangeByName('E1').setText('Internal Cleaning');
-    sheet.getRangeByName('E1').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 4, headerOffset + 3, 4).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 4).setText('WITH OR\nWITHOUT\nACWP');
+    sheet.getRangeByIndex(headerOffset + 1, 4).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('I1:L1').merge();
-    sheet.getRangeByName('I1').setText('Internal Cleaning');
-    sheet.getRangeByName('I1').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 5, headerOffset + 1, 8).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 5).setText('Internal Cleaning');
+    sheet.getRangeByIndex(headerOffset + 1, 5).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('M1:P1').merge();
-    sheet.getRangeByName('M1').setText('Internal Cleaning');
-    sheet.getRangeByName('M1').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 9, headerOffset + 1, 12).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 9).setText('Internal Cleaning');
+    sheet.getRangeByIndex(headerOffset + 1, 9).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('Q1:T1').merge();
-    sheet.getRangeByName('Q1').setText('Intensive Cleaning');
-    sheet.getRangeByName('Q1').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 13, headerOffset + 1, 16).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 13).setText('Internal Cleaning');
+    sheet.getRangeByIndex(headerOffset + 1, 13).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('U1:X1').merge();
-    sheet.getRangeByName('U1').setText('External Cleaning');
-    sheet.getRangeByName('U1').cellStyle = purpleHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 17, headerOffset + 1, 20).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 17).setText('Intensive Cleaning');
+    sheet.getRangeByIndex(headerOffset + 1, 17).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('Y1:AB1').merge();
-    sheet.getRangeByName('Y1').setText('External Cleaning');
-    sheet.getRangeByName('Y1').cellStyle = purpleHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 21, headerOffset + 1, 24).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 21).setText('External Cleaning');
+    sheet.getRangeByIndex(headerOffset + 1, 21).cellStyle = purpleHeader;
 
+    sheet.getRangeByIndex(headerOffset + 1, 25, headerOffset + 1, 28).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 25).setText('External Cleaning');
+    sheet.getRangeByIndex(headerOffset + 1, 25).cellStyle = purpleHeader;
 
-    sheet.getRangeByName('AC1:AE1').merge();
-    sheet.getRangeByName('AC1').setText('Toiletries');
-    sheet.getRangeByName('AC1').cellStyle = lightBlueHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 29, headerOffset + 1, 31).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 29).setText('Toiletries');
+    sheet.getRangeByIndex(headerOffset + 1, 29).cellStyle = lightBlueHeader;
 
+    sheet.getRangeByIndex(headerOffset + 1, 32, headerOffset + 1, 34).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 32).setText('Watering');
+    sheet.getRangeByIndex(headerOffset + 1, 32).cellStyle = lightBlueHeader;
 
-    sheet.getRangeByName('AF1:AH1').merge();
-    sheet.getRangeByName('AF1').setText('Watering');
-    sheet.getRangeByName('AF1').cellStyle = lightBlueHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 35, headerOffset + 1, 37).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 35).setText('Door Locking');
+    sheet.getRangeByIndex(headerOffset + 1, 35).cellStyle = lightBlueHeader;
 
+    sheet.getRangeByIndex(headerOffset + 1, 38, headerOffset + 3, 38).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 38).setText('ACTUAL MANPOWER (with ACWP)');
+    sheet.getRangeByIndex(headerOffset + 1, 38).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('AI1:AK1').merge();
-    sheet.getRangeByName('AI1').setText('Door Locking');
-    sheet.getRangeByName('AI1').cellStyle = lightBlueHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 39, headerOffset + 3, 39).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 39).setText('ACTUAL MANPOWER (without ACWP)');
+    sheet.getRangeByIndex(headerOffset + 1, 39).cellStyle = whiteHeader;
 
+    sheet.getRangeByIndex(headerOffset + 1, 40, headerOffset + 3, 40).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 40).setText('MANPOWER SHORTAGE');
+    sheet.getRangeByIndex(headerOffset + 1, 40).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('AL1:AL3').merge();
-    sheet.getRangeByName('AL1').setText('ACTUAL MANPOWER (with ACWP)');
-    sheet.getRangeByName('AL1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 1, 41, headerOffset + 3, 41).merge();
+    sheet.getRangeByIndex(headerOffset + 1, 41).setText('Machine SHORTAGE');
+    sheet.getRangeByIndex(headerOffset + 1, 41).cellStyle = whiteHeader;
 
-    sheet.getRangeByName('AM1:AM3').merge();
-    sheet.getRangeByName('AM1').setText('ACTUAL MANPOWER (without ACWP)');
-    sheet.getRangeByName('AM1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 5, headerOffset + 2, 8).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 5).setText('Primary or Secondary');
+    sheet.getRangeByIndex(headerOffset + 2, 5).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('AN1:AN3').merge();
-    sheet.getRangeByName('AN1').setText('MANPOWER SHORTAGE');
-    sheet.getRangeByName('AN1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 9, headerOffset + 2, 12).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 9).setText('RBPC With Machine');
+    sheet.getRangeByIndex(headerOffset + 2, 9).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('AO1:AO3').merge();
-    sheet.getRangeByName('AO1').setText('Machine SHORTAGE');
-    sheet.getRangeByName('AO1').cellStyle = whiteHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 13, headerOffset + 2, 16).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 13).setText('RBPC Without Machine');
+    sheet.getRangeByIndex(headerOffset + 2, 13).cellStyle = yellowHeader;
 
+    sheet.getRangeByIndex(headerOffset + 2, 17, headerOffset + 2, 20).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 17).setText('Without ACWP');
+    sheet.getRangeByIndex(headerOffset + 2, 17).cellStyle = yellowHeader;
 
-    sheet.getRangeByName('E2:H2').merge();
-    sheet.getRangeByName('E2').setText('Primary or Secondary');
-    sheet.getRangeByName('E2').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 21, headerOffset + 2, 24).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 21).setText('With ACWP');
+    sheet.getRangeByIndex(headerOffset + 2, 21).cellStyle = purpleHeader;
 
-    sheet.getRangeByName('I2:L2').merge();
-    sheet.getRangeByName('I2').setText('RBPC With Machine');
-    sheet.getRangeByName('I2').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 25, headerOffset + 2, 28).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 25).setText('Without ACWP');
+    sheet.getRangeByIndex(headerOffset + 2, 25).cellStyle = purpleHeader;
 
-    sheet.getRangeByName('M2:P2').merge();
-    sheet.getRangeByName('M2').setText('RBPC Without Machine');
-    sheet.getRangeByName('M2').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 29, headerOffset + 2, 31).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 29).cellStyle = lightBlueHeader;
 
-    sheet.getRangeByName('Q2:T2').merge();
-    sheet.getRangeByName('Q2').setText('Without ACWP');
-    sheet.getRangeByName('Q2').cellStyle = yellowHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 32, headerOffset + 2, 34).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 32).cellStyle = lightBlueHeader;
 
-    sheet.getRangeByName('U2:X2').merge();
-    sheet.getRangeByName('U2').setText('With ACWP');
-    sheet.getRangeByName('U2').cellStyle = purpleHeader;
-
-    sheet.getRangeByName('Y2:AB2').merge();
-    sheet.getRangeByName('Y2').setText('Without ACWP');
-    sheet.getRangeByName('Y2').cellStyle = purpleHeader;
-
-
-    sheet.getRangeByName('AC2:AE2').merge();
-    sheet.getRangeByName('AC2').cellStyle = lightBlueHeader;
-
-    sheet.getRangeByName('AF2:AH2').merge();
-    sheet.getRangeByName('AF2').cellStyle = lightBlueHeader;
-
-    sheet.getRangeByName('AI2:AK2').merge();
-    sheet.getRangeByName('AI2').cellStyle = lightBlueHeader;
+    sheet.getRangeByIndex(headerOffset + 2, 35, headerOffset + 2, 37).merge();
+    sheet.getRangeByIndex(headerOffset + 2, 35).cellStyle = lightBlueHeader;
 
 
     final subHeaders = ['A', 'B', 'C', 'D', 'NA'];
 
-
     for (int i = 0; i < 4; i++) {
-      sheet.getRangeByIndex(3, 5 + i).setText(subHeaders[i]);
-      sheet.getRangeByIndex(3, 5 + i).cellStyle = yellowHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 5 + i).setText(subHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 5 + i).cellStyle = yellowHeader;
     }
 
-
     for (int i = 0; i < 4; i++) {
-      sheet.getRangeByIndex(3, 9 + i).setText(subHeaders[i]);
-      sheet.getRangeByIndex(3, 9 + i).cellStyle = yellowHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 9 + i).setText(subHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 9 + i).cellStyle = yellowHeader;
     }
 
-
     for (int i = 0; i < 4; i++) {
-      sheet.getRangeByIndex(3, 13 + i).setText(subHeaders[i]);
-      sheet.getRangeByIndex(3, 13 + i).cellStyle = yellowHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 13 + i).setText(subHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 13 + i).cellStyle = yellowHeader;
     }
 
-
     for (int i = 0; i < 4; i++) {
-      sheet.getRangeByIndex(3, 17 + i).setText(subHeaders[i]);
-      sheet.getRangeByIndex(3, 17 + i).cellStyle = yellowHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 17 + i).setText(subHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 17 + i).cellStyle = yellowHeader;
     }
-
 
     for (int i = 0; i < 5; i++) {
-      sheet.getRangeByIndex(3, 21 + i).setText(subHeaders[i]);
-      sheet.getRangeByIndex(3, 21 + i).cellStyle = purpleHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 21 + i).setText(subHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 21 + i).cellStyle = purpleHeader;
     }
 
-
     for (int i = 0; i < 4; i++) {
-      sheet.getRangeByIndex(3, 25 + i).setText(subHeaders[i]);
-      sheet.getRangeByIndex(3, 25 + i).cellStyle = purpleHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 25 + i).setText(subHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 25 + i).cellStyle = purpleHeader;
     }
 
 
     final yesNoNaHeaders = ['Yes', 'No', 'NA'];
 
-
     for (int i = 0; i < 3; i++) {
-      sheet.getRangeByIndex(3, 29 + i).setText(yesNoNaHeaders[i]);
-      sheet.getRangeByIndex(3, 29 + i).cellStyle = lightBlueHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 29 + i).setText(yesNoNaHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 29 + i).cellStyle = lightBlueHeader;
     }
 
-
     for (int i = 0; i < 3; i++) {
-      sheet.getRangeByIndex(3, 32 + i).setText(yesNoNaHeaders[i]);
-      sheet.getRangeByIndex(3, 32 + i).cellStyle = lightBlueHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 32 + i).setText(yesNoNaHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 32 + i).cellStyle = lightBlueHeader;
     }
 
-
     for (int i = 0; i < 3; i++) {
-      sheet.getRangeByIndex(3, 35 + i).setText(yesNoNaHeaders[i]);
-      sheet.getRangeByIndex(3, 35 + i).cellStyle = lightBlueHeader;
+      sheet.getRangeByIndex(headerOffset + 3, 35 + i).setText(yesNoNaHeaders[i]);
+      sheet.getRangeByIndex(headerOffset + 3, 35 + i).cellStyle = lightBlueHeader;
     }
 
-
-    sheet.getRangeByName('A1').columnWidth = 10;
-    sheet.getRangeByName('B1').columnWidth = 12;
-    sheet.getRangeByName('C1').columnWidth = 20;
-    sheet.getRangeByName('D1').columnWidth = 15;
-
+    // Column widths
+    sheet.getRangeByIndex(1, 1).columnWidth = 10;
+    sheet.getRangeByIndex(1, 2).columnWidth = 12;
+    sheet.getRangeByIndex(1, 3).columnWidth = 20;
+    sheet.getRangeByIndex(1, 4).columnWidth = 15;
 
     for (int i = 5; i <= 37; i++) {
       sheet.getRangeByIndex(1, i).columnWidth = 5;
     }
 
-
-    sheet.getRangeByName('AL1').columnWidth = 18;
-    sheet.getRangeByName('AM1').columnWidth = 18;
-    sheet.getRangeByName('AN1').columnWidth = 15;
-    sheet.getRangeByName('AO1').columnWidth = 15;
+    sheet.getRangeByIndex(1, 38).columnWidth = 18;
+    sheet.getRangeByIndex(1, 39).columnWidth = 18;
+    sheet.getRangeByIndex(1, 40).columnWidth = 15;
+    sheet.getRangeByIndex(1, 41).columnWidth = 15;
 
 
     final dataStyle = workbook.styles.add('dataStyle')
@@ -246,33 +305,45 @@ class CoachCleaningReportExcelDownload extends StatelessWidget {
       ..borders.all.lineStyle = xlsio.LineStyle.thin;
 
 
-    for (int row = 4; row <= 5; row++) {
+    for (int row = headerOffset + 4; row <= headerOffset + 5; row++) {
       for (int col = 1; col <= 4; col++) {
         sheet.getRangeByIndex(row, col).cellStyle = dataStyle;
       }
-
 
       for (int col = 5; col <= 28; col++) {
         sheet.getRangeByIndex(row, col).cellStyle = yellowDataStyle;
       }
 
-
       for (int col = 29; col <= 37; col++) {
         sheet.getRangeByIndex(row, col).cellStyle = dataStyle;
       }
-
 
       for (int col = 38; col <= 41; col++) {
         sheet.getRangeByIndex(row, col).cellStyle = dataStyle;
       }
     }
 
+    // Sample data row (offset for header)
+    sheet.getRangeByIndex(headerOffset + 4, 1).setText('18-Apr');
+    sheet.getRangeByIndex(headerOffset + 4, 2).setText('11037');
+    sheet.getRangeByIndex(headerOffset + 4, 3).setText('Value selected dropdown');
+    sheet.getRangeByIndex(headerOffset + 4, 4).setText('Value selected dropdown');
+    sheet.getRangeByIndex(headerOffset + 4, 38).setText('6');
 
-    sheet.getRangeByName('A4').setText('18-Apr');
-    sheet.getRangeByName('B4').setText('11037');
-    sheet.getRangeByName('C4').setText('Value selected dropdown');
-    sheet.getRangeByName('D4').setText('Value selected dropdown');
-    sheet.getRangeByName('AL4').setText('6');
+    // Footer
+    final int footerRow = headerOffset + 7;
+    sheet.getRangeByIndex(footerRow, 1, footerRow, 41).merge();
+    final footerStyle = workbook.styles.add('footerBarStyle')
+      ..backColor = '#0D2C6B'
+      ..fontColor = '#C8A400'
+      ..fontSize = 8
+      ..italic = true
+      ..hAlign = xlsio.HAlignType.center
+      ..vAlign = xlsio.VAlignType.center;
+    sheet.getRangeByIndex(footerRow, 1).cellStyle = footerStyle;
+    sheet.getRangeByIndex(footerRow, 1).setText(
+        '  Indian Railways – OBHS Enterprise Monitoring System   |   Generated: ${DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now())}');
+    sheet.getRangeByIndex(footerRow, 1).rowHeight = 18;
 
 
     final List<int> bytes = workbook.saveAsStream();

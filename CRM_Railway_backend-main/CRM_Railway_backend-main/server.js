@@ -809,7 +809,7 @@ app.post('/api/auth/login', async (req, res) => {
       if (userData.uid) {
         
         const runInstanceSnapshot = await db.collection('RunInstance')
-          .where('status', 'in', ['Scheduled', 'Active'])
+          .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
           .get();
 
         for (const doc of runInstanceSnapshot.docs) {
@@ -1487,7 +1487,7 @@ app.get('/api/worker/profile', verifyToken, async (req, res) => {
     // isliye hum better approach use karenge:
     
     const allRunsSnapshot = await db.collection('RunInstance')
-      .where('status', 'in', ['Scheduled', 'Active'])
+      .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
       .get();
 
     let assignedRuns = [];
@@ -1554,7 +1554,7 @@ app.get('/api/worker/statistics', verifyToken, async (req, res) => {
 
     // 1. Find active run instance for this worker
     const runsSnapshot = await db.collection('RunInstance')
-      .where('status', 'in', ['Scheduled', 'Active'])
+      .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
       .get();
 
     let activeRun = null;
@@ -2998,47 +2998,209 @@ app.post('/api/trains', verifyToken, async (req, res) => {
   }
 });
 
+// == HELPER: Frequency-based Task Generation Engine
 // =======================================================
-// == HELPER: Auto-generate OBHS Tasks for Run Instance
-// =======================================================
+// Generates tasks at specific times of day based on Railway Board policy:
+//   06-09: hourly   09-20: every 2hr   20-22: hourly   22-06: passenger-request
+// Cleaner times: 06, 07, 08, 09, 11, 13, 15, 17, 19, 20, 21
+// Garbage: 07, 13, 19 (plus pre-terminal)
+// Water check: 08, 16
+// Safety: 10, 18
+// Petty Repair: 10, 18
 async function generateTaskInstancesForRun(runData) {
-  let defaultTasks = [
-    { name: 'Toilet Cleaning & Disinfection', type: 'Toilet' },
-    { name: 'Compartment Mopping & Dry Cleaning', type: 'Compartment' },
-    { name: 'Garbage Collection & Disposal', type: 'General' },
-    { name: 'Liquid Soap & Tissue Refill', type: 'Toilet' },
-    { name: 'Doorway & Vestibule Cleaning', type: 'General' }
-  ];
-
-  try {
-    const trainDoc = await db.collection('trains').doc(runData.parentTrainId).get();
-    if (trainDoc.exists && trainDoc.data().taskTemplates) {
-      defaultTasks = trainDoc.data().taskTemplates;
-    }
-  } catch (error) {
-    console.log('Using default task templates');
-  }
-
   const batch = db.batch();
   let taskCount = 0;
 
+  const departureDate = runData.departureDate || new Date().toISOString().split('T')[0];
+  
+  // Cleaning frequency schedule (24h format)
+  const cleaningTimes = ['06:00', '07:00', '08:00', '09:00', '11:00', '13:00', '15:00', '17:00', '19:00', '20:00', '21:00'];
+  const garbageTimes = ['07:00', '13:00', '19:00'];
+  const waterCheckTimes = ['08:00', '16:00'];
+  const safetyInspectionTimes = ['10:00', '18:00'];
+  const pettyRepairTimes = ['10:00', '18:00'];
+
   for (const coach of runData.coaches) {
     if (!coach.workerId) continue;
+    const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+    const workerId = coach.workerId;
+    const workerName = coach.workerName || 'Unknown';
 
-    for (const template of defaultTasks) {
-      const taskRef = db.collection('task_instances').doc();
-      batch.set(taskRef, {
-        taskId: taskRef.id,
+    // 1. Generate Toilet/Cleaning Task HEADERS (one per scheduled time)
+    for (const timeSlot of cleaningTimes) {
+      const hour = parseInt(timeSlot.split(':')[0]);
+      let taskTypeName = 'toilet_cleaning';
+      let displayName = 'Toilet Cleaning & Disinfection';
+      if (hour >= 9 && hour < 20) {
+        taskTypeName = 'coach_cleaning';
+        displayName = 'Compartment Cleaning';
+      }
+      
+      const headerId = `${runData.runInstanceId}_${taskTypeName}_${timeSlot.replace(':', '')}`;
+      const headerRef = db.collection('task_headers').doc(headerId);
+      batch.set(headerRef, {
+        headerId,
         runInstanceId: runData.runInstanceId,
         trainNo: runData.trainNo,
-        workerId: coach.workerId,
-        workerName: coach.workerName,
-        coachId: coach.coachPosition,
-        taskName: template.name,
-        taskType: template.type,
+        taskType: taskTypeName,
+        displayName,
+        scheduledTime: timeSlot,
+        scheduledDate: departureDate,
+        status: 'PLANNED',
+        workerId,
+        workerName,
+        coachNo,
+        childTaskIds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      // Create child task detail for this coach/header
+      const detailId = `${headerId}_${coachNo}`;
+      const detailRef = db.collection('task_details').doc(detailId);
+      batch.set(detailRef, {
+        detailId,
+        headerId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        workerId,
+        workerName,
+        taskType: taskTypeName,
+        scheduledTime: timeSlot,
+        scheduledDate: departureDate,
+        toiletStatus: null,
+        washBasinStatus: null,
+        dustbinStatus: null,
+        consumableStatus: null,
+        status: 'PLANNED',
+        beforePhoto: null,
+        afterPhoto: null,
+        gpsLatitude: null,
+        gpsLongitude: null,
+        employeeId: workerId,
+        deviceId: null,
+        mobileNumber: null,
+        checklist: null,
+        remarks: null,
+        completionTime: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      // Update header with child task id
+      batch.update(headerRef, {
+        childTaskIds: admin.firestore.FieldValue.arrayUnion(detailId)
+      });
+      
+      taskCount++;
+    }
+
+    // 2. Generate Garbage Tasks
+    for (const timeSlot of garbageTimes) {
+      const garbageId = `${runData.runInstanceId}_garbage_${timeSlot.replace(':', '')}_${coachNo}`;
+      const garbageRef = db.collection('garbage_tasks').doc(garbageId);
+      batch.set(garbageRef, {
+        id: garbageId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        workerId,
+        workerName,
+        scheduledTime: timeSlot,
+        scheduledDate: departureDate,
+        isPreTerminal: false,
         status: 'PENDING',
-        requiresPhoto: true,
+        beforePhoto: null,
+        afterPhoto: null,
+        gpsLatitude: null,
+        gpsLongitude: null,
+        completedAt: null,
         createdAt: new Date().toISOString()
+      });
+      taskCount++;
+    }
+
+    // 3. Generate Water Check Tasks
+    for (const timeSlot of waterCheckTimes) {
+      const waterId = `${runData.runInstanceId}_water_${timeSlot.replace(':', '')}_${coachNo}`;
+      const waterRef = db.collection('water_checks').doc(waterId);
+      batch.set(waterRef, {
+        id: waterId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        workerId,
+        workerName,
+        checkTime: timeSlot,
+        checkDate: departureDate,
+        waterStatus: 'pending',
+        lowWaterAlert: false,
+        wateringPointSchedule: null,
+        status: 'PENDING',
+        photoUrl: null,
+        completedAt: null,
+        createdAt: new Date().toISOString()
+      });
+      taskCount++;
+    }
+
+    // 4. Generate Safety Check Tasks
+    for (const timeSlot of safetyInspectionTimes) {
+      const safetyId = `${runData.runInstanceId}_safety_${timeSlot.replace(':', '')}_${coachNo}`;
+      const safetyRef = db.collection('safety_checks').doc(safetyId);
+      batch.set(safetyRef, {
+        id: safetyId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        workerId,
+        workerName,
+        scheduledTime: timeSlot,
+        scheduledDate: departureDate,
+        fireExtinguisherStatus: null,
+        fsdsStatus: null,
+        cctvStatus: null,
+        emergencyEquipmentStatus: null,
+        photos: [],
+        deficiencyReports: [],
+        status: 'PENDING',
+        remarks: null,
+        completedAt: null,
+        createdAt: new Date().toISOString()
+      });
+      taskCount++;
+    }
+
+    // 5. Generate Petty Repair Inspection Tasks
+    for (const timeSlot of pettyRepairTimes) {
+      const repairId = `${runData.runInstanceId}_repair_${timeSlot.replace(':', '')}_${coachNo}`;
+      const repairRef = db.collection('petty_repairs').doc(repairId);
+      batch.set(repairRef, {
+        id: repairId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        workerId,
+        workerName,
+        inspectionTime: timeSlot,
+        inspectionDate: departureDate,
+        items: {
+          latches: 'ok',
+          windows: 'ok',
+          doors: 'ok',
+          seats: 'ok',
+          lights: 'ok',
+          fans: 'ok',
+          taps: 'ok',
+          flush: 'ok'
+        },
+        isEscalated: false,
+        escalatedTo: null,
+        status: 'PENDING',
+        remarks: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
       taskCount++;
     }
@@ -3046,7 +3208,52 @@ async function generateTaskInstancesForRun(runData) {
 
   if (taskCount > 0) {
     await batch.commit();
-    console.log(`Generated ${taskCount} tasks for Run Instance ${runData.runInstanceId}`);
+    console.log(`[New Engine] Generated ${taskCount} tasks for Run ${runData.runInstanceId}`);
+  }
+}
+
+// ─── Generate terminal garbage tasks (when train approaches destination) ───
+async function generatePreTerminalGarbageTasks(runInstanceId) {
+  try {
+    const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+    if (!runDoc.exists) return;
+    const runData = runDoc.data();
+    const batch = db.batch();
+    let count = 0;
+
+    for (const coach of (runData.coaches || [])) {
+      if (!coach.workerId) continue;
+      const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+      const timeSlot = 'terminal';
+      const garbageId = `${runInstanceId}_garbage_${timeSlot}_${coachNo}`;
+      const garbageRef = db.collection('garbage_tasks').doc(garbageId);
+      batch.set(garbageRef, {
+        id: garbageId,
+        runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        workerId: coach.workerId,
+        workerName: coach.workerName || 'Unknown',
+        scheduledTime: timeSlot,
+        scheduledDate: new Date().toISOString().split('T')[0],
+        isPreTerminal: true,
+        status: 'PENDING',
+        beforePhoto: null,
+        afterPhoto: null,
+        gpsLatitude: null,
+        gpsLongitude: null,
+        completedAt: null,
+        createdAt: new Date().toISOString()
+      });
+      count++;
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Generated ${count} pre-terminal garbage tasks for ${runInstanceId}`);
+    }
+  } catch (error) {
+    console.error('(PreTerminalGarbage) Error:', error);
   }
 }
 
@@ -3101,6 +3308,21 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
     }));
 
     const { uid, name, email, role } = req.user;
+    
+    // Enforce maximum 2 coaches per worker (Railway Board policy)
+    const workerCoachCount = {};
+    for (const c of coachesWithNames) {
+      if (c.workerId) {
+        workerCoachCount[c.workerId] = (workerCoachCount[c.workerId] || 0) + 1;
+        if (workerCoachCount[c.workerId] > 2) {
+          return res.status(400).send({
+            error: 'Coach Assignment Limit',
+            details: `Worker ${c.workerId} has been assigned to more than 2 coaches. Maximum 2 coaches per janitor allowed.`
+          });
+        }
+      }
+    }
+    
     const userName = name || email || role || 'Unknown';
     const runInstanceRef = db.collection('RunInstance').doc(); 
 
@@ -3113,13 +3335,18 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
       inboundTrainNo: pairData.inboundTrainNo,
       outboundTrainNo: pairData.outboundTrainNo,
       parentTrainId: pairData.parentTrainId,
+      journeyStartTime: pairData.journeyStartTime || null,
+      journeyEndTime: pairData.journeyEndTime || null,
+      scheduledDeparture: `${departureDate}T${pairData.journeyStartTime || '00:00:00'}.000Z`,
       
       numberOfCoaches: coachesWithNames.length, 
       coaches: coachesWithNames,
 
-      status: 'Scheduled',
+      status: 'PLANNED',
       attendanceCaptured: false,
       taskExecutionScore: 0,
+      actualDeparture: null,
+      actualArrival: null,
       
       createdAt: new Date().toISOString(),
       createdBy: uid,
@@ -3127,9 +3354,6 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
     };
 
     await runInstanceRef.set(newRunData);
-
-    // Call helper to generate child tasks for the assigned workers
-    await generateTaskInstancesForRun(newRunData);
 
     await db.collection('TrainPairs').doc(instanceId).update({
       status: 'Active',
@@ -3178,6 +3402,15 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
 
     if (coaches && Array.isArray(coaches)) {
       
+      // AC coach prefix check for attendant validation
+      const isACCoach = (coachType) => {
+        if (!coachType) return false;
+        const upper = coachType.toUpperCase();
+        return ['A', 'B', 'H', 'M', 'C', 'E', 'AC', 'A1', 'B1', 'H1', 'M1', 'C1', 'E1',
+                '2AC', '3AC', '1AC', 'AC', '2A', '3A', '1A', 'EA', 'EC', 'AB', 'HA', 'MA']
+          .includes(upper) || /^[ABHMC]\d*$/.test(upper);
+      };
+
       const coachesWithNames = await Promise.all(coaches.map(async (c) => {
         let workerName = "Unknown Worker";
         
@@ -3188,11 +3421,29 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
           }
         }
 
+        // Resolve attendant name if attendantId provided
+        let attendantName = c.attendantName || null;
+        if (c.attendantId && !attendantName) {
+          const attDoc = await db.collection('users').doc(c.attendantId).get();
+          if (attDoc.exists) {
+            attendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
+          }
+        }
+
+        // Validate: attendant only allowed on AC coaches
+        if (c.attendantId && !isACCoach(c.coachType)) {
+          throw new Error(`Attendant cannot be assigned to Non-AC coach ${c.coachPosition || c.coachNo}. Attendants only allowed on AC coaches.`);
+        }
+
         return {
           coachPosition: c.coachPosition || null,
+          coachNo: c.coachNo || null,
           coachType: c.coachType || null,
           workerId: c.workerId || null,
-          workerName: workerName
+          workerName: workerName,
+          attendantId: c.attendantId || null,
+          attendantName: attendantName,
+          tasks: c.tasks || []
         };
       }));
 
@@ -3229,10 +3480,135 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
     res.status(500).send({ error: 'Failed to update run instance', details: error.message });
   }
 });
+
+// =======================================================
+// == API 4.6: Activate Journey (Set Actual Departure)
+// =======================================================
+app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const { actualDeparture } = req.body;
+
+    if (!runInstanceId) {
+      return res.status(400).send({ error: 'runInstanceId is required.' });
+    }
+
+    const runInstanceRef = db.collection('RunInstance').doc(runInstanceId);
+    const doc = await runInstanceRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).send({ error: 'Run Instance not found.' });
+    }
+
+    const currentData = doc.data();
+    if (!['ALLOCATED', 'READY'].includes(currentData.status)) {
+      return res.status(400).send({
+        error: 'Invalid State Transition',
+        details: `Cannot activate a journey with status '${currentData.status}'. Must be 'ALLOCATED' or 'READY'.`
+      });
+    }
+
+    const departureTime = actualDeparture || new Date().toISOString();
+    
+    await runInstanceRef.update({
+      actualDeparture: departureTime,
+      status: 'Active',
+      journeyStartedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    // ─── Rule-driven task generation on actual departure ───
+    const runDocAfter = await runInstanceRef.get();
+    const activatedRunData = runDocAfter.data();
+    await generateTaskInstancesForRun(activatedRunData);
+    await generatePreTerminalGarbageTasks(runInstanceId);
+    // Also generate from task_masters rules (CM/CA configurable)
+    await generateTasksFromMasters(activatedRunData);
+
+    res.status(200).send({
+      message: 'Journey activated successfully',
+      runInstanceId,
+      actualDeparture: departureTime,
+      status: 'Active'
+    });
+
+  } catch (error) {
+    console.error('(Journey Activation) Error:', error);
+    res.status(500).send({ error: 'Failed to activate journey', details: error.message });
+  }
+});
+
+// =======================================================
+// == API 4.7: Complete Journey (Set Actual Arrival)
+// =======================================================
+app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const { actualArrival, delayMinutes } = req.body;
+
+    if (!runInstanceId) {
+      return res.status(400).send({ error: 'runInstanceId is required.' });
+    }
+
+    const runInstanceRef = db.collection('RunInstance').doc(runInstanceId);
+    const doc = await runInstanceRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).send({ error: 'Run Instance not found.' });
+    }
+
+    const currentData = doc.data();
+    if (currentData.status !== 'Active') {
+      return res.status(400).send({
+        error: 'Invalid State Transition',
+        details: `Cannot complete a journey with status '${currentData.status}'. Must be 'Active'.`
+      });
+    }
+
+    const arrivalTime = actualArrival || new Date().toISOString();
+    const updateData = {
+      actualArrival: arrivalTime,
+      status: 'Completed',
+      journeyCompletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (delayMinutes !== undefined) {
+      updateData.delayMinutes = delayMinutes;
+    }
+
+    await runInstanceRef.update(updateData);
+
+    // Generate journey closure tasks
+    await generateClosureTasks(runInstanceId, arrivalTime, currentData);
+
+    await logAudit({
+      action: 'JOURNEY_COMPLETED',
+      entityType: 'RunInstance',
+      entityId: runInstanceId,
+      actorId: req.user.uid,
+      actorRole: req.user.role,
+      actorName: req.user.fullName,
+      newValue: { actualArrival: arrivalTime, status: 'Completed' },
+      details: `Journey completed at ${arrivalTime}${delayMinutes ? ` with ${delayMinutes}min delay` : ''}`
+    });
+
+    res.status(200).send({
+      message: 'Journey completed successfully',
+      runInstanceId,
+      actualArrival: arrivalTime,
+      status: 'Completed'
+    });
+
+  } catch (error) {
+    console.error('(Journey Completion) Error:', error);
+    res.status(500).send({ error: 'Failed to complete journey', details: error.message });
+  }
+});
+
 // =======================================================
 // == API 4.2: Edit an existing Train (Fixed Version)
 // =======================================================
-
 // NOTE: convertToDecimalDays function ko yahan se hata diya hai 
 // kyunki wo file mein upar pehle se declared hai.
 
@@ -3548,6 +3924,43 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
       error: 'Failed to fetch all run instances', 
       details: error.message 
     });
+  }
+});
+
+// GET /api/v1/obhs-run/:runId — Run instance with nested janitor/attendant/tasks format
+app.get('/api/v1/obhs-run/:runId', verifyToken, async (req, res) => {
+  try {
+    const { runId } = req.params;
+    const doc = await db.collection('RunInstance').doc(runId).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Run instance not found' });
+
+    const data = doc.data();
+    const coaches = (data.coaches || []).map(c => ({
+      coachNo: c.coachPosition || c.coachNo || null,
+      isAc: c.coachType ? ['A', 'B', 'H', 'M', 'C', 'E', 'AC', 'A1']
+        .some(prefix => c.coachType.toUpperCase().startsWith(prefix)) : false,
+      janitor: c.workerId ? { workerId: c.workerId, name: c.workerName || 'Unknown' } : null,
+      attendant: c.attendantId ? { workerId: c.attendantId, name: c.attendantName || 'Unknown' } : null,
+      tasks: c.tasks || []
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        runInstanceId: runId,
+        trainNo: data.trainNo,
+        trainName: data.trainName,
+        status: data.status,
+        coaches,
+        actualDeparture: data.actualDeparture,
+        scheduledArrival: data.scheduledArrival,
+        zone: data.zone, division: data.division, depot: data.depot,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch run instance', details: error.message });
   }
 });
 
@@ -5844,7 +6257,218 @@ setInterval(() => {
   checkAndApprove('premisesForms');
   checkAndApprove('ctsForms');
   checkContractExpiry();
-}, 600000); 
+}, 600000);
+
+// ─── Every 15 minutes: Update task statuses based on time ───
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // Get active journey IDs
+    const activeRunsSnap = await db.collection('RunInstance')
+      .where('status', '==', 'Active')
+      .select('runInstanceId')
+      .get();
+    const activeRunIds = new Set();
+    activeRunsSnap.forEach(doc => activeRunIds.add(doc.id));
+
+    // Update task_headers: mark OVERDUE if scheduled time has passed (only for active journeys)
+    const headerSnapshot = await db.collection('task_headers')
+      .where('status', 'in', ['PLANNED'])
+      .where('scheduledDate', '==', today)
+      .get();
+    
+    const headerBatch = db.batch();
+    let updateCount = 0;
+    headerSnapshot.forEach(doc => {
+      const data = doc.data();
+      // Skip headers for non-active journeys
+      if (!activeRunIds.has(data.runInstanceId)) return;
+
+      const [h, m] = (data.scheduledTime || '00:00').split(':').map(Number);
+      const scheduledDate = new Date(`${today}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
+      if (now > scheduledDate) {
+        headerBatch.update(doc.ref, { 
+          status: 'OVERDUE',
+          updatedAt: now.toISOString()
+        });
+        updateCount++;
+      }
+    });
+    if (updateCount > 0) {
+      await headerBatch.commit();
+      console.log(`[Cron] Updated ${updateCount} task headers to OVERDUE`);
+    }
+
+    // Auto-escalate SLA complaints
+    const complaintSnapshot = await db.collection('obhs_complaints')
+      .where('status', '==', 'OPEN')
+      .get();
+    
+    const complaintBatch = db.batch();
+    let escalatedCount = 0;
+    complaintSnapshot.forEach(doc => {
+      const data = doc.data();
+      const createdAt = new Date(data.createdAt);
+      const elapsedMinutes = (now - createdAt) / (1000 * 60);
+      const slaMap = {
+        'Cleaning': 30,
+        'Garbage': 20,
+        'Water': 30,
+        'Petty Repair': 60,
+        'Toilet': 30,
+        'Electrical': 60
+      };
+      const slaMinutes = slaMap[data.category] || 60;
+      
+      if (elapsedMinutes > slaMinutes && !data.slaEscalated) {
+        complaintBatch.update(doc.ref, {
+          slaEscalated: true,
+          slaEscalatedAt: now.toISOString(),
+          slaBreach: true,
+          escalationLevel: 1,
+          status: 'ESCALATED',
+          updatedAt: now.toISOString()
+        });
+        escalatedCount++;
+      }
+    });
+    if (escalatedCount > 0) {
+      await complaintBatch.commit();
+      console.log(`[Cron] Auto-escalated ${escalatedCount} SLA-breached complaints`);
+    }
+  } catch (error) {
+    console.error('[Cron] Task status update error:', error);
+  }
+});
+
+// ─── Every 5 minutes: Check task status transitions near scheduled times ───
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // Only process tasks for ACTIVE journeys
+    const activeRunsSnap = await db.collection('RunInstance')
+      .where('status', '==', 'Active')
+      .select('runInstanceId')
+      .get();
+    const activeRunIds = new Set();
+    activeRunsSnap.forEach(doc => activeRunIds.add(doc.id));
+
+    // Update PLANNED task_details to OPEN within 15min of scheduled time
+    const detailSnapshot = await db.collection('task_details')
+      .where('status', '==', 'PLANNED')
+      .get();
+    
+    const detailBatch = db.batch();
+    let openCount = 0;
+    let dueSoonCount = 0;
+    let skippedCount = 0;
+    
+    detailSnapshot.forEach(doc => {
+      const data = doc.data();
+      
+      // Skip tasks belonging to non-active journeys
+      if (!activeRunIds.has(data.runInstanceId)) {
+        skippedCount++;
+        return;
+      }
+
+      const [h, m] = (data.scheduledTime || '00:00').split(':').map(Number);
+      const taskMinutes = h * 60 + m;
+      const diff = taskMinutes - nowMinutes;
+      
+      if (diff <= 0 && diff > -120) {
+        detailBatch.update(doc.ref, { 
+          status: 'OPEN',
+          updatedAt: now.toISOString()
+        });
+        openCount++;
+      } else if (diff > 0 && diff <= 15) {
+        detailBatch.update(doc.ref, { 
+          status: 'DUE_SOON',
+          updatedAt: now.toISOString()
+        });
+        dueSoonCount++;
+      }
+    });
+    
+    if (openCount + dueSoonCount > 0) {
+      await detailBatch.commit();
+      console.log(`[Cron] Task status updated: ${openCount} OPEN, ${dueSoonCount} DUE_SOON (${skippedCount} skipped - not active)`);
+    }
+  } catch (error) {
+    console.error('[Cron] Task detail status error:', error);
+  }
+});
+
+// ─── Every 5 minutes: Auto-escalate overdue tasks by time threshold ───
+// Thresholds: 30min→CS, 45min→CTS, 60min→CA, 90min→CM
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const now = new Date();
+    const overdueTasksSnap = await db.collection('task_details')
+      .where('status', '==', 'OVERDUE')
+      .get();
+
+    if (overdueTasksSnap.empty) return;
+
+    const escalationChain = [
+      { minutes: 90, escalateTo: 'CM', label: 'CM Alert' },
+      { minutes: 60, escalateTo: 'CA', label: 'CA Alert' },
+      { minutes: 45, escalateTo: 'CTS', label: 'CTS Alert' },
+      { minutes: 30, escalateTo: 'CS', label: 'CS Alert' }
+    ];
+
+    const batch = db.batch();
+    let escalationCount = 0;
+
+    for (const doc of overdueTasksSnap.docs) {
+      const task = doc.data();
+      const updatedAt = task.updatedAt ? new Date(task.updatedAt) : null;
+      if (!updatedAt) continue;
+
+      const elapsedMinutes = (now - updatedAt) / (1000 * 60);
+      const lastEscalation = task.lastEscalationAt || 0;
+
+      for (const level of escalationChain) {
+        if (elapsedMinutes >= level.minutes && lastEscalation < level.minutes) {
+          const escRef = db.collection('escalations').doc();
+          batch.set(escRef, {
+            escalationId: escRef.id,
+            sourceEntity: 'task_detail',
+            sourceId: task.detailId || doc.id,
+            reason: `${level.label}: Task overdue for ${Math.round(elapsedMinutes)} minutes`,
+            details: `${task.taskType} on Coach ${task.coachNo} overdue since ${updatedAt.toISOString()}`,
+            escalatedBy: 'system',
+            escalatedByName: 'System',
+            escalatedByRole: 'system',
+            escalatedToRole: level.escalateTo,
+            status: 'OPEN',
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+          });
+          batch.update(doc.ref, {
+            lastEscalationAt: level.minutes,
+            escalationLevel: level.label,
+            updatedAt: now.toISOString()
+          });
+          escalationCount++;
+          break; // Only apply highest threshold met
+        }
+      }
+    }
+
+    if (escalationCount > 0) {
+      await batch.commit();
+      console.log(`[Cron] Auto-escalated ${escalationCount} overdue tasks`);
+    }
+  } catch (error) {
+    console.error('[Cron] Escalation error:', error);
+  }
+});
 // =======================================================
 // == 16. COACH CLEANING STATS API (FINAL: GRADES + OPS BREAKDOWN)
 // =======================================================
@@ -7675,7 +8299,9 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       'imageUrl', 
       'latitude', 
       'longitude', 
-      'deviceTimestamp'
+      'deviceTimestamp',
+      'mobileNumber',
+      'deviceId'
     ];
 
     const bodyKeys = Object.keys(req.body);
@@ -7688,7 +8314,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       }
     }
 
-    const { runInstanceId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp } = req.body;
+    const { runInstanceId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId } = req.body;
 
     if (!runInstanceId || !attendanceType || !imageUrl || !deviceTimestamp) {
       return res.status(400).send({ 
@@ -7708,6 +8334,48 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     const { uid: workerId, fullName: workerName } = req.user; 
     const finalWorkerName = workerName || 'Unknown Worker';
 
+    // ─── ATTENDANCE WINDOW VALIDATION (Railway Board Policy) ──────────
+    // Window opens: Scheduled Departure - 60 min
+    // Deadline: Actual Departure - 45 min
+    // Late/Non-Compliant if attendance time > Actual Departure - 45 min
+    let attendanceWindowError = null;
+    let isLateAttendance = false;
+    try {
+      if (runInstanceId) {
+        const runSnap = await db.collection('RunInstance').doc(runInstanceId).get();
+        if (runSnap.exists) {
+          const runData = runSnap.data();
+          if (runData.scheduledDeparture) {
+            const schedDeparture = new Date(runData.scheduledDeparture);
+            const windowOpen = new Date(schedDeparture.getTime() - 60 * 60 * 1000); // -60min
+            const now = new Date();
+            
+            if (now < windowOpen) {
+              attendanceWindowError = `Attendance window opens at ${windowOpen.toISOString()}. Current time is before the window.`;
+            }
+            
+            // Late check based on actual departure
+            if (runData.actualDeparture && attendanceType === 'start') {
+              const actualDeparture = new Date(runData.actualDeparture);
+              const deadline = new Date(actualDeparture.getTime() - 45 * 60 * 1000); // -45min
+              if (now > deadline) {
+                isLateAttendance = true;
+              }
+            }
+          }
+        }
+      }
+    } catch (winErr) {
+      console.error('(Attendance Window) Error:', winErr);
+    }
+
+    if (attendanceWindowError) {
+      return res.status(403).send({
+        error: 'Attendance Window Not Open',
+        details: attendanceWindowError
+      });
+    }
+    
     // ─── GPS GEO-FENCING & SHIFT-TIMING VALIDATION ─────────────────────
     let resolvedStationLat = null;
     let resolvedStationLng = null;
@@ -7803,7 +8471,9 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       photoUrl: imageUrl,
       deviceTimestamp: deviceTimestamp,
       serverTimestamp: new Date().toISOString(),
-      location: (latitude && longitude) ? { latitude, longitude } : null
+      location: (latitude && longitude) ? { latitude, longitude } : null,
+      mobileNumber: mobileNumber || null,
+      deviceId: deviceId || null
     };
 
     // --- CASE 1: INITIAL SUBSCRIPTION LOOP ('start' execution) ---
@@ -7820,6 +8490,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         runInstanceId,
         workerId,
         workerName: finalWorkerName,
+        mobileNumber: mobileNumber || null,
+        deviceId: deviceId || null,
         isStartMarked: true,       
         isMidMarked: false,
         isEndMarked: false,
@@ -7832,6 +8504,30 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       };
 
       await attendanceRef.set(newRecord);
+
+      // Check if all workers for this journey have marked attendance → transition to READY
+      try {
+        if (runInstanceId && attendanceType === 'start') {
+          const runSnap2 = await db.collection('RunInstance').doc(runInstanceId).get();
+          if (runSnap2.exists && runSnap2.data().status === 'ALLOCATED') {
+            const runData2 = runSnap2.data();
+            const totalWorkers = (runData2.coaches || []).filter(c => c.workerId).length;
+            const attendSnap = await db.collection('obhs_attendance')
+              .where('runInstanceId', '==', runInstanceId)
+              .where('isStartMarked', '==', true)
+              .get();
+            if (attendSnap.size >= totalWorkers && totalWorkers > 0) {
+              await db.collection('RunInstance').doc(runInstanceId).update({
+                status: 'READY',
+                updatedAt: new Date().toISOString()
+              });
+              console.log(`(Attendance) Journey ${runInstanceId} → READY (all ${totalWorkers} workers reported)`);
+            }
+          }
+        }
+      } catch (readyErr) {
+        console.error('(Attendance->READY) Error:', readyErr.message);
+      }
     } 
     // --- CASE 2: INCREMENTAL VERIFICATION LOOPS ('mid' or 'end') ---
     else {
@@ -7891,10 +8587,38 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     }
 
     console.log(`(OBHS Attendance Matrix) Verified matching for ${attendanceType} on worker ${finalWorkerName}`);
+
+    // Audit log for attendance
+    await logAudit({
+      action: `ATTENDANCE_${attendanceType.toUpperCase()}`,
+      entityType: 'obhs_attendance',
+      entityId: attendanceDocId,
+      actorId: workerId,
+      actorRole: req.user.role,
+      actorName: finalWorkerName,
+      newValue: { attendanceType, isLate: isLateAttendance, mobileNumber, deviceId },
+      details: `${attendanceType} attendance marked - ${isLateAttendance ? 'LATE' : 'ON TIME'}`
+    });
+    
+    // Update coach attendance status in RunInstance
+    try {
+      if (runInstanceId) {
+        const updateKey = attendanceType === 'start' ? 'startAttendance' : (attendanceType === 'mid' ? 'midAttendance' : 'endAttendance');
+        await db.collection('RunInstance').doc(runInstanceId).update({
+          [`coachAttendance.${workerId}.${updateKey}`]: new Date().toISOString(),
+          [`coachAttendance.${workerId}.status`]: isLateAttendance ? 'Late' : 'OnTime'
+        });
+      }
+    } catch (updErr) {
+      console.error('(Attendance Coach Update) Error:', updErr);
+    }
+
     res.status(200).send({
       success: true,
       message: `${attendanceType.toUpperCase()} attendance face matched and processed successfully.`,
-      uid: attendanceDocId
+      uid: attendanceDocId,
+      isLate: isLateAttendance,
+      isNonCompliant: isLateAttendance
     });
 
   } catch (error) {
@@ -8070,15 +8794,24 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       frequencyIndex, 
       beforePhoto, 
       afterPhoto, 
+      gpsLatitude,
+      gpsLongitude,
       comment,
-      deviceTimestamp 
+      deviceTimestamp
     } = req.body;
 
-    // UI ke mutabiq Before, After aur baaki fields mandatory hain final submit par
+    // GPS is mandatory per Railway evidence policy
     if (!runInstanceId || !taskType || !coachNo || !beforePhoto || !afterPhoto || !deviceTimestamp) {
       return res.status(400).send({ 
         error: "Missing mandatory fields.", 
         details: "runInstanceId, taskType, coachNo, beforePhoto, afterPhoto, and deviceTimestamp are required." 
+      });
+    }
+
+    if (!gpsLatitude || !gpsLongitude) {
+      return res.status(400).send({ 
+        error: "GPS evidence required.", 
+        details: "gpsLatitude and gpsLongitude are mandatory for task completion." 
       });
     }
 
@@ -8100,8 +8833,8 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       uid: taskId,
       runInstanceId,
       coachNo,
-      taskType,       // 'Toilet Cleaning', 'Coach Cleaning', 'Linen Distribution'
-      frequencyIndex: frequencyIndex || null, // 'Hour 1', 'Hour 2', etc.
+      taskType,
+      frequencyIndex: frequencyIndex || null,
       
       // User mapping
       submittedBy: {
@@ -8110,11 +8843,13 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
         role: role
       },
       
-      // Execution Data captured from UI steps
+      // Evidence
       beforePhoto,
       afterPhoto,
+      gpsLatitude,
+      gpsLongitude,
       comment: comment || "",
-      status: 'Completed', // Kyunki data final review ke baad submit ho raha hai
+      status: 'Completed',
       
       // Timing metadata
       deviceTimestamp,
@@ -8122,6 +8857,53 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
     };
 
     await taskRef.set(taskData);
+
+    // ─── Sync: Update corresponding task_detail to COMPLETED ───
+    const taskTypeMap = {
+      'Toilet Cleaning': 'toilet_cleaning',
+      'Coach Cleaning': 'coach_cleaning',
+      'Toilet Cleaning & Disinfection': 'toilet_cleaning',
+      'Compartment Cleaning': 'coach_cleaning'
+    };
+    const mappedType = taskTypeMap[taskType] || taskType.toLowerCase().replace(/\s+/g, '_');
+    const detailId = `${runInstanceId}_${mappedType}_${frequencyIndex ? frequencyIndex.replace(':', '') : ''}_${coachNo}`.replace(/\s+/g, '');
+    
+    try {
+      const detailRef = db.collection('task_details').doc(detailId);
+      const detailDoc = await detailRef.get();
+      if (detailDoc.exists) {
+        await detailRef.update({
+          status: 'COMPLETED',
+          beforePhoto,
+          afterPhoto,
+          gpsLatitude,
+          gpsLongitude,
+          completionTime: new Date().toISOString(),
+          remarks: comment || null,
+          deviceId: req.body.deviceId || null,
+          mobileNumber: req.body.mobileNumber || null,
+          updatedAt: new Date().toISOString()
+        });
+        // Try to auto-close parent task_header
+        await autoCloseParentTask(detailRef, detailDoc);
+      }
+    } catch (syncErr) {
+      console.error('(TaskSubmit) Detail sync warning:', syncErr.message);
+      // Non-blocking: submission already succeeded
+    }
+
+    // ─── Audit log ───
+    await logAudit({
+      action: 'TASK_COMPLETED',
+      entityType: 'task_details',
+      entityId: detailId,
+      actorId: userId,
+      actorRole: role,
+      actorName: userName,
+      newValue: { status: 'Completed', coachNo, taskType, gpsLatitude, gpsLongitude },
+      oldValue: { status: 'OPEN' },
+      details: `${taskType} completed for Coach ${coachNo} with GPS evidence`
+    });
 
     console.log(`(OBHS Task) ${taskType} for Coach ${coachNo} successfully submitted by ${userName}`);
     res.status(201).send({
@@ -8601,7 +9383,7 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
       console.log(`(Complaint) runInstanceId missing in request & token for worker ${workerId}. Fetching from DB...`);
       
       const runInstanceSnapshot = await db.collection('RunInstance')
-        .where('status', 'in', ['Scheduled', 'Active'])
+        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
         .get();
 
       for (const doc of runInstanceSnapshot.docs) {
@@ -8657,6 +9439,48 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
     };
 
     await complaintsRef.set(complaintData);
+
+    // ─── Auto-generate task from complaint ───
+    try {
+      const categoryMap = {
+        'Toilet': 'TOILET_CLEANING', 'Garbage': 'GARBAGE_COLLECTION',
+        'Water': 'WATER_CHECK', 'Cleaning': 'COACH_CLEANING',
+        'Behaviour': 'STAFF_BEHAVIOUR', 'Repair': 'PETTY_REPAIR',
+        'Electrical': 'ELECTRICAL_ISSUE'
+      };
+      const taskMasterCode = categoryMap[category] || 'COMPLAINT_GENERIC';
+      const complaintTaskId = `${runInstanceId}_COMPLAINT_${complaintsRef.id}_${coachNo}`;
+
+      // Find worker assigned to this coach
+      let assignedWorker = null;
+      if (runData.coaches) {
+        const coach = runData.coaches.find(c => (c.coachPosition === coachNo || c.coachNo === coachNo));
+        if (coach && coach.workerId) assignedWorker = coach;
+      }
+
+      const complaintTaskRef = db.collection('task_instances').doc(complaintTaskId);
+      await complaintTaskRef.set({
+        taskId: complaintTaskId, parentTaskId: null,
+        runInstanceId, trainNo, coachNo,
+        taskMasterCode, taskName: `Complaint: ${category} - ${description?.substring(0, 50)}`,
+        category: 'complaint', subCategory: category,
+        workerId: assignedWorker?.workerId || null,
+        workerName: assignedWorker?.workerName || 'Unassigned',
+        workerRole: assignedWorker?.workerRole || 'janitor',
+        scheduledTime: new Date().toTimeString().slice(0, 5),
+        scheduledDate: new Date().toISOString().split('T')[0],
+        status: 'OPEN', priority: 2, isParentTask: false,
+        childTaskIds: [], beforePhoto: null, afterPhoto: null,
+        gpsLatitude: null, gpsLongitude: null,
+        supervisorVerified: false,
+        sourceComplaintId: complaintsRef.id,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      console.log(`(Complaint) Auto-generated task ${complaintTaskId} from complaint ${complaintsRef.id}`);
+    } catch (taskGenErr) {
+      console.error('(Complaint->Task) Error:', taskGenErr.message);
+      // Non-blocking: complaint already saved
+    }
 
     console.log(`(Complaint) Successfully raised ID: ${complaintsRef.id} for Train: ${trainNo}`);
 
@@ -8884,7 +9708,7 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
 
     if (!runInstanceId) {
       const runInstanceSnapshot = await db.collection('RunInstance')
-        .where('status', 'in', ['Scheduled', 'Active'])
+        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active'])
         .get();
 
       for (const doc of runInstanceSnapshot.docs) {
@@ -9044,7 +9868,7 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
     // Agar portal ya backend token mein instance ID nahi hai, toh worker ki assignment dhoodho
     if (!runInstanceId) {
       const runInstanceSnapshot = await db.collection('RunInstance')
-        .where('status', 'in', ['Active', 'Scheduled', 'Completed']) // Completed included for past shift analysis
+        .where('status', 'in', ['Active', 'PLANNED', 'ALLOCATED', 'READY', 'Completed']) // Completed included for past shift analysis
         .get();
 
       for (const doc of runInstanceSnapshot.docs) {
@@ -11497,14 +12321,14 @@ app.post('/api/obhs/complaints/auto-route', verifyToken, async (req, res) => {
     const category = (complaint.category || '').toLowerCase();
     const text = `${category} ${description}`;
     const keywordMap = [
-      { keywords: ['toilet', 'bathroom', 'restroom', 'washroom', 'sanitary', 'urinal', 'foul smell', 'stink'], taskType: 'Toilet Cleaning', priority: 'high' },
-      { keywords: ['clean', 'dirty', 'dust', 'sweep', 'mop', 'garbage', 'waste', 'litter', 'rubbish', 'spill'], taskType: 'Coach Cleaning', priority: 'medium' },
-      { keywords: ['linen', 'bedsheet', 'pillow', 'blanket', 'bed roll', 'curtain'], taskType: 'Linen Distribution', priority: 'medium' },
-      { keywords: ['light', 'fan', 'ac', 'air conditioner', 'cooling', 'electrical', 'plug', 'charging', 'switch'], taskType: 'Electrical Issue', priority: 'high' },
-      { keywords: ['water', 'drinking', 'supply', 'tap', 'leak', 'pipeline', 'overflow'], taskType: 'Water Issue', priority: 'high' },
-      { keywords: ['seat', 'berth', 'broken', 'damage', 'repair', 'maintenance', 'crack', 'rust'], taskType: 'Maintenance Issue', priority: 'high' },
-      { keywords: ['security', 'theft', 'safety', 'suspicious', 'unauthorized'], taskType: 'Security Issue', priority: 'critical' },
-      { keywords: ['staff', 'behaviour', 'rude', 'misbehave', 'attitude', 'service'], taskType: 'Staff Behaviour', priority: 'medium' },
+      { keywords: ['toilet', 'bathroom', 'restroom', 'washroom', 'sanitary', 'urinal', 'foul smell', 'stink'], taskType: 'Toilet Cleaning', priority: 2 },
+      { keywords: ['clean', 'dirty', 'dust', 'sweep', 'mop', 'garbage', 'waste', 'litter', 'rubbish', 'spill'], taskType: 'Coach Cleaning', priority: 3 },
+      { keywords: ['linen', 'bedsheet', 'pillow', 'blanket', 'bed roll', 'curtain'], taskType: 'Linen Distribution', priority: 3 },
+      { keywords: ['light', 'fan', 'ac', 'air conditioner', 'cooling', 'electrical', 'plug', 'charging', 'switch'], taskType: 'Electrical Issue', priority: 2 },
+      { keywords: ['water', 'drinking', 'supply', 'tap', 'leak', 'pipeline', 'overflow'], taskType: 'Water Issue', priority: 2 },
+      { keywords: ['seat', 'berth', 'broken', 'damage', 'repair', 'maintenance', 'crack', 'rust'], taskType: 'Maintenance Issue', priority: 2 },
+      { keywords: ['security', 'theft', 'safety', 'suspicious', 'unauthorized'], taskType: 'Security Issue', priority: 1 },
+      { keywords: ['staff', 'behaviour', 'rude', 'misbehave', 'attitude', 'service'], taskType: 'Staff Behaviour', priority: 3 },
     ];
     let assignedTaskType = 'Coach Cleaning';
     let assignedPriority = 'medium';
@@ -12451,6 +13275,2389 @@ app.get('/api/backup/logs', verifyToken, async (req, res) => {
 });
 
 // -------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// == PHASE 3: NEW MODULE APIS - Garbage / Water / Safety / Petty Repair
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── GARBAGE TASK APIS ────────────────────────────────────────────────────
+
+// Get garbage tasks for a run instance
+app.get('/api/obhs/garbage-tasks', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('garbage_tasks')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('scheduledTime')
+      .get();
+    const tasks = [];
+    snapshot.forEach(doc => tasks.push(doc.data()));
+    res.status(200).json({ success: true, count: tasks.length, tasks });
+  } catch (error) {
+    console.error('(GarbageTasks) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch garbage tasks', details: error.message });
+  }
+});
+
+// Complete a garbage task (with evidence)
+app.post('/api/obhs/garbage-tasks/complete', verifyToken, async (req, res) => {
+  try {
+    const { taskId, beforePhoto, afterPhoto, latitude, longitude } = req.body;
+    if (!taskId || !beforePhoto || !afterPhoto) {
+      return res.status(400).json({ error: 'taskId, beforePhoto, and afterPhoto are required.' });
+    }
+    const ref = db.collection('garbage_tasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Garbage task not found.' });
+    }
+    await ref.update({
+      status: 'COMPLETED',
+      beforePhoto,
+      afterPhoto,
+      gpsLatitude: latitude || null,
+      gpsLongitude: longitude || null,
+      completedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Garbage task completed', taskId });
+  } catch (error) {
+    console.error('(GarbageComplete) Error:', error);
+    res.status(500).json({ error: 'Failed to complete garbage task', details: error.message });
+  }
+});
+
+// Get pre-terminal garbage tasks
+app.get('/api/obhs/garbage-tasks/pre-terminal', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('garbage_tasks')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('isPreTerminal', '==', true)
+      .get();
+    const tasks = [];
+    snapshot.forEach(doc => tasks.push(doc.data()));
+    res.status(200).json({ success: true, count: tasks.length, tasks });
+  } catch (error) {
+    console.error('(PreTerminalGarbage) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch pre-terminal tasks', details: error.message });
+  }
+});
+
+// ─── WATER CHECK APIS ─────────────────────────────────────────────────────
+
+// Get water checks for a run instance
+app.get('/api/obhs/water-checks', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('water_checks')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('checkTime')
+      .get();
+    const checks = [];
+    snapshot.forEach(doc => checks.push(doc.data()));
+    res.status(200).json({ success: true, count: checks.length, checks });
+  } catch (error) {
+    console.error('(WaterChecks) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch water checks', details: error.message });
+  }
+});
+
+// Submit a water check
+app.post('/api/obhs/water-checks/submit', verifyToken, async (req, res) => {
+  try {
+    const { checkId, waterStatus, lowWaterAlert, wateringPointSchedule, photoUrl } = req.body;
+    if (!checkId || !waterStatus) {
+      return res.status(400).json({ error: 'checkId and waterStatus are required.' });
+    }
+    const validStatuses = ['full', 'low', 'empty'];
+    if (!validStatuses.includes(waterStatus)) {
+      return res.status(400).json({ error: 'Invalid waterStatus. Must be: full, low, or empty.' });
+    }
+    const ref = db.collection('water_checks').doc(checkId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Water check not found.' });
+    }
+    await ref.update({
+      waterStatus,
+      lowWaterAlert: lowWaterAlert || (waterStatus === 'empty') || (waterStatus === 'low'),
+      wateringPointSchedule: wateringPointSchedule || null,
+      photoUrl: photoUrl || null,
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Water check submitted', checkId });
+  } catch (error) {
+    console.error('(WaterSubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit water check', details: error.message });
+  }
+});
+
+// Get low water alerts
+app.get('/api/obhs/water-checks/alerts', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('water_checks')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('lowWaterAlert', '==', true)
+      .get();
+    const alerts = [];
+    snapshot.forEach(doc => alerts.push(doc.data()));
+    res.status(200).json({ success: true, count: alerts.length, alerts });
+  } catch (error) {
+    console.error('(WaterAlerts) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch water alerts', details: error.message });
+  }
+});
+
+// ─── SAFETY CHECK APIS ────────────────────────────────────────────────────
+
+// Get safety checks for a run instance
+app.get('/api/obhs/safety-checks', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('safety_checks')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('scheduledTime')
+      .get();
+    const checks = [];
+    snapshot.forEach(doc => checks.push(doc.data()));
+    res.status(200).json({ success: true, count: checks.length, checks });
+  } catch (error) {
+    console.error('(SafetyChecks) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch safety checks', details: error.message });
+  }
+});
+
+// Submit a safety check
+app.post('/api/obhs/safety-checks/submit', verifyToken, async (req, res) => {
+  try {
+    const { checkId, fireExtinguisherStatus, fsdsStatus, cctvStatus, emergencyEquipmentStatus, photos, deficiencyReports, remarks } = req.body;
+    if (!checkId) {
+      return res.status(400).json({ error: 'checkId is required.' });
+    }
+    const ref = db.collection('safety_checks').doc(checkId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Safety check not found.' });
+    }
+    await ref.update({
+      fireExtinguisherStatus: fireExtinguisherStatus || null,
+      fsdsStatus: fsdsStatus || null,
+      cctvStatus: cctvStatus || null,
+      emergencyEquipmentStatus: emergencyEquipmentStatus || null,
+      photos: photos || [],
+      deficiencyReports: deficiencyReports || [],
+      status: 'COMPLETED',
+      remarks: remarks || null,
+      completedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Safety check submitted', checkId });
+  } catch (error) {
+    console.error('(SafetySubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit safety check', details: error.message });
+  }
+});
+
+// Report a safety deficiency
+app.post('/api/obhs/safety-checks/report-deficiency', verifyToken, async (req, res) => {
+  try {
+    const { checkId, deficiencyReport, photoUrl } = req.body;
+    if (!checkId || !deficiencyReport) {
+      return res.status(400).json({ error: 'checkId and deficiencyReport are required.' });
+    }
+    const ref = db.collection('safety_checks').doc(checkId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Safety check not found.' });
+    }
+    await ref.update({
+      deficiencyReports: admin.firestore.FieldValue.arrayUnion({
+        report: deficiencyReport,
+        photoUrl: photoUrl || null,
+        reportedAt: new Date().toISOString(),
+        reportedBy: req.user.uid
+      })
+    });
+    res.status(200).json({ success: true, message: 'Deficiency reported', checkId });
+  } catch (error) {
+    console.error('(SafetyDeficiency) Error:', error);
+    res.status(500).json({ error: 'Failed to report deficiency', details: error.message });
+  }
+});
+
+// ─── PETTY REPAIR APIS ────────────────────────────────────────────────────
+
+// Get petty repairs for a run instance
+app.get('/api/obhs/petty-repairs', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) {
+      return res.status(400).json({ error: 'runInstanceId query parameter is required.' });
+    }
+    const snapshot = await db.collection('petty_repairs')
+      .where('runInstanceId', '==', runInstanceId)
+      .orderBy('inspectionTime')
+      .get();
+    const repairs = [];
+    snapshot.forEach(doc => repairs.push(doc.data()));
+    res.status(200).json({ success: true, count: repairs.length, repairs });
+  } catch (error) {
+    console.error('(PettyRepairs) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch petty repairs', details: error.message });
+  }
+});
+
+// Submit a petty repair inspection
+app.post('/api/obhs/petty-repairs/submit', verifyToken, async (req, res) => {
+  try {
+    const { repairId, items, remarks } = req.body;
+    if (!repairId) {
+      return res.status(400).json({ error: 'repairId is required.' });
+    }
+    const ref = db.collection('petty_repairs').doc(repairId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Petty repair record not found.' });
+    }
+    const updateData = {
+      items: items || {},
+      status: items ? 'COMPLETED' : 'PENDING',
+      remarks: remarks || null,
+      updatedAt: new Date().toISOString()
+    };
+    await ref.update(updateData);
+    res.status(200).json({ success: true, message: 'Petty repair inspection submitted', repairId });
+  } catch (error) {
+    console.error('(RepairSubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit repair inspection', details: error.message });
+  }
+});
+
+// Escalate a petty repair
+app.post('/api/obhs/petty-repairs/escalate', verifyToken, async (req, res) => {
+  try {
+    const { repairId, escalatedTo } = req.body;
+    if (!repairId) {
+      return res.status(400).json({ error: 'repairId is required.' });
+    }
+    const ref = db.collection('petty_repairs').doc(repairId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Petty repair record not found.' });
+    }
+    await ref.update({
+      isEscalated: true,
+      escalatedTo: escalatedTo || 'supervisor',
+      status: 'ESCALATED',
+      updatedAt: new Date().toISOString()
+    });
+    res.status(200).json({ success: true, message: 'Repair escalated', repairId });
+  } catch (error) {
+    console.error('(RepairEscalate) Error:', error);
+    res.status(500).json({ error: 'Failed to escalate repair', details: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == PHASE 4: COMPLAINTS SLA, RATINGS, SUPERVISOR DASHBOARD, ANALYTICS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── MULTI-SOURCE RATINGS ─────────────────────────────────────────────────
+
+// Submit a rating from any source (passenger, tte, supervisor, railway_official)
+app.post('/api/obhs/ratings/submit', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId, coachNo, employeeId, source, rating, remarks } = req.body;
+    if (!runInstanceId || !source || !rating) {
+      return res.status(400).json({ error: 'runInstanceId, source, and rating are required.' });
+    }
+    const validSources = ['passenger', 'tte', 'supervisor', 'railway_official'];
+    if (!validSources.includes(source)) {
+      return res.status(400).json({ error: `Invalid source. Must be one of: ${validSources.join(', ')}` });
+    }
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
+    }
+    const ref = db.collection('ratings').doc();
+    const data = {
+      id: ref.id,
+      runInstanceId,
+      coachNo: coachNo || null,
+      employeeId: employeeId || req.user.uid,
+      taskId: req.body.taskId || null,
+      source,
+      rating: Number(rating),
+      journeyId: runInstanceId,
+      remarks: remarks || null,
+      createdAt: new Date().toISOString()
+    };
+    await ref.set(data);
+    res.status(201).json({ success: true, message: 'Rating submitted', ratingId: ref.id });
+  } catch (error) {
+    console.error('(RatingsSubmit) Error:', error);
+    res.status(500).json({ error: 'Failed to submit rating', details: error.message });
+  }
+});
+
+// Get ratings for an employee/work instance
+app.get('/api/obhs/ratings', verifyToken, async (req, res) => {
+  try {
+    const { employeeId, runInstanceId, source } = req.query;
+    let query = db.collection('ratings');
+    if (employeeId) query = query.where('employeeId', '==', employeeId);
+    if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
+    if (source) query = query.where('source', '==', source);
+    const snapshot = await query.get();
+    const ratings = [];
+    snapshot.forEach(doc => ratings.push(doc.data()));
+    res.status(200).json({ success: true, count: ratings.length, ratings });
+  } catch (error) {
+    console.error('(RatingsGet) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch ratings', details: error.message });
+  }
+});
+
+// Get performance score for an employee
+app.get('/api/obhs/ratings/performance/:employeeId', verifyToken, async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const snapshot = await db.collection('ratings').where('employeeId', '==', employeeId).get();
+    let totalRating = 0, count = 0;
+    let sourceBreakdown = { passenger: { total: 0, count: 0 }, tte: { total: 0, count: 0 }, supervisor: { total: 0, count: 0 }, railway_official: { total: 0, count: 0 } };
+    snapshot.forEach(doc => {
+      const r = doc.data();
+      totalRating += r.rating;
+      count++;
+      if (sourceBreakdown[r.source]) {
+        sourceBreakdown[r.source].total += r.rating;
+        sourceBreakdown[r.source].count++;
+      }
+    });
+    const avgRating = count > 0 ? parseFloat((totalRating / count).toFixed(2)) : 0;
+    const breakdown = {};
+    for (const [key, val] of Object.entries(sourceBreakdown)) {
+      breakdown[key] = {
+        average: val.count > 0 ? parseFloat((val.total / val.count).toFixed(2)) : 0,
+        count: val.count
+      };
+    }
+    res.status(200).json({
+      success: true,
+      employeeId,
+      averageRating: avgRating,
+      totalRatings: count,
+      sourceBreakdown: breakdown
+    });
+  } catch (error) {
+    console.error('(PerformanceScore) Error:', error);
+    res.status(500).json({ error: 'Failed to get performance score', details: error.message });
+  }
+});
+
+// ─── COMPLAINTS SLA ───────────────────────────────────────────────────────
+
+// Update complaint with SLA info and status
+app.patch('/api/obhs/complaints/sla-update/:complaintId', verifyToken, async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    const { status, resolutionNotes, resolutionPhotoUrl, escalatedTo } = req.body;
+    const ref = db.collection('obhs_complaints').doc(complaintId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Complaint not found.' });
+    }
+    const complaint = doc.data();
+    const createdAt = new Date(complaint.createdAt);
+    const now = new Date();
+    const resolutionTimeMinutes = Math.round((now - createdAt) / (1000 * 60));
+
+    const slaMap = {
+      'Cleaning': 30, 'Garbage': 20, 'Water': 30,
+      'Petty Repair': 60, 'Toilet': 30, 'Electrical': 60,
+      'Toilet Cleaning': 30, 'Coach Cleaning': 30
+    };
+    const slaMinutes = slaMap[complaint.category] || 30;
+    const slaBreached = resolutionTimeMinutes > slaMinutes;
+
+    const updateData = {
+      status: status || complaint.status,
+      updatedAt: now.toISOString(),
+      slaMinutes: slaMinutes,
+      resolutionTimeMinutes,
+      slaBreached,
+      resolutionNotes: resolutionNotes || complaint.resolutionNotes || null,
+      resolutionPhotoUrl: resolutionPhotoUrl || complaint.resolutionPhotoUrl || null
+    };
+    if (escalatedTo) updateData.escalatedTo = escalatedTo;
+    if (status === 'RESOLVED' || status === 'CLOSED') {
+      updateData.resolvedAt = now.toISOString();
+    }
+    await ref.update(updateData);
+    res.status(200).json({
+      success: true,
+      message: 'Complaint SLA updated',
+      complaintId,
+      resolutionTimeMinutes,
+      slaBreached,
+      slaMinutes
+    });
+  } catch (error) {
+    console.error('(SLAUpdate) Error:', error);
+    res.status(500).json({ error: 'Failed to update complaint SLA', details: error.message });
+  }
+});
+
+// Get SLA compliance report
+app.get('/api/obhs/complaints/sla-report', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    let query = db.collection('obhs_complaints');
+    if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
+    const snapshot = await query.get();
+    let total = 0, withinSLA = 0, breached = 0, open = 0;
+    const categoryStats = {};
+    snapshot.forEach(doc => {
+      const c = doc.data();
+      total++;
+      if (c.status === 'OPEN' || c.status === 'ESCALATED') open++;
+      if (c.slaBreached) breached++;
+      else if (c.status === 'RESOLVED' || c.status === 'CLOSED') withinSLA++;
+      const cat = c.category || 'Other';
+      if (!categoryStats[cat]) categoryStats[cat] = { total: 0, breached: 0, withinSLA: 0 };
+      categoryStats[cat].total++;
+      if (c.slaBreached) categoryStats[cat].breached++;
+      else if (c.status === 'RESOLVED' || c.status === 'CLOSED') categoryStats[cat].withinSLA++;
+    });
+    const slaComplianceRate = (total - open) > 0 ? parseFloat((withinSLA / (total - open) * 100).toFixed(1)) : 0;
+    res.status(200).json({
+      success: true,
+      total,
+      open,
+      resolved: withinSLA + breached,
+      withinSLA,
+      slaBreached: breached,
+      slaComplianceRate,
+      categoryStats
+    });
+  } catch (error) {
+    console.error('(SLAReport) Error:', error);
+    res.status(500).json({ error: 'Failed to get SLA report', details: error.message });
+  }
+});
+
+// ─── SUPERVISOR DASHBOARD ─────────────────────────────────────────────────
+
+// Get supervisor dashboard summary
+app.get('/api/obhs/supervisor/dashboard', verifyToken, async (req, res) => {
+  try {
+    const allowedRoles = ['Admin', 'Supervisor', 'Company Master', 'Railway Supervisor'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied. Supervisor role required.' });
+    }
+
+    const activeRunsSnap = await db.collection('RunInstance').where('status', '==', 'Active').get();
+    const activeTrains = activeRunsSnap.size;
+    const activeWorkersSet = new Set();
+    activeRunsSnap.forEach(doc => {
+      const data = doc.data();
+      if (data.coaches) data.coaches.forEach(c => { if (c.workerId) activeWorkersSet.add(c.workerId); });
+    });
+
+    const overdueHeadersSnap = await db.collection('task_headers').where('status', '==', 'OVERDUE').get();
+    const openDetailsSnap = await db.collection('task_details').where('status', 'in', ['OPEN', 'OVERDUE']).get();
+    let missedTasks = 0, overdueTasks = 0;
+    openDetailsSnap.forEach(doc => {
+      if (doc.data().status === 'OVERDUE') overdueTasks++;
+      else missedTasks++;
+    });
+
+    const escalatedDetailsSnap = await db.collection('task_details').where('status', '==', 'ESCALATED').get();
+    const escalatedTasks = escalatedDetailsSnap.size;
+
+    const openComplaintsSnap = await db.collection('obhs_complaints').where('status', '==', 'OPEN').get();
+    const openComplaints = openComplaintsSnap.size;
+
+    const ratingsSnap = await db.collection('ratings').get();
+    let totalRating = 0, ratingCount = 0;
+    ratingsSnap.forEach(doc => { totalRating += doc.data().rating || 0; ratingCount++; });
+    const averageRating = ratingCount > 0 ? parseFloat((totalRating / ratingCount).toFixed(2)) : 0;
+
+    const lowWaterSnap = await db.collection('water_checks').where('status', '==', 'PENDING').where('lowWaterAlert', '==', true).get();
+    const waterIssues = lowWaterSnap.size;
+
+    const safetySnap = await db.collection('safety_checks').where('status', '==', 'PENDING').get();
+    let safetyIssues = 0;
+    safetySnap.forEach(doc => {
+      const d = doc.data();
+      if (d.fireExtinguisherStatus === 'deficient' || d.fsdsStatus === 'deficient') safetyIssues++;
+    });
+
+    res.status(200).json({
+      success: true,
+      dashboard: {
+        activeTrains,
+        activeWorkers: activeWorkersSet.size,
+        missedTasks,
+        overdueTasks,
+        escalatedTasks,
+        openComplaints,
+        averageRating,
+        waterIssues,
+        safetyIssues,
+        lastUpdated: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('(SupervisorDashboard) Error:', error);
+    res.status(500).json({ error: 'Failed to get dashboard', details: error.message });
+  }
+});
+
+// ─── ANALYTICS ENDPOINTS ──────────────────────────────────────────────────
+
+// Janitor performance analytics
+app.get('/api/obhs/analytics/janitor-performance', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) return res.status(400).json({ error: 'runInstanceId is required.' });
+
+    const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+    if (!runDoc.exists) return res.status(404).json({ error: 'Run instance not found.' });
+    const runData = runDoc.data();
+    const janitors = {};
+
+    for (const coach of (runData.coaches || [])) {
+      if (coach.workerId && !janitors[coach.workerId]) {
+        janitors[coach.workerId] = { janitorId: coach.workerId, janitorName: coach.workerName || 'Unknown', tasksCompleted: 0, tasksMissed: 0, tasksOverdue: 0, totalTasks: 0, averageRating: 0, completionPercentage: 0, coachCleanlinessScore: 0 };
+      }
+    }
+
+    const detailsSnap = await db.collection('task_details').where('runInstanceId', '==', runInstanceId).get();
+    detailsSnap.forEach(doc => {
+      const d = doc.data();
+      const wId = d.workerId;
+      if (wId && janitors[wId]) {
+        janitors[wId].totalTasks++;
+        if (d.status === 'COMPLETED') janitors[wId].tasksCompleted++;
+        else if (d.status === 'OVERDUE') janitors[wId].tasksOverdue++;
+        else if (d.status === 'PLANNED') janitors[wId].tasksMissed++;
+      }
+    });
+
+    const ratingsSnap = await db.collection('ratings').where('runInstanceId', '==', runInstanceId).get();
+    const ratingMap = {}, ratingCountMap = {};
+    ratingsSnap.forEach(doc => {
+      const r = doc.data();
+      const eid = r.employeeId;
+      if (eid) { ratingMap[eid] = (ratingMap[eid] || 0) + r.rating; ratingCountMap[eid] = (ratingCountMap[eid] || 0) + 1; }
+    });
+
+    const result = Object.values(janitors).map(j => ({
+      ...j,
+      averageRating: ratingCountMap[j.janitorId] ? parseFloat((ratingMap[j.janitorId] / ratingCountMap[j.janitorId]).toFixed(2)) : 0,
+      completionPercentage: j.totalTasks > 0 ? parseFloat(((j.tasksCompleted / j.totalTasks) * 100).toFixed(1)) : 0
+    }));
+
+    res.status(200).json({ success: true, performance: result });
+  } catch (error) {
+    console.error('(JanitorPerformance) Error:', error);
+    res.status(500).json({ error: 'Failed to get janitor performance', details: error.message });
+  }
+});
+
+// Coach cleanliness analytics
+app.get('/api/obhs/analytics/coach-cleanliness', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) return res.status(400).json({ error: 'runInstanceId is required.' });
+
+    const detailsSnap = await db.collection('task_details').where('runInstanceId', '==', runInstanceId).get();
+    const coaches = {};
+    detailsSnap.forEach(doc => {
+      const d = doc.data();
+      const cn = d.coachNo;
+      if (!cn) return;
+      if (!coaches[cn]) coaches[cn] = { coachNo: cn, totalToiletTasks: 0, toiletCompletions: 0, totalTasks: 0, completedTasks: 0 };
+      coaches[cn].totalTasks++;
+      if (d.status === 'COMPLETED') {
+        coaches[cn].completedTasks++;
+        if (d.taskType === 'toilet_cleaning') coaches[cn].toiletCompletions++;
+      }
+      if (d.taskType === 'toilet_cleaning') coaches[cn].totalToiletTasks++;
+    });
+
+    const garbageSnap = await db.collection('garbage_tasks').where('runInstanceId', '==', runInstanceId).get();
+    const garbageMap = {};
+    garbageSnap.forEach(doc => { const g = doc.data(); if (g.coachNo) garbageMap[g.coachNo] = (garbageMap[g.coachNo] || 0) + 1; });
+
+    const waterSnap = await db.collection('water_checks').where('runInstanceId', '==', runInstanceId).where('lowWaterAlert', '==', true).get();
+    const waterIssuesMap = {};
+    waterSnap.forEach(doc => { const w = doc.data(); if (w.coachNo) waterIssuesMap[w.coachNo] = (waterIssuesMap[w.coachNo] || 0) + 1; });
+
+    const result = Object.values(coaches).map(c => ({ ...c, cleanlinessScore: c.totalTasks > 0 ? parseFloat(((c.completedTasks / c.totalTasks) * 100).toFixed(1)) : 0, garbageIssues: garbageMap[c.coachNo] || 0, waterIssues: waterIssuesMap[c.coachNo] || 0 }));
+    res.status(200).json({ success: true, coaches: result });
+  } catch (error) {
+    console.error('(CoachCleanliness) Error:', error);
+    res.status(500).json({ error: 'Failed to get coach cleanliness', details: error.message });
+  }
+});
+
+// Attendance compliance analytics
+app.get('/api/obhs/analytics/attendance-compliance', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) return res.status(400).json({ error: 'runInstanceId is required.' });
+
+    const snapshot = await db.collection('obhs_attendance').where('runInstanceId', '==', runInstanceId).get();
+    let total = 0, onTime = 0, late = 0;
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      total++;
+      const startLate = d.startAttendance && d.startAttendance.isLate;
+      const midLate = d.midAttendance && d.midAttendance.isLate;
+      const endLate = d.endAttendance && d.endAttendance.isLate;
+      if (startLate || midLate || endLate) late++;
+      else onTime++;
+    });
+
+    res.status(200).json({
+      success: true, total, onTime, late,
+      complianceRate: total > 0 ? parseFloat(((onTime / total) * 100).toFixed(1)) : 0
+    });
+  } catch (error) {
+    console.error('(AttendanceCompliance) Error:', error);
+    res.status(500).json({ error: 'Failed to get attendance compliance', details: error.message });
+  }
+});
+
+// Task completion percentage
+app.get('/api/obhs/analytics/task-completion', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    if (!runInstanceId) return res.status(400).json({ error: 'runInstanceId is required.' });
+
+    const snapshot = await db.collection('task_details').where('runInstanceId', '==', runInstanceId).get();
+    let total = 0, completed = 0, overdue = 0, planned = 0, open = 0, escalated = 0;
+    snapshot.forEach(doc => {
+      const d = doc.data(); total++;
+      switch (d.status) { case 'COMPLETED': completed++; break; case 'OVERDUE': overdue++; break; case 'PLANNED': planned++; break; case 'OPEN': open++; break; case 'ESCALATED': escalated++; break; }
+    });
+
+    res.status(200).json({
+      success: true, total, completed, overdue, planned, open, escalated,
+      completionRate: total > 0 ? parseFloat(((completed / total) * 100).toFixed(1)) : 0,
+      overdueRate: total > 0 ? parseFloat(((overdue / total) * 100).toFixed(1)) : 0
+    });
+  } catch (error) {
+    console.error('(TaskCompletion) Error:', error);
+    res.status(500).json({ error: 'Failed to get task completion', details: error.message });
+  }
+});
+
+// Passenger rating trend
+app.get('/api/obhs/analytics/passenger-rating-trend', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    const query = db.collection('obhs_feedbacks');
+    const snapshot = runInstanceId ? await query.where('runInstanceId', '==', runInstanceId).get() : await query.get();
+    const dailyRates = {};
+    snapshot.forEach(doc => {
+      const f = doc.data();
+      if (f.feedbackType === 'PASSENGER' && f.overallRating) {
+        const date = f.date || new Date(f.createdAt).toISOString().split('T')[0];
+        if (!dailyRates[date]) dailyRates[date] = { total: 0, count: 0 };
+        dailyRates[date].total += f.overallRating;
+        dailyRates[date].count++;
+      }
+    });
+    const trend = Object.entries(dailyRates).sort(([a], [b]) => a.localeCompare(b)).map(([date, data]) => ({ date, averageRating: parseFloat((data.total / data.count).toFixed(2)), count: data.count }));
+    const overallAvg = trend.length > 0 ? parseFloat((trend.reduce((s, d) => s + d.averageRating, 0) / trend.length).toFixed(2)) : 0;
+    res.status(200).json({ success: true, trend, overallAverageRating: overallAvg });
+  } catch (error) {
+    console.error('(RatingTrend) Error:', error);
+    res.status(500).json({ error: 'Failed to get rating trend', details: error.message });
+  }
+});
+
+// Penalty risk report
+app.get('/api/obhs/analytics/penalty-risk', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    const risks = [];
+
+    let detailQuery = db.collection('task_details').where('status', '==', 'OVERDUE');
+    if (runInstanceId) detailQuery = detailQuery.where('runInstanceId', '==', runInstanceId);
+    const overdueSnap = await detailQuery.get();
+    const overdueByWorker = {};
+    overdueSnap.forEach(doc => {
+      const d = doc.data();
+      const key = d.workerId || 'unknown';
+      if (!overdueByWorker[key]) overdueByWorker[key] = { workerId: key, workerName: d.workerName || 'Unknown', overdueCount: 0, missedCount: 0, penaltyAmount: 0 };
+      overdueByWorker[key].overdueCount++;
+      overdueByWorker[key].penaltyAmount += 50;
+    });
+
+    let attendQuery = db.collection('obhs_attendance');
+    if (runInstanceId) attendQuery = attendQuery.where('runInstanceId', '==', runInstanceId);
+    const attendSnap = await attendQuery.get();
+    attendSnap.forEach(doc => {
+      const d = doc.data();
+      const key = d.uid ? d.uid.split('_')[1] : 'unknown';
+      if (!d.startAttendance || !d.endAttendance) {
+        if (!overdueByWorker[key]) overdueByWorker[key] = { workerId: key, workerName: 'Unknown', overdueCount: 0, missedCount: 0, penaltyAmount: 0 };
+        overdueByWorker[key].missedCount++;
+        overdueByWorker[key].penaltyAmount += 100;
+      }
+    });
+
+    Object.values(overdueByWorker).forEach(w => risks.push(w));
+    res.status(200).json({ success: true, riskReport: risks, totalPenaltyRisk: risks.reduce((s, r) => s + r.penaltyAmount, 0) });
+  } catch (error) {
+    console.error('(PenaltyRisk) Error:', error);
+    res.status(500).json({ error: 'Failed to get penalty risk report', details: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == NEW ARCHITECTURE: MCC OBHS CONTRACTOR MANAGEMENT SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── ROLE HIERARCHY ───────────────────────────────────────────────────────
+const ROLE_HIERARCHY = {
+  'CM':  { level: 5, label: 'Contractor Master', manages: ['CA', 'CTS', 'CS', 'janitor', 'attendant'] },
+  'CA':  { level: 4, label: 'Contractor Admin', manages: ['CTS', 'CS', 'janitor', 'attendant'] },
+  'CTS': { level: 3, label: 'Contractor Train Supervisor', manages: ['CS', 'janitor', 'attendant'] },
+  'CS':  { level: 2, label: 'Contractor Supervisor', manages: ['janitor', 'attendant'] },
+  'janitor':  { level: 1, label: 'Janitor', manages: [] },
+  'attendant':{ level: 1, label: 'Coach Attendant', manages: [] }
+};
+
+function hasRolePermission(actorRole, targetRole) {
+  const actor = ROLE_HIERARCHY[actorRole];
+  if (!actor) return false;
+  if (actorRole === targetRole) return true;
+  return actor.manages.includes(targetRole);
+}
+
+// ─── AUDIT LOG HELPER ─────────────────────────────────────────────────────
+async function logAudit({ action, entityType, entityId, actorId, actorRole, actorName, oldValue, newValue, details }) {
+  try {
+    const ref = db.collection('audit_logs').doc();
+    const entry = {
+      logId: ref.id,
+      action,
+      entityType,
+      entityId,
+      actorId: actorId || 'system',
+      actorRole: actorRole || 'system',
+      actorName: actorName || 'System',
+      oldValue: oldValue || null,
+      newValue: newValue || null,
+      details: details || '',
+      ip: null,
+      userAgent: null,
+      timestamp: new Date().toISOString()
+    };
+    await ref.set(entry);
+    return ref.id;
+  } catch (err) {
+    console.error('(AuditLog) Error:', err.message);
+  }
+}
+
+// ─── AUTO-CLOSE PARENT TASK HEADER ───────────────────────────────────────
+async function autoCloseParentTask(detailRef, detailDoc) {
+  try {
+    const detailData = detailDoc.data();
+    if (!detailData.headerId) return;
+
+    const headerRef = db.collection('task_headers').doc(detailData.headerId);
+    const headerDoc = await headerRef.get();
+    if (!headerDoc.exists) return;
+
+    const headerData = headerDoc.data();
+    const childIds = headerData.childTaskIds || [];
+
+    // Check all children
+    let allCompleted = true;
+    let anyOverdue = false;
+    for (const cId of childIds) {
+      const cDoc = await db.collection('task_details').doc(cId).get();
+      if (!cDoc.exists) { allCompleted = false; continue; }
+      const cData = cDoc.data();
+      if (cData.status === 'OVERDUE') anyOverdue = true;
+      if (cData.status !== 'COMPLETED') allCompleted = false;
+    }
+
+    let newStatus = headerData.status;
+    if (allCompleted) {
+      newStatus = 'COMPLETED';
+    } else if (anyOverdue) {
+      newStatus = 'PARTIAL';
+    }
+
+    if (newStatus !== headerData.status) {
+      await headerRef.update({
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  } catch (err) {
+    console.error('(AutoCloseParent) Error:', err.message);
+  }
+}
+
+// ─── GENERATE CLOSURE TASKS ──────────────────────────────────────────────
+async function generateClosureTasks(runInstanceId, arrivalTime, runData) {
+  try {
+    const batch = db.batch();
+    let count = 0;
+    const coaches = runData.coaches || [];
+
+    const closureTasks = [
+      { code: 'FINAL_INSPECTION', name: 'Final Coach Inspection', category: 'closure' },
+      { code: 'FINAL_GARBAGE', name: 'Final Garbage Clearance Verification', category: 'closure' },
+      { code: 'LOST_FOUND', name: 'Lost & Found Check', category: 'closure' },
+      { code: 'INVENTORY', name: 'Inventory & Consumable Reconciliation', category: 'closure' },
+      { code: 'CLOSURE_REPORT', name: 'Journey Closure Report', category: 'closure' }
+    ];
+
+    for (const coach of coaches) {
+      if (!coach.workerId) continue;
+      const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+
+      for (const task of closureTasks) {
+        const taskId = `${runInstanceId}_${task.code}_${coachNo}`;
+        const ref = db.collection('closure_tasks').doc(taskId);
+        batch.set(ref, {
+          taskId, runInstanceId, coachNo,
+          taskCode: task.code, taskName: task.name,
+          category: task.category,
+          workerId: coach.workerId, workerName: coach.workerName || 'Unknown',
+          status: 'PENDING',
+          beforePhoto: null, afterPhoto: null,
+          gpsLatitude: null, gpsLongitude: null,
+          supervisorVerified: false,
+          completedAt: null, createdAt: new Date().toISOString()
+        });
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`[Closure] Generated ${count} closure tasks for ${runInstanceId}`);
+    }
+  } catch (err) {
+    console.error('(GenerateClosure) Error:', err.message);
+  }
+}
+
+// ─── SEED DEFAULT TASK MASTERS ────────────────────────────────────────────
+async function seedTaskMasters() {
+  try {
+    const existing = await db.collection('task_masters').limit(1).get();
+    if (!existing.empty) {
+      console.log('[TaskMasters] Already seeded, skipping.');
+      return;
+    }
+
+    const masters = [
+      // ── TOILET CLEANING (Janitor) ──
+      {
+        taskCode: 'TOILET_CLEAN_06', taskName: 'Toilet Cleaning 06:00',
+        category: 'cleaning', subCategory: 'toilet',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'toilet_cleaning',
+        frequencyRules: [
+          { startHour: 6, endHour: 9, intervalMinutes: 60, label: 'Peak Morning' }
+        ],
+        scheduledTime: '06:00',
+        checklistTemplate: [
+          { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
+          { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
+          { item: 'mirror_cleaned', label: 'Mirror Cleaned', required: false },
+          { item: 'floor_wiped', label: 'Floor Wiped', required: true },
+          { item: 'deodorant_applied', label: 'Deodorant Applied', required: false }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'TOILET_CLEAN_07', taskName: 'Toilet Cleaning 07:00',
+        category: 'cleaning', subCategory: 'toilet',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'toilet_cleaning',
+        frequencyRules: [
+          { startHour: 6, endHour: 9, intervalMinutes: 60, label: 'Peak Morning' }
+        ],
+        scheduledTime: '07:00',
+        checklistTemplate: [
+          { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
+          { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
+          { item: 'floor_wiped', label: 'Floor Wiped', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'TOILET_CLEAN_08', taskName: 'Toilet Cleaning 08:00',
+        category: 'cleaning', subCategory: 'toilet',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'toilet_cleaning',
+        frequencyRules: [
+          { startHour: 6, endHour: 9, intervalMinutes: 60, label: 'Peak Morning' }
+        ],
+        scheduledTime: '08:00',
+        checklistTemplate: [
+          { item: 'toilet_pan_cleaned', label: 'Toilet Pan Cleaned', required: true },
+          { item: 'washbasin_cleaned', label: 'Washbasin Cleaned', required: true },
+          { item: 'floor_wiped', label: 'Floor Wiped', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── COACH CLEANING (Janitor) Normal hours every 2hr ──
+      {
+        taskCode: 'COACH_CLEAN_09', taskName: 'Coach Cleaning 09:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
+        ],
+        scheduledTime: '09:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
+          { item: 'windows_cleaned', label: 'Windows Cleaned', required: false }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'COACH_CLEAN_11', taskName: 'Coach Cleaning 11:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
+        ],
+        scheduledTime: '11:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'COACH_CLEAN_13', taskName: 'Coach Cleaning 13:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
+        ],
+        scheduledTime: '13:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'COACH_CLEAN_15', taskName: 'Coach Cleaning 15:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
+        ],
+        scheduledTime: '15:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'COACH_CLEAN_17', taskName: 'Coach Cleaning 17:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
+        ],
+        scheduledTime: '17:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'COACH_CLEAN_19', taskName: 'Coach Cleaning 19:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 9, endHour: 20, intervalMinutes: 120, label: 'Normal Hours' }
+        ],
+        scheduledTime: '19:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── EVENING PEAK (Janitor) every 1hr ──
+      {
+        taskCode: 'COACH_CLEAN_20', taskName: 'Coach Cleaning 20:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 20, endHour: 22, intervalMinutes: 60, label: 'Evening Peak' }
+        ],
+        scheduledTime: '20:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'COACH_CLEAN_21', taskName: 'Coach Cleaning 21:00',
+        category: 'cleaning', subCategory: 'compartment',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'coach_cleaning',
+        frequencyRules: [
+          { startHour: 20, endHour: 22, intervalMinutes: 60, label: 'Evening Peak' }
+        ],
+        scheduledTime: '21:00',
+        checklistTemplate: [
+          { item: 'floor_swept', label: 'Floor Swept', required: true },
+          { item: 'seats_dusted', label: 'Seats Dusted', required: true },
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── GARBAGE MANAGEMENT (Janitor) ──
+      {
+        taskCode: 'GARBAGE_07', taskName: 'Garbage Collection 07:00',
+        category: 'garbage', subCategory: 'collection',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 4, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'garbage',
+        frequencyRules: [], scheduledTime: '07:00',
+        checklistTemplate: [
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
+          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
+          { item: 'area_clean', label: 'Area Clean After Collection', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'GARBAGE_13', taskName: 'Garbage Collection 13:00',
+        category: 'garbage', subCategory: 'collection',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 4, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'garbage',
+        frequencyRules: [], scheduledTime: '13:00',
+        checklistTemplate: [
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
+          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
+          { item: 'area_clean', label: 'Area Clean After Collection', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'GARBAGE_19', taskName: 'Garbage Collection 19:00',
+        category: 'garbage', subCategory: 'collection',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 4, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'garbage',
+        frequencyRules: [], scheduledTime: '19:00',
+        checklistTemplate: [
+          { item: 'dustbin_emptied', label: 'Dustbin Emptied', required: true },
+          { item: 'garbage_bagged', label: 'Garbage Bagged', required: true },
+          { item: 'area_clean', label: 'Area Clean After Collection', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── WATER CHECK (Supervisor) ──
+      {
+        taskCode: 'WATER_CHECK_08', taskName: 'Morning Water Check 08:00',
+        category: 'water', subCategory: 'check',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: true,
+        isComplaintDriven: false, conflictGroup: 'water',
+        frequencyRules: [], scheduledTime: '08:00',
+        checklistTemplate: [
+          { item: 'tank_level', label: 'Water Tank Level', required: true },
+          { item: 'chiller_status', label: 'Water Chiller Status', required: true },
+          { item: 'cooler_status', label: 'Cooler Status', required: false }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'WATER_CHECK_16', taskName: 'Evening Water Check 16:00',
+        category: 'water', subCategory: 'check',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: true,
+        isComplaintDriven: false, conflictGroup: 'water',
+        frequencyRules: [], scheduledTime: '16:00',
+        checklistTemplate: [
+          { item: 'tank_level', label: 'Water Tank Level', required: true },
+          { item: 'chiller_status', label: 'Water Chiller Status', required: true },
+          { item: 'cooler_status', label: 'Cooler Status', required: false }
+        ],
+        active: true, isSystem: true
+      },
+      // ── SAFETY INSPECTION (Supervisor) ──
+      {
+        taskCode: 'SAFETY_10', taskName: 'Morning Safety Inspection 10:00',
+        category: 'safety', subCategory: 'inspection',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 1, requiresSupervisorVerification: true,
+        isComplaintDriven: false, conflictGroup: 'safety',
+        frequencyRules: [], scheduledTime: '10:00',
+        checklistTemplate: [
+          { item: 'fire_extinguisher', label: 'Fire Extinguisher Status', required: true },
+          { item: 'cctv', label: 'CCTV Functioning', required: true },
+          { item: 'fsds', label: 'FSDS System', required: true },
+          { item: 'emergency_equipment', label: 'Emergency Equipment', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'SAFETY_18', taskName: 'Evening Safety Inspection 18:00',
+        category: 'safety', subCategory: 'inspection',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 1, requiresSupervisorVerification: true,
+        isComplaintDriven: false, conflictGroup: 'safety',
+        frequencyRules: [], scheduledTime: '18:00',
+        checklistTemplate: [
+          { item: 'fire_extinguisher', label: 'Fire Extinguisher Status', required: true },
+          { item: 'cctv', label: 'CCTV Functioning', required: true },
+          { item: 'fsds', label: 'FSDS System', required: true },
+          { item: 'emergency_equipment', label: 'Emergency Equipment', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── PETTY REPAIR (Supervisor) ──
+      {
+        taskCode: 'REPAIR_10', taskName: 'Morning Petty Repair Check 10:00',
+        category: 'repair', subCategory: 'inspection',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: true,
+        isComplaintDriven: false, conflictGroup: 'repair',
+        frequencyRules: [], scheduledTime: '10:00',
+        checklistTemplate: [
+          { item: 'latches', label: 'Door Latches', required: true },
+          { item: 'windows', label: 'Windows', required: true },
+          { item: 'fans', label: 'Fans', required: true },
+          { item: 'lights', label: 'Lights', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'REPAIR_18', taskName: 'Evening Petty Repair Check 18:00',
+        category: 'repair', subCategory: 'inspection',
+        assignedRole: 'CS', applicableCoachTypes: ['all'],
+        priority: 2, requiresSupervisorVerification: true,
+        isComplaintDriven: false, conflictGroup: 'repair',
+        frequencyRules: [], scheduledTime: '18:00',
+        checklistTemplate: [
+          { item: 'latches', label: 'Door Latches', required: true },
+          { item: 'windows', label: 'Windows', required: true },
+          { item: 'fans', label: 'Fans', required: true },
+          { item: 'lights', label: 'Lights', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── ATTENDANT TASKS (AC Coaches Only) ──
+      {
+        taskCode: 'LINEN_DIST', taskName: 'Linen Distribution',
+        category: 'passenger_service', subCategory: 'linen',
+        assignedRole: 'attendant', applicableCoachTypes: ['ac'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'linen',
+        frequencyRules: [], scheduledTime: '06:00',
+        checklistTemplate: [
+          { item: 'bedroll', label: 'Bedroll Distributed', required: true },
+          { item: 'blanket', label: 'Blanket Distributed', required: true },
+          { item: 'pillow', label: 'Pillow Distributed', required: true },
+          { item: 'towel', label: 'Towel Distributed', required: false }
+        ],
+        active: true, isSystem: true
+      },
+      {
+        taskCode: 'BEDROLL_COLLECT', taskName: 'Bedroll Collection',
+        category: 'passenger_service', subCategory: 'linen',
+        assignedRole: 'attendant', applicableCoachTypes: ['ac'],
+        priority: 3, requiresSupervisorVerification: false,
+        isComplaintDriven: false, conflictGroup: 'linen',
+        frequencyRules: [], scheduledTime: '21:00',
+        checklistTemplate: [
+          { item: 'bedroll_collected', label: 'Bedroll Collected', required: true },
+          { item: 'count_verified', label: 'Count Verified', required: true }
+        ],
+        active: true, isSystem: true
+      },
+      // ── NIGHT TASKS (Complaint-driven only) ──
+      {
+        taskCode: 'NIGHT_CLEAN_REQUEST', taskName: 'Night Cleaning (On Request)',
+        category: 'cleaning', subCategory: 'night',
+        assignedRole: 'janitor', applicableCoachTypes: ['all'],
+        priority: 4, requiresSupervisorVerification: false,
+        isComplaintDriven: true, conflictGroup: 'night_cleaning',
+        frequencyRules: [
+          { startHour: 22, endHour: 6, intervalMinutes: 0, label: 'Night Hours (Request Only)' }
+        ],
+        scheduledTime: null,
+        checklistTemplate: [
+          { item: 'toilet_cleaned', label: 'Toilet Cleaned', required: true },
+          { item: 'area_wiped', label: 'Area Wiped', required: true }
+        ],
+        active: true, isSystem: true
+      }
+    ];
+
+    const batch = db.batch();
+    for (const master of masters) {
+      const ref = db.collection('task_masters').doc(master.taskCode);
+      batch.set(ref, { ...master, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    }
+    await batch.commit();
+    console.log(`[TaskMasters] Seeded ${masters.length} default task masters`);
+  } catch (err) {
+    console.error('(SeedTaskMasters) Error:', err.message);
+  }
+}
+
+// ─── GENERATE TASKS FROM MASTERS (Rule-driven, called on activation) ─────
+async function generateTasksFromMasters(runData) {
+  try {
+    const mastersSnap = await db.collection('task_masters')
+      .where('active', '==', true)
+      .where('isComplaintDriven', '==', false)
+      .get();
+
+    if (mastersSnap.empty) return;
+
+    const masters = [];
+    mastersSnap.forEach(doc => masters.push(doc.data()));
+
+    const batch = db.batch();
+    let count = 0;
+    const departureDate = runData.departureDate || new Date().toISOString().split('T')[0];
+    const runId = runData.runInstanceId;
+    const actualDeparture = runData.actualDeparture || new Date().toISOString();
+
+    // Calculate journey timeline from actual departure
+    const departureTime = new Date(actualDeparture);
+    const depHour = departureTime.getHours();
+    const depMinutes = departureTime.getMinutes();
+
+    for (const coach of (runData.coaches || [])) {
+      if (!coach.workerId) continue;
+      const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+      const workerId = coach.workerId;
+      const workerName = coach.workerName || 'Unknown';
+      const isAC = coach.coachType === 'AC' || coach.coachType === 'ac';
+
+      for (const master of masters) {
+        // Check if this task applies to this coach type
+        if (!master.applicableCoachTypes.includes('all')) {
+          if (isAC && !master.applicableCoachTypes.includes('ac')) continue;
+          if (!isAC && !master.applicableCoachTypes.includes('non_ac')) continue;
+        }
+
+        // Check role match: task assigned to this worker's role
+        const workerRole = coach.workerRole || 'janitor';
+        if (master.assignedRole !== workerRole && master.assignedRole !== 'all') continue;
+
+        // Build scheduled time from master or compute from frequency
+        const taskTime = master.scheduledTime;
+        if (!taskTime) continue;
+
+        const [th, tm] = taskTime.split(':').map(Number);
+        const taskHour = th;
+        const taskMinute = tm || 0;
+
+        // Skip tasks scheduled before actual departure (train hasn't left yet)
+        if (taskHour < depHour || (taskHour === depHour && taskMinute < depMinutes)) continue;
+
+        // Create task instance (parent)
+        const taskId = `${runId}_${master.taskCode}_${coachNo}`;
+        const taskRef = db.collection('task_instances').doc(taskId);
+        batch.set(taskRef, {
+          taskId, runInstanceId: runId, trainNo: runData.trainNo,
+          taskMasterCode: master.taskCode, taskName: master.taskName,
+          category: master.category, subCategory: master.subCategory,
+          coachNo, workerId, workerName, workerRole,
+          scheduledTime: taskTime, scheduledDate: departureDate,
+          status: 'PLANNED',
+          priority: master.priority,
+          requiresSupervisorVerification: master.requiresSupervisorVerification,
+          conflictGroup: master.conflictGroup,
+          checklistTemplate: master.checklistTemplate,
+          isParentTask: true, childTaskIds: [],
+          beforePhoto: null, afterPhoto: null,
+          gpsLatitude: null, gpsLongitude: null,
+          supervisorVerified: false,
+          supervisorId: null, supervisorRemarks: null,
+          exceptionReason: null,
+          checklistResponses: [],
+          completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+
+        // Create child task for this specific coach
+        const childId = `${taskId}_child`;
+        const childRef = db.collection('task_instances').doc(childId);
+        batch.set(childRef, {
+          taskId: childId, parentTaskId: taskId, runInstanceId: runId,
+          taskMasterCode: master.taskCode, taskName: master.taskName,
+          category: master.category, subCategory: master.subCategory,
+          coachNo, workerId, workerName, workerRole,
+          scheduledTime: taskTime, scheduledDate: departureDate,
+          status: 'PLANNED', priority: master.priority,
+          isParentTask: false,
+          beforePhoto: null, afterPhoto: null,
+          gpsLatitude: null, gpsLongitude: null,
+          supervisorVerified: false,
+          supervisorId: null, supervisorRemarks: null,
+          exceptionReason: null,
+          checklistResponses: [],
+          completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+
+        batch.update(taskRef, {
+          childTaskIds: admin.firestore.FieldValue.arrayUnion(childId)
+        });
+        count += 2; // parent + child
+      }
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`[TaskMasters] Generated ${count} task instances from masters for ${runId}`);
+    }
+  } catch (err) {
+    console.error('(GenerateFromMasters) Error:', err.message);
+  }
+}
+
+// ─── OVERLAPPING TASK CONFLICT RESOLUTION ────────────────────────────────
+async function resolveTaskConflicts(runInstanceId) {
+  try {
+    const snapshot = await db.collection('task_instances')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('isParentTask', '==', true)
+      .where('status', '==', 'PLANNED')
+      .get();
+
+    const tasks = {};
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      const key = `${d.coachNo}_${d.conflictGroup || 'default'}`;
+      if (!tasks[key]) tasks[key] = [];
+      tasks[key].push(d);
+    });
+
+    const batch = db.batch();
+    let resolved = 0;
+
+    for (const [key, group] of Object.entries(tasks)) {
+      if (group.length <= 1) continue;
+      // Sort by scheduled time
+      group.sort((a, b) => (a.scheduledTime || '00:00').localeCompare(b.scheduledTime || '00:00'));
+      
+      for (let i = 1; i < group.length; i++) {
+        const prev = group[i - 1];
+        const curr = group[i];
+        if (prev.scheduledTime === curr.scheduledTime) {
+          // Same time + same conflict group = overlap
+          // Priority: 1=highest(Safety), 2=Complaint, 3=Policy, 4=Routine
+          if (curr.priority > prev.priority) {
+            batch.update(db.collection('task_instances').doc(curr.taskId), {
+              status: 'DEFERRED',
+              exceptionReason: `Deferred due to conflict with ${prev.taskName} (higher priority)`,
+              updatedAt: new Date().toISOString()
+            });
+            resolved++;
+          }
+        }
+      }
+    }
+
+    if (resolved > 0) {
+      await batch.commit();
+      console.log(`[ConflictResolve] Resolved ${resolved} overlapping tasks for ${runInstanceId}`);
+    }
+  } catch (err) {
+    console.error('(ConflictResolve) Error:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == NEW ARCHITECTURE APIs
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── TASK MASTERS CRUD ───────────────────────────────────────────────────
+
+// List all active task masters (CM, CA, CTS can manage)
+app.get('/api/v2/task-masters', verifyToken, async (req, res) => {
+  try {
+    const { active, assignedRole, category } = req.query;
+    let query = db.collection('task_masters');
+    if (active === 'true') query = query.where('active', '==', true);
+    if (assignedRole) query = query.where('assignedRole', '==', assignedRole);
+    if (category) query = query.where('category', '==', category);
+    const snap = await query.get();
+    const masters = [];
+    snap.forEach(doc => masters.push({ id: doc.id, ...doc.data() }));
+    res.status(200).json({ success: true, count: masters.length, masters });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch task masters', details: error.message });
+  }
+});
+
+// Create a custom task master (CM, CA)
+app.post('/api/v2/task-masters', verifyToken, async (req, res) => {
+  try {
+    if (!['CM', 'CA'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CM/CA can create task masters' });
+    }
+    const { taskCode, taskName, category, subCategory, assignedRole, applicableCoachTypes,
+            priority, frequencyRules, scheduledTime, checklistTemplate,
+            requiresSupervisorVerification, conflictGroup } = req.body;
+
+    if (!taskCode || !taskName || !assignedRole) {
+      return res.status(400).json({ error: 'taskCode, taskName, assignedRole are required' });
+    }
+
+    const ref = db.collection('task_masters').doc(taskCode);
+    const existing = await ref.get();
+    if (existing.exists) {
+      return res.status(409).json({ error: 'Task master with this code already exists' });
+    }
+
+    const data = {
+      taskCode, taskName, category: category || 'custom', subCategory: subCategory || null,
+      assignedRole, applicableCoachTypes: applicableCoachTypes || ['all'],
+      priority: priority || 'medium', requiresSupervisorVerification: requiresSupervisorVerification || false,
+      isComplaintDriven: false, conflictGroup: conflictGroup || taskCode,
+      frequencyRules: frequencyRules || [], scheduledTime: scheduledTime || null,
+      checklistTemplate: checklistTemplate || [],
+      active: true, isSystem: false,
+      createdBy: req.user.uid, createdByName: req.user.fullName,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await ref.set(data);
+
+    await logAudit({
+      action: 'TASK_MASTER_CREATED', entityType: 'task_masters',
+      entityId: taskCode, actorId: req.user.uid, actorRole: req.user.role,
+      actorName: req.user.fullName, newValue: data,
+      details: `Created task master: ${taskName} (${taskCode})`
+    });
+
+    res.status(201).json({ success: true, message: 'Task master created', taskCode });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create task master', details: error.message });
+  }
+});
+
+// Update a task master
+app.put('/api/v2/task-masters/:taskCode', verifyToken, async (req, res) => {
+  try {
+    if (!['CM', 'CA'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CM/CA can update task masters' });
+    }
+    const { taskCode } = req.params;
+    const ref = db.collection('task_masters').doc(taskCode);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task master not found' });
+
+    const oldData = doc.data();
+    const updates = req.body;
+    delete updates.taskCode;
+    delete updates.isSystem;
+    updates.updatedAt = new Date().toISOString();
+    updates.updatedBy = req.user.uid;
+
+    await ref.update(updates);
+
+    await logAudit({
+      action: 'TASK_MASTER_UPDATED', entityType: 'task_masters',
+      entityId: taskCode, actorId: req.user.uid, actorRole: req.user.role,
+      actorName: req.user.fullName, oldValue: oldData, newValue: { ...oldData, ...updates },
+      details: `Updated task master: ${taskCode}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task master updated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update task master', details: error.message });
+  }
+});
+
+// ─── CONTRACTOR WORKER ASSIGNMENTS ────────────────────────────────────────
+
+// Assign workers to coaches for a journey (CA, CTS, CS)
+app.post('/api/v2/assignments/create', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId, assignments } = req.body;
+    // assignments: [{ workerId, workerRole, coachNos[] }]
+    if (!runInstanceId || !assignments || !Array.isArray(assignments)) {
+      return res.status(400).json({ error: 'runInstanceId and assignments array are required' });
+    }
+
+    const runRef = db.collection('RunInstance').doc(runInstanceId);
+    const runDoc = await runRef.get();
+    if (!runDoc.exists) return res.status(404).json({ error: 'Run instance not found' });
+    if (runDoc.data().status !== 'PLANNED') {
+      return res.status(400).json({ error: 'Can only assign workers to PLANNED journeys' });
+    }
+
+    const batch = db.batch();
+    const results = [];
+
+    for (const assign of assignments) {
+      const { workerId, workerRole, coachNos } = assign;
+      if (!workerId || !workerRole || !coachNos || !Array.isArray(coachNos)) {
+        return res.status(400).json({ error: 'Each assignment needs workerId, workerRole, coachNos[]' });
+      }
+
+      // Validate role hierarchy
+      if (!hasRolePermission(req.user.role, workerRole)) {
+        return res.status(403).json({ error: `Cannot assign ${workerRole}. Your role (${req.user.role}) lacks permission.` });
+      }
+
+      // Janitor max 2 coaches
+      if (workerRole === 'janitor' && coachNos.length > 2) {
+        return res.status(400).json({ error: `Janitor ${workerId} cannot be assigned more than 2 coaches (got ${coachNos.length})` });
+      }
+
+      // Attendant only for AC coaches
+      if (workerRole === 'attendant') {
+        // Validate that all assigned coaches are AC type
+        const runData = runDoc.data();
+        for (const cn of coachNos) {
+          const coach = runData.coaches.find(c => (c.coachPosition === cn || c.coachNo === cn));
+          if (coach && coach.coachType !== 'AC' && coach.coachType !== 'ac') {
+            return res.status(400).json({ error: `Attendant can only be assigned to AC coaches. Coach ${cn} is not AC.` });
+          }
+        }
+      }
+
+      const assignmentId = `${runInstanceId}_${workerId}_${Date.now()}`;
+      const ref = db.collection('worker_assignments').doc(assignmentId);
+      batch.set(ref, {
+        assignmentId, runInstanceId, workerId, workerRole,
+        coachNos, assignedBy: req.user.uid,
+        assignedByName: req.user.fullName,
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString()
+      });
+
+      // Update RunInstance coaches array
+      for (const cn of coachNos) {
+        const coachIndex = runDoc.data().coaches.findIndex(c => (c.coachPosition === cn || c.coachNo === cn));
+        if (coachIndex !== -1) {
+          const coachRef = db.collection('RunInstance').doc(runInstanceId);
+          batch.update(coachRef, {
+            [`coaches.${coachIndex}.workerId`]: workerId,
+            [`coaches.${coachIndex}.workerName`]: req.body.workerName || assign.workerName || 'Unknown',
+            [`coaches.${coachIndex}.workerRole`]: workerRole
+          });
+        }
+      }
+
+      results.push({ assignmentId, workerId, workerRole, coachNos });
+    }
+
+    await batch.commit();
+
+    // Transition journey to ALLOCATED
+    await runRef.update({ status: 'ALLOCATED', updatedAt: new Date().toISOString() });
+
+    await logAudit({
+      action: 'WORKERS_ASSIGNED', entityType: 'RunInstance',
+      entityId: runInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      newValue: { assignments: results, status: 'ALLOCATED' },
+      details: `Assigned ${assignments.length} workers to ${runInstanceId}`
+    });
+
+    res.status(201).json({ success: true, message: 'Workers assigned', assignments: results });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to assign workers', details: error.message });
+  }
+});
+
+// Get assignments for a journey
+app.get('/api/v2/assignments/:runInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const snap = await db.collection('worker_assignments')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('status', '==', 'ACTIVE')
+      .get();
+    const assignments = [];
+    snap.forEach(doc => assignments.push(doc.data()));
+    res.status(200).json({ success: true, count: assignments.length, assignments });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get assignments', details: error.message });
+  }
+});
+
+// ─── TASK INSTANCE APIS (Unified) ────────────────────────────────────────
+
+// Get task instances for a journey
+app.get('/api/v2/tasks/:runInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const { coachNo, status, workerId } = req.query;
+    let query = db.collection('task_instances')
+      .where('runInstanceId', '==', runInstanceId);
+    if (coachNo) query = query.where('coachNo', '==', coachNo);
+    if (status) query = query.where('status', '==', status);
+    if (workerId) query = query.where('workerId', '==', workerId);
+    const snap = await query.get();
+    const tasks = [];
+    snap.forEach(doc => tasks.push(doc.data()));
+    res.status(200).json({ success: true, count: tasks.length, tasks });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch tasks', details: error.message });
+  }
+});
+
+// Submit task completion (with full evidence)
+app.post('/api/v2/tasks/submit', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId, checklistResponses, beforePhoto, afterPhoto,
+            gpsLatitude, gpsLongitude, deviceTimestamp, deviceId, mobileNumber, comment } = req.body;
+
+    if (!taskInstanceId || !beforePhoto || !afterPhoto || !gpsLatitude || !gpsLongitude) {
+      return res.status(400).json({ error: 'taskInstanceId, beforePhoto, afterPhoto, gpsLatitude, gpsLongitude are mandatory' });
+    }
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const taskData = doc.data();
+    if (['COMPLETED', 'VERIFIED', 'CLOSED', 'NOT_APPLICABLE'].includes(taskData.status)) {
+      return res.status(400).json({ error: `Task already in final state: ${taskData.status}` });
+    }
+
+    const updateData = {
+      status: 'COMPLETED',
+      beforePhoto, afterPhoto,
+      gpsLatitude, gpsLongitude,
+      deviceId: deviceId || null,
+      mobileNumber: mobileNumber || null,
+      checklistResponses: checklistResponses || [],
+      comment: comment || null,
+      completedBy: req.user.uid,
+      completedByName: req.user.fullName,
+      deviceTimestamp: deviceTimestamp || new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await ref.update(updateData);
+
+    // If this is a child task, check and update parent
+    if (taskData.parentTaskId) {
+      await updateParentTaskStatus(taskData.parentTaskId);
+    }
+
+    await logAudit({
+      action: 'TASK_INSTANCE_COMPLETED', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: taskData.status },
+      newValue: { status: 'COMPLETED', gpsLatitude, gpsLongitude },
+      details: `Completed ${taskData.taskName} for Coach ${taskData.coachNo}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task completed', taskInstanceId });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to submit task', details: error.message });
+  }
+});
+
+// Worker start task (OPEN/OVERDUE → IN_PROGRESS)
+app.post('/api/v2/tasks/start', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId, gpsLatitude, gpsLongitude, deviceId } = req.body;
+    if (!taskInstanceId) return res.status(400).json({ error: 'taskInstanceId required' });
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    if (!['OPEN', 'OVERDUE', 'REOPENED'].includes(oldData.status)) {
+      return res.status(400).json({ error: `Cannot start task in status ${oldData.status}` });
+    }
+
+    await ref.update({
+      status: 'IN_PROGRESS',
+      startedAt: new Date().toISOString(),
+      startedBy: req.user.uid,
+      startedByName: req.user.fullName,
+      gpsLatitude: gpsLatitude || null,
+      gpsLongitude: gpsLongitude || null,
+      deviceId: deviceId || null,
+      updatedAt: new Date().toISOString()
+    });
+
+    await logAudit({
+      action: 'TASK_STARTED', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: oldData.status },
+      newValue: { status: 'IN_PROGRESS' },
+      details: `Started ${oldData.taskName} for Coach ${oldData.coachNo}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task started', taskInstanceId, status: 'IN_PROGRESS' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to start task', details: error.message });
+  }
+});
+
+// Supervisor verify a task (COMPLETED → VERIFIED or REJECTED)
+app.post('/api/v2/tasks/verify', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId, verified, remarks } = req.body;
+    if (!taskInstanceId) return res.status(400).json({ error: 'taskInstanceId required' });
+
+    const allowedRoles = ['CS', 'CTS', 'CA', 'CM'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CS/CTS/CA/CM can verify tasks' });
+    }
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    const isApproved = verified !== false;
+    const newStatus = isApproved ? 'VERIFIED' : 'REJECTED';
+
+    await ref.update({
+      supervisorVerified: isApproved,
+      supervisorId: req.user.uid,
+      supervisorName: req.user.fullName,
+      supervisorRemarks: remarks || null,
+      verifiedAt: new Date().toISOString(),
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    });
+
+    await logAudit({
+      action: isApproved ? 'TASK_VERIFIED' : 'TASK_REJECTED',
+      entityType: 'task_instances', entityId: taskInstanceId,
+      actorId: req.user.uid, actorRole: req.user.role,
+      actorName: req.user.fullName,
+      oldValue: { status: oldData.status, supervisorVerified: oldData.supervisorVerified },
+      newValue: { status: newStatus, supervisorVerified: isApproved, remarks },
+      details: remarks || 'No remarks'
+    });
+
+    res.status(200).json({ success: true, message: isApproved ? 'Task verified' : 'Task rejected', status: newStatus });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to verify task', details: error.message });
+  }
+});
+
+// Close task (VERIFIED → CLOSED)
+app.post('/api/v2/tasks/close', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId, remarks } = req.body;
+    if (!taskInstanceId) return res.status(400).json({ error: 'taskInstanceId required' });
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    if (oldData.status !== 'VERIFIED') {
+      return res.status(400).json({ error: 'Only VERIFIED tasks can be closed' });
+    }
+
+    await ref.update({
+      status: 'CLOSED',
+      closedAt: new Date().toISOString(),
+      closedBy: req.user.uid,
+      closedByName: req.user.fullName,
+      closeRemarks: remarks || null,
+      updatedAt: new Date().toISOString()
+    });
+
+    await logAudit({
+      action: 'TASK_CLOSED', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: oldData.status },
+      newValue: { status: 'CLOSED' },
+      details: remarks || 'Task closed'
+    });
+
+    res.status(200).json({ success: true, message: 'Task closed', taskInstanceId, status: 'CLOSED' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to close task', details: error.message });
+  }
+});
+
+// Reopen task (any completed state → REOPENED)
+app.post('/api/v2/tasks/reopen', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId, reason } = req.body;
+    if (!taskInstanceId || !reason) return res.status(400).json({ error: 'taskInstanceId and reason required' });
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    const completableStatuses = ['COMPLETED', 'VERIFIED', 'CLOSED', 'REJECTED'];
+    if (!completableStatuses.includes(oldData.status)) {
+      return res.status(400).json({ error: `Cannot reopen task in status ${oldData.status}` });
+    }
+
+    await ref.update({
+      status: 'REOPENED',
+      reopenedAt: new Date().toISOString(),
+      reopenedBy: req.user.uid,
+      reopenedByName: req.user.fullName,
+      reopenReason: reason,
+      supervisorVerified: false,
+      updatedAt: new Date().toISOString()
+    });
+
+    await logAudit({
+      action: 'TASK_REOPENED', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: oldData.status },
+      newValue: { status: 'REOPENED', reason },
+      details: `Reopened: ${reason}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task reopened', taskInstanceId, status: 'REOPENED' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reopen task', details: error.message });
+  }
+});
+
+// Mark task as not applicable
+app.post('/api/v2/tasks/not-applicable', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId, reason } = req.body;
+    if (!taskInstanceId || !reason) return res.status(400).json({ error: 'taskInstanceId and reason required' });
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    if (!['OPEN', 'PLANNED', 'OVERDUE'].includes(oldData.status)) {
+      return res.status(400).json({ error: `Cannot mark task as N/A in status ${oldData.status}` });
+    }
+
+    await ref.update({
+      status: 'NOT_APPLICABLE',
+      notApplicableReason: reason,
+      notApplicableMarkedBy: req.user.uid,
+      notApplicableMarkedByName: req.user.fullName,
+      notApplicableAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    await logAudit({
+      action: 'TASK_NA', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: oldData.status },
+      newValue: { status: 'NOT_APPLICABLE', reason },
+      details: `Marked N/A: ${reason}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task marked not applicable', taskInstanceId, status: 'NOT_APPLICABLE' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark task N/A', details: error.message });
+  }
+});
+
+// Supervisor edit task instance (reassign worker, reschedule, update fields)
+app.put('/api/v2/tasks/:taskInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { taskInstanceId } = req.params;
+    const allowedRoles = ['CS', 'CTS', 'CA', 'CM'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CS/CTS/CA/CM can edit tasks' });
+    }
+
+    const ref = db.collection('task_instances').doc(taskInstanceId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Task instance not found' });
+
+    const oldData = doc.data();
+    const updates = { ...req.body };
+
+    // Remove protected fields that cannot be edited by supervisor
+    delete updates.taskId;
+    delete updates.runInstanceId;
+    delete updates.isParentTask;
+    delete updates.parentTaskId;
+    delete updates.childTaskIds;
+    delete updates.createdAt;
+
+    // If reassigning worker, resolve worker name
+    if (updates.workerId && updates.workerId !== oldData.workerId) {
+      if (!updates.workerName) {
+        try {
+          const workerDoc = await db.collection('users').doc(updates.workerId).get();
+          if (workerDoc.exists) {
+            updates.workerName = workerDoc.data().fullName || workerDoc.data().name || 'Unknown';
+          }
+        } catch (_) { updates.workerName = 'Unknown'; }
+      }
+    }
+
+    updates.updatedAt = new Date().toISOString();
+    updates.editedBy = req.user.uid;
+    updates.editedByName = req.user.fullName;
+    updates.editedAt = updates.updatedAt;
+
+    await ref.update(updates);
+
+    // Also update child tasks if worker reassigned on a parent task
+    if (oldData.isParentTask && (updates.workerId || updates.workerName || updates.workerRole)) {
+      const children = oldData.childTaskIds || [];
+      const childBatch = db.batch();
+      for (const cId of children) {
+        const childRef = db.collection('task_instances').doc(cId);
+        childBatch.update(childRef, {
+          ...(updates.workerId && { workerId: updates.workerId }),
+          ...(updates.workerName && { workerName: updates.workerName }),
+          ...(updates.workerRole && { workerRole: updates.workerRole }),
+          ...(updates.scheduledTime && { scheduledTime: updates.scheduledTime }),
+          ...(updates.coachNo && { coachNo: updates.coachNo }),
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await childBatch.commit();
+    }
+
+    await logAudit({
+      action: 'TASK_EDITED', entityType: 'task_instances',
+      entityId: taskInstanceId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: oldData, newValue: { ...oldData, ...updates },
+      details: `Supervisor ${req.user.fullName} edited task ${taskInstanceId}`
+    });
+
+    res.status(200).json({ success: true, message: 'Task updated', taskInstanceId });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to edit task', details: error.message });
+  }
+});
+
+// Helper: Update parent task status when child completes
+async function updateParentTaskStatus(parentTaskId) {
+  try {
+    const parentRef = db.collection('task_instances').doc(parentTaskId);
+    const parentDoc = await parentRef.get();
+    if (!parentDoc.exists) return;
+
+    const parentData = parentDoc.data();
+    const childIds = parentData.childTaskIds || [];
+
+    let allCompleted = true;
+    let anyOverdue = false;
+    let anyOpen = false;
+    let anyRejected = false;
+    let anyNA = false;
+    let anyReopened = false;
+
+    for (const cId of childIds) {
+      const cDoc = await db.collection('task_instances').doc(cId).get();
+      if (!cDoc.exists) { allCompleted = false; continue; }
+      const s = cDoc.data().status;
+      const finalStates = ['COMPLETED', 'VERIFIED', 'CLOSED', 'NOT_APPLICABLE'];
+      if (!finalStates.includes(s)) allCompleted = false;
+      if (s === 'OVERDUE') anyOverdue = true;
+      if (s === 'OPEN' || s === 'PLANNED') anyOpen = true;
+      if (s === 'REJECTED') anyRejected = true;
+      if (s === 'NOT_APPLICABLE') anyNA = true;
+      if (s === 'REOPENED') anyReopened = true;
+    }
+
+    let newStatus;
+    if (allCompleted) newStatus = 'COMPLETED';
+    else if (anyReopened) newStatus = 'REOPENED';
+    else if (anyRejected) newStatus = 'PARTIAL';
+    else if (anyOverdue) newStatus = 'OVERDUE';
+    else if (anyOpen) newStatus = 'IN_PROGRESS';
+    else newStatus = parentData.status;
+
+    if (newStatus !== parentData.status) {
+      await parentRef.update({ status: newStatus, updatedAt: new Date().toISOString() });
+    }
+  } catch (err) {
+    console.error('(UpdateParentTask) Error:', err.message);
+  }
+}
+
+// ─── ESCALATION APIS ──────────────────────────────────────────────────────
+
+// Create escalation
+app.post('/api/v2/escalations/create', verifyToken, async (req, res) => {
+  try {
+    const { sourceEntity, sourceId, reason, escalatedToRole, details } = req.body;
+    if (!sourceEntity || !sourceId || !reason) {
+      return res.status(400).json({ error: 'sourceEntity, sourceId, reason required' });
+    }
+
+    const ref = db.collection('escalations').doc();
+    const escalation = {
+      escalationId: ref.id,
+      sourceEntity, sourceId,
+      reason, details: details || '',
+      escalatedBy: req.user.uid, escalatedByName: req.user.fullName,
+      escalatedByRole: req.user.role,
+      escalatedToRole: escalatedToRole || getNextEscalationRole(req.user.role),
+      status: 'OPEN',
+      resolvedAt: null, resolvedBy: null, resolution: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await ref.set(escalation);
+
+    // Update source entity status (non-blocking)
+    if (sourceEntity === 'task_instance') {
+      try {
+        const srcDoc = await db.collection('task_instances').doc(sourceId).get();
+        if (srcDoc.exists) {
+          await srcDoc.ref.update({
+            status: 'ESCALATED',
+            escalationId: ref.id,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } catch (srcErr) {
+        console.error('(Escalation) Source update warning:', srcErr.message);
+      }
+    }
+
+    await logAudit({
+      action: 'ESCALATION_CREATED', entityType: 'escalations',
+      entityId: ref.id, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      newValue: escalation, details: `Escalated ${sourceEntity}:${sourceId} - ${reason}`
+    });
+
+    res.status(201).json({ success: true, message: 'Escalation created', escalationId: ref.id });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create escalation', details: error.message });
+  }
+});
+
+// Resolve escalation
+app.post('/api/v2/escalations/resolve/:escalationId', verifyToken, async (req, res) => {
+  try {
+    const { escalationId } = req.params;
+    const { resolution } = req.body;
+
+    const ref = db.collection('escalations').doc(escalationId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Escalation not found' });
+
+    const oldData = doc.data();
+    await ref.update({
+      status: 'RESOLVED',
+      resolvedBy: req.user.uid,
+      resolvedByName: req.user.fullName,
+      resolution: resolution || 'Resolved',
+      resolvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    await logAudit({
+      action: 'ESCALATION_RESOLVED', entityType: 'escalations',
+      entityId: escalationId, actorId: req.user.uid,
+      actorRole: req.user.role, actorName: req.user.fullName,
+      oldValue: { status: oldData.status },
+      newValue: { status: 'RESOLVED', resolution },
+      details: resolution || 'Resolved'
+    });
+
+    res.status(200).json({ success: true, message: 'Escalation resolved' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to resolve escalation', details: error.message });
+  }
+});
+
+// Get escalation chain
+function getNextEscalationRole(currentRole) {
+  const chain = ['janitor', 'CS', 'CTS', 'CA', 'CM'];
+  const idx = chain.indexOf(currentRole);
+  if (idx === -1 || idx >= chain.length - 1) return 'CM';
+  return chain[idx + 1];
+}
+
+// Get escalations
+app.get('/api/v2/escalations', verifyToken, async (req, res) => {
+  try {
+    const { status, sourceEntity } = req.query;
+    let query = db.collection('escalations');
+    if (status) query = query.where('status', '==', status);
+    if (sourceEntity) query = query.where('sourceEntity', '==', sourceEntity);
+    const snap = await query.orderBy('createdAt', 'desc').get();
+    const list = [];
+    snap.forEach(doc => list.push(doc.data()));
+    res.status(200).json({ success: true, count: list.length, escalations: list });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch escalations', details: error.message });
+  }
+});
+
+// ─── AUDIT LOG APIS ───────────────────────────────────────────────────────
+
+// Get audit logs
+app.get('/api/v2/audit-logs', verifyToken, async (req, res) => {
+  try {
+    const { entityType, entityId, action, limit: qLimit } = req.query;
+    let query = db.collection('audit_logs');
+    if (entityType) query = query.where('entityType', '==', entityType);
+    if (entityId) query = query.where('entityId', '==', entityId);
+    if (action) query = query.where('action', '==', action);
+    const snap = await query.orderBy('timestamp', 'desc').limit(parseInt(qLimit) || 100).get();
+    const logs = [];
+    snap.forEach(doc => logs.push(doc.data()));
+    res.status(200).json({ success: true, count: logs.length, logs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch audit logs', details: error.message });
+  }
+});
+
+// ─── JOURNEY CLOSURE TASK APIS ────────────────────────────────────────────
+
+// Get closure tasks
+app.get('/api/v2/closure-tasks/:runInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const snap = await db.collection('closure_tasks')
+      .where('runInstanceId', '==', runInstanceId)
+      .get();
+    const tasks = [];
+    snap.forEach(doc => tasks.push(doc.data()));
+    res.status(200).json({ success: true, count: tasks.length, tasks });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch closure tasks', details: error.message });
+  }
+});
+
+// Complete a closure task
+app.post('/api/v2/closure-tasks/complete', verifyToken, async (req, res) => {
+  try {
+    const { taskId, beforePhoto, afterPhoto, gpsLatitude, gpsLongitude } = req.body;
+    if (!taskId) return res.status(400).json({ error: 'taskId required' });
+
+    const ref = db.collection('closure_tasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Closure task not found' });
+
+    await ref.update({
+      status: 'COMPLETED',
+      beforePhoto: beforePhoto || null,
+      afterPhoto: afterPhoto || null,
+      gpsLatitude: gpsLatitude || null,
+      gpsLongitude: gpsLongitude || null,
+      completedAt: new Date().toISOString()
+    });
+
+    res.status(200).json({ success: true, message: 'Closure task completed', taskId });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to complete closure task', details: error.message });
+  }
+});
+
+// ─── ROLE-BASED WORKER PROFILE ────────────────────────────────────────────
+
+// Get worker's assigned tasks for their current journey
+app.get('/api/v2/worker/my-tasks', verifyToken, async (req, res) => {
+  try {
+    const workerId = req.user.uid;
+    const { status: filterStatus } = req.query;
+
+    // Find active journey for this worker (as janitor or attendant)
+    const runsSnap = await db.collection('RunInstance')
+      .where('status', '==', 'Active')
+      .get();
+
+    let myRun = null;
+    let myCoaches = [];
+    let myCoachTasks = null; // per-coach task filter array
+    runsSnap.forEach(doc => {
+      const d = doc.data();
+      const assigned = (d.coaches || []).filter(c => c.workerId === workerId || c.attendantId === workerId);
+      if (assigned.length > 0) {
+        myRun = { ...d, runInstanceId: doc.id };
+        myCoaches = assigned.map(c => c.coachPosition || c.coachNo);
+        // Collect per-coach task filters
+        myCoachTasks = assigned.reduce((acc, c) => {
+          const cn = c.coachPosition || c.coachNo;
+          if (c.tasks && c.tasks.length > 0) acc[cn] = c.tasks.map(t => t.toLowerCase());
+          return acc;
+        }, {});
+      }
+    });
+
+    if (!myRun) {
+      return res.status(404).json({ success: false, error: 'No active journey found for this worker' });
+    }
+
+    let taskQuery = db.collection('task_instances')
+      .where('runInstanceId', '==', myRun.runInstanceId)
+      .where('isParentTask', '==', false);
+
+    // If worker is the janitor (primary workerId)
+    const janitorCoaches = myRun.coaches.filter(c => c.workerId === workerId).map(c => c.coachPosition || c.coachNo);
+    // If worker is the attendant (secondary)
+    const attendantCoaches = myRun.coaches.filter(c => c.attendantId === workerId).map(c => c.coachPosition || c.coachNo);
+    const assignedCoachNos = [...new Set([...janitorCoaches, ...attendantCoaches])];
+
+    const taskSnap = await taskQuery.get();
+    let tasks = [];
+    taskSnap.forEach(doc => tasks.push(doc.data()));
+
+    // Filter by assigned coaches
+    tasks = tasks.filter(t => assignedCoachNos.includes(t.coachNo));
+
+    // Apply per-coach task filtering if defined
+    if (myCoachTasks) {
+      tasks = tasks.filter(t => {
+        const allowed = myCoachTasks[t.coachNo];
+        if (!allowed) return true; // no filter for this coach
+        const taskName = (t.taskName || t.taskMasterCode || '').toLowerCase();
+        return allowed.some(keyword => taskName.includes(keyword));
+      });
+    }
+
+    if (filterStatus) tasks = tasks.filter(t => t.status === filterStatus);
+
+    res.status(200).json({
+      success: true,
+      journey: {
+        runInstanceId: myRun.runInstanceId,
+        trainNo: myRun.trainNo, trainName: myRun.trainName,
+        coaches: myCoaches,
+        actualDeparture: myRun.actualDeparture,
+        scheduledArrival: myRun.scheduledArrival
+      },
+      taskCount: tasks.length,
+      tasks
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch worker tasks', details: error.message });
+  }
+});
+
+// ─── JOURNEY TIMELINE (Delay-aware) ──────────────────────────────────────
+
+// Get journey timeline with delay-adjusted task schedule
+app.get('/api/v2/journey/timeline/:runInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+    if (!runDoc.exists) return res.status(404).json({ error: 'Journey not found' });
+
+    const run = runDoc.data();
+    const actualDeparture = run.actualDeparture ? new Date(run.actualDeparture) : null;
+    const scheduledDeparture = run.scheduledDeparture ? new Date(run.scheduledDeparture) : null;
+    const delayMs = actualDeparture && scheduledDeparture
+      ? actualDeparture.getTime() - scheduledDeparture.getTime()
+      : 0;
+    const delayMinutes = Math.round(delayMs / 60000);
+
+    // Fetch tasks
+    const taskSnap = await db.collection('task_instances')
+      .where('runInstanceId', '==', runInstanceId)
+      .where('isParentTask', '==', true)
+      .get();
+    const tasks = [];
+    taskSnap.forEach(doc => tasks.push(doc.data()));
+
+    // Adjust task scheduled times for delay
+    const adjustedTasks = tasks.map(t => {
+      if (delayMinutes > 0 && t.scheduledTime) {
+        const [h, m] = t.scheduledTime.split(':').map(Number);
+        const totalMin = h * 60 + m + delayMinutes;
+        const newH = Math.floor(totalMin / 60) % 24;
+        const newM = totalMin % 60;
+        return { ...t, originalScheduledTime: t.scheduledTime, adjustedTime: `${String(newH).padStart(2,'0')}:${String(newM).padStart(2,'0')}` };
+      }
+      return { ...t, adjustedTime: t.scheduledTime };
+    });
+
+    res.status(200).json({
+      success: true,
+      journey: {
+        runInstanceId, trainNo: run.trainNo, trainName: run.trainName,
+        scheduledDeparture: run.scheduledDeparture,
+        actualDeparture: run.actualDeparture,
+        scheduledArrival: run.scheduledArrival,
+        actualArrival: run.actualArrival,
+        delayMinutes,
+        status: run.status
+      },
+      taskCount: adjustedTasks.length,
+      tasks: adjustedTasks
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get journey timeline', details: error.message });
+  }
+});
+
+// ─── SEED ON STARTUP ──────────────────────────────────────────────────────
+seedTaskMasters();
 
 // --- Server Start ---
 app.listen(port, () => {

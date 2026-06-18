@@ -1042,40 +1042,43 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                                       color: Colors.black87,
                                     ),
                                   ),
-                                  if (coach.workerId != null)
-                                    Row(
-                                      children: [
-                                        Text('Worker: ${coach.workerName}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        InkWell(
-                                          onTap: () => _assignWorkerFlow(instance, index),
-                                          child: const Icon(Icons.edit, size: 14, color: kRailwayBlue),
-                                        )
-                                      ],
-                                    )
-                                  else
-                                    InkWell(
-                                      onTap: () => _assignWorkerFlow(instance, index),
-                                      child: Row(
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
                                         children: [
-                                          Text(
-                                            'No worker assigned',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.orange[700],
-                                              fontStyle: FontStyle.italic,
+                                          if (coach.workerId != null)
+                                            Text('Worker: ${coach.workerName}',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                            )
+                                          else
+                                            Text('No worker assigned',
+                                              style: TextStyle(fontSize: 11, color: Colors.orange[700], fontStyle: FontStyle.italic),
                                             ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.add_circle, size: 14, color: Colors.orange),
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            onTap: () => _assignWorkerFlow(instance, index),
+                                            child: const Icon(Icons.edit, size: 14, color: kRailwayBlue),
+                                          )
                                         ],
                                       ),
-                                    ),
+                                      if (coach.attendantId != null && _isAcCoach(coach.coachType))
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text('Attendant: ${coach.attendantName ?? 'Assigned'}',
+                                            style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                          ),
+                                        ),
+                                      if (coach.tasks != null && coach.tasks!.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text('Tasks: ${coach.tasks!.join(', ')}',
+                                            style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
@@ -1112,6 +1115,9 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
     );
   }
   Future<void> _assignWorkerFlow(RunInstanceModel instance, int coachIndex) async {
+    final coach = instance.coaches[coachIndex];
+    final bool isAc = _isAcCoach(coach.coachType);
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1123,62 +1129,156 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
 
-      final selectedWorker = await showModalBottomSheet<RailwayWorkerModel>(
+      // Initial state for dialog
+      RailwayWorkerModel? selectedJanitor = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.workerId, orElse: () => null);
+      RailwayWorkerModel? selectedAttendant = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.attendantId, orElse: () => null);
+      List<String> selectedTasks = List.from(coach.tasks ?? ['Toilet Cleaning', 'Aisle Mopping', 'Garbage Collection']);
+
+      final List<String> allTasks = [
+        'Toilet Cleaning',
+        'Aisle Mopping',
+        'Garbage Collection',
+        'Window Cleaning',
+        'Mirror Cleaning',
+        'Linen Distribution'
+      ];
+
+      await showDialog(
         context: context,
-        builder: (context) => Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text('Select Worker to Assign', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: workers.length,
-                itemBuilder: (context, index) {
-                  final worker = workers[index];
-                  return ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person)),
-                    title: Text(worker.fullName),
-                    subtitle: Text(worker.designation ?? ''),
-                    onTap: () => Navigator.pop(context, worker),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return AlertDialog(
+                title: Text('Edit Assignment: Coach ${coach.coachPosition}'),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Assign Janitor', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<RailwayWorkerModel>(
+                          value: selectedJanitor,
+                          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                          items: workers.map((w) => DropdownMenuItem(value: w, child: Text(w.fullName))).toList(),
+                          onChanged: (val) => setStateDialog(() => selectedJanitor = val),
+                          hint: const Text('Select Janitor'),
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        Row(
+                          children: [
+                            const Text('Assign Attendant', style: TextStyle(fontWeight: FontWeight.bold)),
+                            if (!isAc) 
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text('(AC Only)', style: TextStyle(color: Colors.red, fontSize: 12)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<RailwayWorkerModel>(
+                          value: selectedAttendant,
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            fillColor: isAc ? Colors.white : Colors.grey[200],
+                            filled: !isAc,
+                          ),
+                          items: isAc 
+                              ? workers.map((w) => DropdownMenuItem(value: w, child: Text(w.fullName))).toList()
+                              : const [],
+                          onChanged: isAc ? (val) => setStateDialog(() => selectedAttendant = val) : null,
+                          hint: Text(isAc ? 'Select Attendant' : 'Not Applicable'),
+                          disabledHint: const Text('Non-AC Coach'),
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        const Text('Edit Coach Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: allTasks.map((task) {
+                              final isSelected = selectedTasks.contains(task);
+                              return CheckboxListTile(
+                                title: Text(task, style: const TextStyle(fontSize: 14)),
+                                value: isSelected,
+                                activeColor: kRailwayBlue,
+                                dense: true,
+                                onChanged: (checked) {
+                                  setStateDialog(() {
+                                    if (checked == true) {
+                                      selectedTasks.add(task);
+                                    } else {
+                                      selectedTasks.remove(task);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      
+                      // Show saving...
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(child: CircularProgressIndicator()),
+                      );
+
+                      // Modify the instance coaches locally
+                      final updatedCoaches = List<CoachAssignment>.from(instance.coaches);
+                      updatedCoaches[coachIndex] = updatedCoaches[coachIndex].copyWith(
+                        workerId: selectedJanitor?.uid,
+                        workerName: selectedJanitor?.fullName,
+                        attendantId: selectedAttendant?.uid,
+                        attendantName: selectedAttendant?.fullName,
+                        tasks: selectedTasks,
+                      );
+
+                      // Update in backend
+                      await OBHSRepository.updateRunInstance(
+                        runInstanceId: instance.runInstanceId ?? instance.id ?? '',
+                        coaches: updatedCoaches,
+                      );
+
+                      if (!mounted) return;
+                      Navigator.pop(context); // close saving dialog
+                      Navigator.pop(context); // close bottom sheet
+                      _loadRunInstances(); // reload list
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Coach assignments updated successfully!'), backgroundColor: Colors.green),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue),
+                    child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              );
+            }
+          );
+        },
       );
 
-      if (selectedWorker != null) {
-        // Show saving...
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const Center(child: CircularProgressIndicator()),
-        );
-
-        // Modify the instance coaches locally
-        final updatedCoaches = List<CoachAssignment>.from(instance.coaches);
-        updatedCoaches[coachIndex] = updatedCoaches[coachIndex].copyWith(
-          workerId: selectedWorker.uid,
-          workerName: selectedWorker.fullName,
-        );
-
-        // Update in backend
-        await OBHSRepository.updateRunInstance(
-          runInstanceId: instance.runInstanceId ?? instance.id ?? '',
-          coaches: updatedCoaches,
-        );
-
-        if (!mounted) return;
-        Navigator.pop(context); // close saving dialog
-        Navigator.pop(context); // close bottom sheet
-        _loadRunInstances(); // reload list
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Worker assigned successfully!'), backgroundColor: Colors.green),
-        );
-      }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // close loading dialog
@@ -1187,5 +1287,15 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
         );
       }
     }
+  }
+
+  bool _isAcCoach(String coachType) {
+    final upper = coachType.toUpperCase();
+    return upper.startsWith('A') || 
+           upper.startsWith('B') || 
+           upper.startsWith('H') || 
+           upper.startsWith('M') || 
+           upper.startsWith('C') || 
+           upper.startsWith('E');
   }
 }

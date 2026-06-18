@@ -68,9 +68,6 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
       WorkerTaskScreen(),
       WorkerAttendanceScreen(),
       WorkerComplaintsScreen(),
-      // isOfficialMode: false → Passenger rating by default.
-      // Pass true when user role is TTE / Official.
-      const WorkerRatingScreen(isOfficialMode: false),
     ];
   }
 
@@ -97,12 +94,6 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.report_rounded),
         title: "Complaints",
-        activeColorPrimary: kRailwayBlue,
-        inactiveColorPrimary: Colors.grey,
-      ),
-      PersistentBottomNavBarItem(
-        icon: const Icon(Icons.star_rounded),
-        title: "Ratings",
         activeColorPrimary: kRailwayBlue,
         inactiveColorPrimary: Colors.grey,
       ),
