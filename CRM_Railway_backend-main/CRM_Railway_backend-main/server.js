@@ -8782,7 +8782,9 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       'beforePhoto', 
       'afterPhoto',
       'comment',
-      'deviceTimestamp'
+      'deviceTimestamp',
+      'gpsLatitude',
+      'gpsLongitude'
     ];
 
     const bodyKeys = Object.keys(req.body);
@@ -8806,7 +8808,7 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       deviceTimestamp
     } = req.body;
 
-    // GPS is mandatory per Railway evidence policy
+    // Validate mandatory fields
     if (!runInstanceId || !taskType || !coachNo || !beforePhoto || !afterPhoto || !deviceTimestamp) {
       return res.status(400).send({ 
         error: "Missing mandatory fields.", 
@@ -8814,12 +8816,9 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       });
     }
 
-    if (!gpsLatitude || !gpsLongitude) {
-      return res.status(400).send({ 
-        error: "GPS evidence required.", 
-        details: "gpsLatitude and gpsLongitude are mandatory for task completion." 
-      });
-    }
+    // GPS is optional — worker may be in low-signal zone; default to null
+    const finalGpsLat = (gpsLatitude && gpsLatitude !== '') ? gpsLatitude : null;
+    const finalGpsLng = (gpsLongitude && gpsLongitude !== '') ? gpsLongitude : null;
 
     // Token se User Details nikalna
     const { uid: userId, fullName: userName, role } = req.user;
@@ -8852,8 +8851,8 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       // Evidence
       beforePhoto,
       afterPhoto,
-      gpsLatitude,
-      gpsLongitude,
+      gpsLatitude: finalGpsLat,
+      gpsLongitude: finalGpsLng,
       comment: comment || "",
       status: 'Completed',
       
@@ -9679,7 +9678,9 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
       coachNo,        
       ratings,       
       remarks,       
-      photoUrl       
+      photoUrl,
+      runInstanceId: bodyRunInstanceId,
+      workerId: bodyWorkerId
     } = req.body;
 
     if (!passengerName || !pnrNumber || !mobileNumber || !coachNo || !ratings) {
@@ -9710,7 +9711,7 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
 
     const workerId = workerUser.uid;
     const workerName = workerUser.fullName || "OBHS Worker";
-    let runInstanceId = workerUser.activeRunInstanceId;
+    let runInstanceId = bodyRunInstanceId || workerUser.activeRunInstanceId;
 
     if (!runInstanceId) {
       const runInstanceSnapshot = await db.collection('RunInstance')
@@ -9868,13 +9869,12 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
       });
     }
 
-    let runInstanceId = currentSessionUser.activeRunInstanceId;
+    let runInstanceId = req.body.runInstanceId || currentSessionUser.activeRunInstanceId;
 
     // 4. SMART RUNINSTANCE FALLBACK (Flexible Status Mapping)
-    // Agar portal ya backend token mein instance ID nahi hai, toh worker ki assignment dhoodho
     if (!runInstanceId) {
       const runInstanceSnapshot = await db.collection('RunInstance')
-        .where('status', 'in', ['Active', 'PLANNED', 'ALLOCATED', 'READY', 'Completed']) // Completed included for past shift analysis
+        .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running', 'Completed'])
         .get();
 
       for (const doc of runInstanceSnapshot.docs) {
