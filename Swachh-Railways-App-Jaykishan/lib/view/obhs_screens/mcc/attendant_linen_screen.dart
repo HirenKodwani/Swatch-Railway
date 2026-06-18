@@ -21,10 +21,10 @@ class _AttendantLinenScreenState extends State<AttendantLinenScreen> {
   String selectedCoach = 'A1';
 
   final List<Map<String, dynamic>> linenItems = [
-    {'item': 'Bedsheet', 'distributed': 0, 'collected': 0, 'target': 72},
-    {'item': 'Pillow Cover', 'distributed': 0, 'collected': 0, 'target': 72},
-    {'item': 'Blanket', 'distributed': 0, 'collected': 0, 'target': 72},
-    {'item': 'Towel', 'distributed': 0, 'collected': 0, 'target': 72},
+    {'item': 'Bedsheet', 'distributed': 0, 'returned': 0, 'missing': 0, 'damaged': 0, 'target': 72},
+    {'item': 'Pillow Cover', 'distributed': 0, 'returned': 0, 'missing': 0, 'damaged': 0, 'target': 72},
+    {'item': 'Blanket', 'distributed': 0, 'returned': 0, 'missing': 0, 'damaged': 0, 'target': 72},
+    {'item': 'Towel', 'distributed': 0, 'returned': 0, 'missing': 0, 'damaged': 0, 'target': 72},
   ];
 
   @override
@@ -46,7 +46,7 @@ class _AttendantLinenScreenState extends State<AttendantLinenScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],
@@ -158,18 +158,22 @@ class _AttendantLinenScreenState extends State<AttendantLinenScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            const Text('Distribution', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
             const Divider(),
-            const SizedBox(height: 8),
             _buildCounterRow('Distributed', item['distributed'], (newVal) {
-              setState(() {
-                item['distributed'] = newVal;
-              });
+              setState(() => item['distributed'] = newVal);
             }),
-            const SizedBox(height: 12),
-            _buildCounterRow('Collected', item['collected'], (newVal) {
-              setState(() {
-                item['collected'] = newVal;
-              });
+            const SizedBox(height: 16),
+            const Text('Collection Status', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            const Divider(),
+            _buildCounterRow('Returned (Clean)', item['returned'], (newVal) {
+              setState(() => item['returned'] = newVal);
+            }),
+            _buildCounterRow('Missing', item['missing'], (newVal) {
+              setState(() => item['missing'] = newVal);
+            }),
+            _buildCounterRow('Damaged', item['damaged'], (newVal) {
+              setState(() => item['damaged'] = newVal);
             }),
           ],
         ),

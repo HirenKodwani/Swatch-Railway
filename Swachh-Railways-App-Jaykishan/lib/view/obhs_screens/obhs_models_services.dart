@@ -95,7 +95,7 @@
 //   final int position;
 //   final String displayNo;
 //   final String coachType;
-//   final String? assignedWorkerId;
+//   final String? assignedJanitorId;
 //   final String? assignedWorkerName;
 //   final String? roleTag;
 //   final String status;
@@ -108,7 +108,7 @@
 //     required this.position,
 //     required this.displayNo,
 //     required this.coachType,
-//     this.assignedWorkerId,
+//     this.assignedJanitorId,
 //     this.assignedWorkerName,
 //     this.roleTag,
 //     required this.status,
@@ -123,7 +123,7 @@
 //       position: json['position'] ?? 0,
 //       displayNo: json['displayNo'] ?? '',
 //       coachType: json['coachType'] ?? 'General',
-//       assignedWorkerId: json['assignedWorkerId'],
+//       assignedJanitorId: json['assignedJanitorId'],
 //       assignedWorkerName: json['assignedWorkerName'],
 //       roleTag: json['roleTag'],
 //       status: json['status'] ?? 'Unassigned',
@@ -140,7 +140,7 @@
 //     'position': position,
 //     'displayNo': displayNo,
 //     'coachType': coachType,
-//     'assignedWorkerId': assignedWorkerId,
+//     'assignedJanitorId': assignedJanitorId,
 //     'assignedWorkerName': assignedWorkerName,
 //     'roleTag': roleTag,
 //     'status': status,
@@ -167,8 +167,8 @@
 //     required this.id,
 //     required this.instanceId,
 //     required this.coachId,
-//     required this.workerId,
-//     required this.workerName,
+//     required this.janitorId,
+//     required this.janitorName,
 //     required this.workerDesignation,
 //     required this.assignedDate,
 //     this.unassignedDate,
@@ -183,8 +183,8 @@
 //       id: json['id'] ?? '',
 //       instanceId: json['instanceId'] ?? '',
 //       coachId: json['coachId'] ?? '',
-//       workerId: json['workerId'] ?? '',
-//       workerName: json['workerName'] ?? '',
+//       janitorId: json['janitorId'] ?? '',
+//       janitorName: json['janitorName'] ?? '',
 //       workerDesignation: json['workerDesignation'] ?? '',
 //       assignedDate: DateTime.parse(json['assignedDate'] ?? DateTime.now().toString()),
 //       unassignedDate: json['unassignedDate'] != null
@@ -448,8 +448,8 @@
 //         id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
 //         instanceId: instanceId,
 //         coachId: coachId,
-//         workerId: workerId,
-//         workerName: workerName,
+//         janitorId: workerId,
+//         janitorName: workerName,
 //         workerDesignation: workerDesignation,
 //         assignedDate: DateTime.now(),
 //         assignmentReason: assignmentReason,

@@ -139,7 +139,7 @@ class FirebaseOBHSService {
         totalCoaches += coaches.length;
         for (final c in coaches) {
           final cm = c as Map<String, dynamic>;
-          final wId = cm['workerId']?.toString() ?? '';
+          final wId = cm['janitorId']?.toString() ?? '';
           if (wId.isNotEmpty) {
             coachesWithWorkers++;
             totalWorkersAssigned++;

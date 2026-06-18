@@ -7,6 +7,7 @@ import 'cts_train_view_screen.dart';
 import 'cs_field_execution_screen.dart';
 import 'janitor_home_screen.dart';
 import 'attendant_linen_screen.dart';
+import 'attendant_home_screen.dart';
 
 class ObhsMccRouter extends StatelessWidget {
   final UserModel user;
@@ -27,7 +28,7 @@ class ObhsMccRouter extends StatelessWidget {
       case 'Janitor':
         return JanitorHomeScreen(user: user);
       case 'Attendant':
-        return AttendantLinenScreen(user: user);
+        return AttendantHomeScreen(user: user);
       default:
         return const Scaffold(
           body: Center(

@@ -11,7 +11,7 @@ class CoachData {
   final String displayNo;
   int? position;
   String? type;
-  String? assignedWorkerId;
+  String? assignedJanitorId;
   String? assignedWorkerName;
 
   CoachData({
@@ -19,7 +19,7 @@ class CoachData {
     required this.displayNo,
     this.position,
     this.type,
-    this.assignedWorkerId,
+    this.assignedJanitorId,
     this.assignedWorkerName,
   });
 }
@@ -109,7 +109,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           displayNo: 'C${(index + 1).toString().padLeft(2, '0')}',
           position: coach.coachPosition,
           type: coach.coachType,
-          assignedWorkerId: coach.workerId,
+          assignedJanitorId: coach.janitorId,
           assignedWorkerName: null,
         );
       }).toList();
@@ -220,7 +220,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
   bool isCoachComplete(CoachData coach) {
     return coach.position != null &&
         coach.type != null &&
-        coach.assignedWorkerId != null;
+        coach.assignedJanitorId != null;
   }
 
   bool allCoachesComplete() {
@@ -271,7 +271,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
         return CoachAssignment(
           coachPosition: coach.position!,
           coachType: coach.type!,
-          workerId: coach.assignedWorkerId,
+          janitorId: coach.assignedJanitorId,
         );
       }).toList();
 
@@ -1251,7 +1251,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: coach.assignedWorkerId,
+          value: coach.assignedJanitorId,
           hint: Text('Worker', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
           items: workers
               .map((w) => DropdownMenuItem(
@@ -1265,7 +1265,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
               .toList(),
           onChanged: (v) {
             setState(() {
-              coach.assignedWorkerId = v;
+              coach.assignedJanitorId = v;
               coach.assignedWorkerName =
                   workers.firstWhere((w) => w.uid == v).fullName;
             });

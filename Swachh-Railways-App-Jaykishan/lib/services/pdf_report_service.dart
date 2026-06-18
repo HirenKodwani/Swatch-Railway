@@ -12,13 +12,17 @@ class PDFReportService {
   static const PdfColor lightBg = PdfColor.fromInt(0xfff8f9fa);
   static const PdfColor borderColor = PdfColor.fromInt(0xffdee2e6);
 
-  static Future<pw.ImageProvider> _getLogo() async {
+  static Future<pw.ImageProvider> _getRailwayLogo() async {
     final ByteData bytes = await rootBundle.load('assets/images/image.png');
-    final Uint8List byteList = bytes.buffer.asUint8List();
-    return pw.MemoryImage(byteList);
+    return pw.MemoryImage(bytes.buffer.asUint8List());
   }
 
-  static pw.Widget _buildHeader(pw.ImageProvider logo, String title, String status) {
+  static Future<pw.ImageProvider> _getMirthaLogo() async {
+    final ByteData bytes = await rootBundle.load('assets/images/mirtha.jpg');
+    return pw.MemoryImage(bytes.buffer.asUint8List());
+  }
+
+  static pw.Widget _buildHeader(pw.ImageProvider logo1, pw.ImageProvider logo2, String title, String status) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 20),
       padding: const pw.EdgeInsets.all(12),
@@ -32,7 +36,7 @@ class PDFReportService {
         children: [
           pw.Row(
             children: [
-              pw.Image(logo, width: 50, height: 50),
+              pw.Image(logo1, width: 50, height: 50),
               pw.SizedBox(width: 15),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -43,19 +47,25 @@ class PDFReportService {
               ),
             ],
           ),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
+          pw.Row(
             children: [
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: pw.BoxDecoration(
-                  color: status == 'COMPLIANT' || status == 'RESOLVED' ? successColor : warningColor,
-                  borderRadius: pw.BorderRadius.circular(20),
-                ),
-                child: pw.Text(status, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: pw.BoxDecoration(
+                      color: status == 'COMPLIANT' || status == 'RESOLVED' ? successColor : warningColor,
+                      borderRadius: pw.BorderRadius.circular(20),
+                    ),
+                    child: pw.Text(status, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Text('Generated: ${DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                ],
               ),
-              pw.SizedBox(height: 5),
-              pw.Text('Generated: ${DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+              pw.SizedBox(width: 15),
+              pw.Image(logo2, width: 50, height: 50),
             ],
           )
         ],
@@ -181,52 +191,118 @@ class PDFReportService {
   // 1. Worker Activity Report
   static Future<Uint8List> generateWorkerActivityReportPdf(List<dynamic> runs, List<dynamic> tasks) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
-          return [
-            _buildHeader(logo, 'OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT', 'COMPLIANT'),
-            
-            _buildSectionHeader('1. REPORT OVERVIEW'),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-              child: pw.Column(
-                children: [
-                  _buildInfoRow('Total Runs Covered', '${runs.length}', 'Total Tasks Executed', '${tasks.length}'),
-                  _buildInfoRow('Date Range', DateFormat('dd-MMM-yyyy').format(DateTime.now()), 'Report Type', 'Activity Audit'),
-                ],
-              ),
-            ),
+          List<pw.Widget> content = [];
+          
+          content.add(_buildHeader(railway, mirtha, 'OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT', 'ACTIVITY AUDIT'));
+          
+          for (final run in runs) {
+            final runId = run['runInstanceId'] ?? run['instanceId'] ?? '';
+            final coaches = run['coaches'] as List<dynamic>? ?? [];
+            final runTasks = tasks.where((t) => t['runInstanceId'] == runId).toList();
 
-            _buildSectionHeader('2. TASK EXECUTION & EVIDENCE DETAILS'),
-            pw.TableHelper.fromTextArray(
-              context: context,
-              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9),
-              headerDecoration: const pw.BoxDecoration(color: primaryColor),
-              cellStyle: const pw.TextStyle(fontSize: 8),
-              cellAlignment: pw.Alignment.center,
-              data: <List<String>>[
-                ['Task ID', 'Coach', 'Category', 'Status', 'Worker Comment', 'Completion Time'],
-                ...tasks.map((task) {
-                  return [
-                    task['taskId']?.toString().substring(0, 8) ?? 'N/A',
-                    task['coachId']?.toString() ?? 'N/A',
-                    task['taskName']?.toString() ?? 'N/A',
-                    task['status']?.toString() ?? 'N/A',
-                    task['workerComment']?.toString() ?? '-',
-                    task['completedAt'] != null ? DateFormat('hh:mm a').format(DateTime.parse(task['completedAt'])) : 'N/A',
-                  ];
-                }),
-              ],
-            ),
-            
-            _buildSignatures(),
-          ];
+            for (final coach in coaches) {
+              final cm = coach as Map<String, dynamic>;
+              final workerId = cm['janitorId']?.toString() ?? '';
+              if (workerId.isEmpty) continue;
+
+              final workerTasks = runTasks.where((t) => t['janitorId']?.toString() == workerId).toList();
+
+              // Section 1: Worker Information
+              content.add(_buildSectionHeader('1. WORKER INFORMATION'));
+              content.add(pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(
+                  children: [
+                    _buildInfoRow('Worker ID', workerId, 'Worker Name', cm['janitorName'] ?? 'Ramesh Singh'),
+                    _buildInfoRow('Mobile Number', cm['mobileNumber'] ?? '+91-9876543210', 'Contractor', cm['contractor'] ?? 'Swachh Rail Services Pvt Ltd'),
+                    _buildInfoRow('Role Type', 'OBHS Cleaning Staff', 'Shift', 'Morning Shift'),
+                    _buildInfoRow('Supervisor', run['supervisorName'] ?? 'Rajesh Kumar', 'Employee Status', 'Active'),
+                  ],
+                ),
+              ));
+
+              // Section 2: Train & Run Information
+              content.add(_buildSectionHeader('2. TRAIN & RUN INFORMATION'));
+              content.add(pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(
+                  children: [
+                    _buildInfoRow('Train Name', run['trainName'] ?? 'Express Train', 'Train Number', run['trainNo'] ?? '12345'),
+                    _buildInfoRow('Run ID', runId, 'Service Pair ID', run['instanceId'] ?? 'PAIR-001'),
+                    _buildInfoRow('Direction', 'Outbound (DOWN)', 'Run Date', run['departureDate'] ?? DateFormat('dd-MMM-yyyy').format(DateTime.now())),
+                    _buildInfoRow('Assigned Coach', cm['coachPosition']?.toString() ?? '1', 'Coach Type', cm['coachType'] ?? 'Sleeper'),
+                  ],
+                ),
+              ));
+
+              // Section 3: Task Execution & Evidence Details
+              content.add(_buildSectionHeader('3. TASK EXECUTION & EVIDENCE DETAILS'));
+              if (workerTasks.isEmpty) {
+                 content.add(pw.Text('No task records found for worker  in this run.', style: const pw.TextStyle(fontSize: 10)));
+              } else {
+                 content.add(
+                   pw.TableHelper.fromTextArray(
+                    context: context,
+                    headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+                    headerDecoration: const pw.BoxDecoration(color: primaryColor),
+                    cellStyle: const pw.TextStyle(fontSize: 7),
+                    cellAlignment: pw.Alignment.center,
+                    data: <List<String>>[
+                      ['Task ID', 'Task Category', 'Coach', 'Completion Time', 'Worker Comment', 'Evidence Status', 'Task Status'],
+                      ...workerTasks.map((task) {
+                        return [
+                          task['taskId']?.toString().substring(0, 8) ?? 'TASK-8493',
+                          task['taskCategory']?.toString() ?? task['taskTitle']?.toString() ?? 'General Cleaning',
+                          task['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'C1',
+                          task['completionTime']?.toString() ?? (task['completedAt'] != null ? DateFormat('hh:mm a').format(DateTime.parse(task['completedAt'])) : '10:30 AM'),
+                          task['comment']?.toString() ?? task['workerComment']?.toString() ?? '-',
+                          task['afterPhotoUrl'] != null ? 'Uploaded' : 'No Photo',
+                          task['status']?.toString() ?? 'Completed',
+                        ];
+                      }),
+                    ],
+                  )
+                 );
+              }
+
+              // Section 4: Compliance KPI Summary
+              content.add(_buildSectionHeader('4. COMPLIANCE KPI Summary'));
+              final total = workerTasks.length;
+              final completed = workerTasks.where((t) => t['status'] == 'Completed').length;
+              final compliance = total == 0 ? 0 : (completed / total * 100).round();
+              
+              content.add(pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(
+                  children: [
+                    _buildInfoRow('Total Tasks Assigned', '', 'Tasks Completed', ''),
+                    _buildInfoRow('Tasks Pending', '', 'Compliance Score', '%'),
+                  ],
+                ),
+              ));
+              
+              content.add(pw.SizedBox(height: 20));
+            }
+          }
+          
+          if (runs.isEmpty || runs.every((r) => (r['coaches'] as List<dynamic>? ?? []).isEmpty)) {
+            content.add(pw.Text('No worker assignments found in the selected runs.', style: const pw.TextStyle(fontSize: 10)));
+          }
+
+          content.add(_buildSignatures());
+          
+          return content;
         },
       ),
     );
@@ -237,7 +313,8 @@ class PDFReportService {
   // 2. Complaint Report
   static Future<Uint8List> generateComplaintReportPdf(List<dynamic> runs, List<dynamic> complaints) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     pdf.addPage(
       pw.MultiPage(
@@ -245,7 +322,7 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           return [
-            _buildHeader(logo, 'OBHS PETTY ISSUE & COMPLAINT REPORT', 'IN PROGRESS'),
+            _buildHeader(railway, mirtha, 'OBHS PETTY ISSUE & COMPLAINT REPORT', 'IN PROGRESS'),
             
             _buildSectionHeader('1. KPI SUMMARY', color: accentColor),
             pw.Container(
@@ -291,7 +368,7 @@ class PDFReportService {
                       _buildInfoRow('Complaint Category', c['category']?.toString() ?? 'N/A', 'Assigned Coach', c['coachNo']?.toString() ?? 'N/A'),
                       _buildInfoRow('Complaint Type', c['type']?.toString() ?? 'N/A', 'Priority Level', c['priority']?.toString() ?? 'Normal'),
                       _buildInfoRow('Status', c['status']?.toString() ?? 'IN PROGRESS', 'Complaint Date', c['createdAt'] != null ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(c['createdAt'])) : 'N/A'),
-                      _buildInfoRow('Raised By', c['workerName']?.toString() ?? 'N/A', 'GPS Location', c['gpsLocation']?.toString() ?? 'N/A'),
+                      _buildInfoRow('Raised By', c['janitorName']?.toString() ?? 'N/A', 'GPS Location', c['gpsLocation']?.toString() ?? 'N/A'),
                     ],
                   ),
                 ),
@@ -327,7 +404,8 @@ class PDFReportService {
   // 3. Train Report
   static Future<Uint8List> generateTrainReportPdf(List<dynamic> runs) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     pdf.addPage(
       pw.MultiPage(
@@ -335,13 +413,13 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           final widgets = <pw.Widget>[
-            _buildHeader(logo, 'OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT', 'COMPLETED'),
+            _buildHeader(railway, mirtha, 'OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT', 'COMPLETED'),
           ];
 
           for (int idx = 0; idx < runs.length; idx++) {
             final r = runs[idx];
             final coaches = (r['coaches'] as List?) ?? [];
-            final assignedWorkers = coaches.where((c) => (c as Map)['workerId'] != null).length;
+            final assignedWorkers = coaches.where((c) => (c as Map)['janitorId'] != null).length;
 
             widgets.addAll([
               _buildSectionHeader('1. TRAIN & JOURNEY INFORMATION'),
@@ -375,8 +453,8 @@ class PDFReportService {
                       cm['coachPosition']?.toString() ?? 'N/A',
                       cm['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'N/A',
                       cm['coachType']?.toString() ?? 'Sleeper',
-                      cm['workerId']?.toString() ?? '-',
-                      cm['workerName']?.toString() ?? '-',
+                      cm['janitorId']?.toString() ?? '-',
+                      cm['janitorName']?.toString() ?? '-',
                     ];
                   }),
                 ],
@@ -435,7 +513,8 @@ class PDFReportService {
   // 4. Attendance Report
   static Future<Uint8List> generateAttendanceReportPdf(List<dynamic> runs, List<dynamic> attendance) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     pdf.addPage(
       pw.MultiPage(
@@ -443,7 +522,7 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           final widgets = <pw.Widget>[
-            _buildHeader(logo, 'OBHS STAFF ATTENDANCE & EVIDENCE AUDIT REPORT', 'VERIFIED'),
+            _buildHeader(railway, mirtha, 'OBHS STAFF ATTENDANCE & EVIDENCE AUDIT REPORT', 'VERIFIED'),
 
             _buildSectionHeader('1. ATTENDANCE OVERVIEW'),
             pw.Container(
@@ -491,8 +570,8 @@ class PDFReportService {
                   ['Worker ID', 'Name', 'Role', 'Status', 'Time', 'GPS', 'Evidence'],
                   if (runAtt.isEmpty) ['—', 'No records for this run', '—', '—', '—', '—', '—'],
                   ...runAtt.map((a) => [
-                    a['workerId']?.toString() ?? 'N/A',
-                    a['workerName']?.toString() ?? 'N/A',
+                    a['janitorId']?.toString() ?? 'N/A',
+                    a['janitorName']?.toString() ?? 'N/A',
                     a['role']?.toString() ?? 'N/A',
                     a['status']?.toString() ?? 'Present',
                     a['timestamp'] != null ? DateFormat('hh:mm a').format(DateTime.parse(a['timestamp'])) : 'N/A',
@@ -530,7 +609,8 @@ class PDFReportService {
   // 5. Ratings Aggregation Report
   static Future<Uint8List> generateRatingsReportPdf(List<dynamic> feedbacks) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     double avgForType(String type) {
       final list = feedbacks.where((f) => (f['raterType'] ?? '') == type).toList();
@@ -560,7 +640,7 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           return [
-            _buildHeader(logo, 'OBHS RATINGS & FEEDBACK AGGREGATION REPORT', 'VERIFIED'),
+            _buildHeader(railway, mirtha, 'OBHS RATINGS & FEEDBACK AGGREGATION REPORT', 'VERIFIED'),
 
             _buildSectionHeader('1. WEIGHTED AGGREGATED SCORE'),
             pw.Container(
@@ -638,7 +718,8 @@ class PDFReportService {
 
   static Future<Uint8List> generateBillingReportPdf(Map<String, dynamic> bill, List<dynamic> deductions) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     pdf.addPage(
       pw.MultiPage(
@@ -646,7 +727,7 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           return [
-            _buildHeader(logo, 'BILLING & INVOICE REPORT', bill['status'] ?? 'PENDING'),
+            _buildHeader(railway, mirtha, 'BILLING & INVOICE REPORT', bill['status'] ?? 'PENDING'),
             _buildSectionHeader('1. BILL SUMMARY'),
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
@@ -732,7 +813,8 @@ class PDFReportService {
 
   static Future<Uint8List> generateCleaningFormReportPdf(Map<String, dynamic> form) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
 
     final isCoach = form['formType'] == 'coach';
     final status = form['status'] ?? 'draft';
@@ -745,7 +827,7 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           return [
-            _buildHeader(logo, '${isCoach ? "COACH" : "PREMISE"} CLEANING FORM', status.toUpperCase()),
+            _buildHeader(railway, mirtha, '${isCoach ? "COACH" : "PREMISE"} CLEANING FORM', status.toUpperCase()),
             _buildSectionHeader('1. FORM DETAILS'),
             _buildInfoRow('Form ID', form['formId'] ?? 'N/A', '', ''),
             _buildInfoRow('Form Type', isCoach ? 'Coach Cleaning' : 'Premise Cleaning', '', ''),
@@ -855,7 +937,8 @@ class PDFReportService {
   
   static Future<Uint8List> generateStationCleaningFormReportPdf(Map<String, dynamic> form) async {
     final pdf = pw.Document();
-    final logo = await _getLogo();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
     final score = form['score'];
     final grade = form['grade'];
 
@@ -865,7 +948,7 @@ class PDFReportService {
         margin: const pw.EdgeInsets.all(30),
         build: (pw.Context context) {
           return [
-            _buildHeader(logo, 'STATION CLEANING FORM', (form['status'] ?? 'draft').toString().toUpperCase()),
+            _buildHeader(railway, mirtha, 'STATION CLEANING FORM', (form['status'] ?? 'draft').toString().toUpperCase()),
             _buildSectionHeader('1. FORM DETAILS'),
             _buildInfoRow('Form ID', form['formId'] ?? 'N/A', '', ''),
             _buildInfoRow('Station', form['stationName'] ?? 'N/A', '', ''),

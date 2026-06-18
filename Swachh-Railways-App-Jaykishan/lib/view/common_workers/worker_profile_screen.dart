@@ -181,7 +181,7 @@ class WorkerProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       _buildDetailRow(
-                          Icons.person_outline, 'Full Name', controller.workerName),
+                          Icons.person_outline, 'Full Name', controller.janitorName),
                       _buildDetailRow(
                           Icons.email, 'Email', controller.workerEmail),
                       _buildDetailRow(
@@ -330,7 +330,7 @@ class WorkerProfileScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  controller.workerName,
+                  controller.janitorName,
                   style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,

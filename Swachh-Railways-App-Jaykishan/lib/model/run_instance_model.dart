@@ -167,31 +167,34 @@ class RunInstanceModel {
 class CoachAssignment {
   final int coachPosition;
   final String coachType;
-  final String? workerId;
-  final String? workerName;
+  final String? janitorId;
+  final String? janitorName;
   final String? attendantId;
   final String? attendantName;
-  final List<String>? tasks;
+  final List<String>? janitorTasks;
+  final List<String>? attendantTasks;
 
   CoachAssignment({
     required this.coachPosition,
     required this.coachType,
-    this.workerId,
-    this.workerName,
+    this.janitorId,
+    this.janitorName,
     this.attendantId,
     this.attendantName,
-    this.tasks,
+    this.janitorTasks,
+    this.attendantTasks,
   });
 
   factory CoachAssignment.fromJson(Map<String, dynamic> json) {
     return CoachAssignment(
       coachPosition: json['coachPosition'] as int? ?? 0,
       coachType: json['coachType'] as String? ?? '',
-      workerId: json['workerId'] as String?,
-      workerName: json['workerName'] as String?,
+      janitorId: json['janitorId'] as String?,
+      janitorName: json['janitorName'] as String?,
       attendantId: json['attendantId'] as String?,
       attendantName: json['attendantName'] as String?,
-      tasks: (json['tasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      janitorTasks: (json['janitorTasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      attendantTasks: (json['attendantTasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
     );
   }
 
@@ -199,31 +202,34 @@ class CoachAssignment {
     return {
       'coachPosition': coachPosition,
       'coachType': coachType,
-      if (workerId != null && workerId!.isNotEmpty) 'workerId': workerId,
-      if (workerName != null && workerName!.isNotEmpty) 'workerName': workerName,
+      if (janitorId != null && janitorId!.isNotEmpty) 'janitorId': janitorId,
+      if (janitorName != null && janitorName!.isNotEmpty) 'janitorName': janitorName,
       if (attendantId != null && attendantId!.isNotEmpty) 'attendantId': attendantId,
       if (attendantName != null && attendantName!.isNotEmpty) 'attendantName': attendantName,
-      if (tasks != null) 'tasks': tasks,
+      if (janitorTasks != null) 'janitorTasks': janitorTasks,
+      if (attendantTasks != null) 'attendantTasks': attendantTasks,
     };
   }
 
   CoachAssignment copyWith({
     int? coachPosition,
     String? coachType,
-    String? workerId,
-    String? workerName,
+    String? janitorId,
+    String? janitorName,
     String? attendantId,
     String? attendantName,
-    List<String>? tasks,
+    List<String>? janitorTasks,
+    List<String>? attendantTasks,
   }) {
     return CoachAssignment(
       coachPosition: coachPosition ?? this.coachPosition,
       coachType: coachType ?? this.coachType,
-      workerId: workerId ?? this.workerId,
-      workerName: workerName ?? this.workerName,
+      janitorId: janitorId ?? this.janitorId,
+      janitorName: janitorName ?? this.janitorName,
       attendantId: attendantId ?? this.attendantId,
       attendantName: attendantName ?? this.attendantName,
-      tasks: tasks ?? this.tasks,
+      janitorTasks: janitorTasks ?? this.janitorTasks,
+      attendantTasks: attendantTasks ?? this.attendantTasks,
     );
   }
 }

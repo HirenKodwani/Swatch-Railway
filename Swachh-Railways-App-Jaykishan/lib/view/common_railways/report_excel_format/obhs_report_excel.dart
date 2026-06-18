@@ -162,10 +162,18 @@ class OBHSReportExcelGenerator {
       final xlsio.Picture picture = s.pictures.addStream(row, 1, byteList);
       picture.height = 44;
       picture.width = 44;
-    } catch (_) {/* logo not found — skip */}
+    } catch (_) {}
+
+    try {
+      final ByteData bytes2 = await rootBundle.load('assets/images/mirtha.jpg');
+      final Uint8List byteList2 = bytes2.buffer.asUint8List();
+      final xlsio.Picture picture2 = s.pictures.addStream(row, 8, byteList2);
+      picture2.height = 44;
+      picture2.width = 44;
+    } catch (_) {}
 
     // Title spanning columns 2-8
-    s.getRangeByIndex(row, 2, row, 8).merge();
+    s.getRangeByIndex(row, 2, row, 7).merge();
     final titleStyle = s.workbook.styles.add('ts_${title.hashCode.abs()}');
     titleStyle.backColor = _navyBlue;
     titleStyle.fontColor = _white;
@@ -298,9 +306,9 @@ class OBHSReportExcelGenerator {
           cm['coachPosition']?.toString() ?? '1',
           cm['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'C1',
           cm['coachType'] ?? 'Sleeper',
-          cm['workerId'] != null ? '1' : '0',
-          cm['workerId'] ?? 'W-10293',
-          cm['workerName'] ?? 'Ramesh Singh',
+          cm['janitorId'] != null ? '1' : '0',
+          cm['janitorId'] ?? 'W-10293',
+          cm['janitorName'] ?? 'Ramesh Singh',
           run['supervisorName'] ?? 'Rajesh Kumar',
           'OPERATIONAL',
         ];
@@ -318,7 +326,7 @@ class OBHSReportExcelGenerator {
       final kpiMetrics = [
         ['Total Coaches', coaches.length.toString()],
         ['Total Workers Assigned',
-            coaches.where((c) => (c as Map)['workerId'] != null).length.toString()],
+            coaches.where((c) => (c as Map)['janitorId'] != null).length.toString()],
         ['Attendance Compliance', '98%'],
         ['Task Completion Rate', '96%'],
         ['Complaint Resolution Rate', '94%'],
@@ -418,7 +426,7 @@ class OBHSReportExcelGenerator {
       row = _kvRow(s, row, 'Run Status', run['status'] ?? 'Scheduled',
           'Total Assigned Workers',
           (run['coaches'] as List? ?? [])
-              .where((c) => (c as Map)['workerId'] != null)
+              .where((c) => (c as Map)['janitorId'] != null)
               .length
               .toString(),
           ls,
@@ -564,17 +572,17 @@ class OBHSReportExcelGenerator {
       // For each coach/worker in this run
       for (final coach in coaches) {
         final cm = coach as Map<String, dynamic>;
-        final workerId = cm['workerId']?.toString() ?? '';
+        final workerId = cm['janitorId']?.toString() ?? '';
         if (workerId.isEmpty) continue;
 
         final workerTasks = runTasks
-            .where((t) => t['workerId']?.toString() == workerId)
+            .where((t) => t['janitorId']?.toString() == workerId)
             .toList();
 
         // Section 1: Worker Information
         row = _sectionHeader(s, row, '1. WORKER INFORMATION', hs);
         row = _kvRow(s, row, 'Worker ID', workerId, 'Worker Name',
-            cm['workerName'] ?? 'Ramesh Singh', ls, vs);
+            cm['janitorName'] ?? 'Ramesh Singh', ls, vs);
         row = _kvRow(s, row, 'Mobile Number', cm['mobileNumber'] ?? '+91-9876543210',
             'Contractor', cm['contractor'] ?? 'Swachh Rail Services Pvt Ltd', ls, vs);
         row = _kvRow(s, row, 'Role Type', 'OBHS Cleaning Staff', 'Shift',
@@ -756,7 +764,7 @@ class OBHSReportExcelGenerator {
         row = _sectionHeader(s, row, '2. WORKER COMPLAINT INFORMATION', hs);
         row = _kvRow(s, row, 'Complaint ID',
             cmp['complaintId']?.toString() ?? 'CMP-9921', 'Complaint Raised By',
-            cmp['workerName']?.toString() ?? 'Ramesh Singh', ls, vs);
+            cmp['janitorName']?.toString() ?? 'Ramesh Singh', ls, vs);
         row = _kvRow(s, row, 'Complaint Category',
             cmp['category']?.toString() ?? 'Equipment Failure', 'Assigned Coach',
             cmp['coachNo']?.toString() ?? 'C1', ls, vs);
@@ -844,7 +852,7 @@ class OBHSReportExcelGenerator {
         // Approval
         row = _sectionHeader(s, row, 'APPROVAL & AUTHENTICATION', hs);
         row = _kvRow(s, row, 'Complaint Raised By',
-            cmp['workerName']?.toString() ?? '-', 'Acknowledged By',
+            cmp['janitorName']?.toString() ?? '-', 'Acknowledged By',
             'Railway Electrical Dept.', ls, vs);
         row = _kvRow(s, row, 'Report Verified By', 'OBHS Monitoring System',
             'Generated On', _nowFmt.format(DateTime.now()), ls, vs);

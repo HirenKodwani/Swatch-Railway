@@ -3,27 +3,26 @@ import 'package:crm_train/model/user_model.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 import 'obhs_coach_checklist_screen.dart';
-import 'package:crm_train/utills/app_colors.dart';
+import 'attendant_linen_screen.dart';
 
 import '../../../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'obhs_attendance_screen.dart';
 
-class JanitorHomeScreen extends StatefulWidget {
+class AttendantHomeScreen extends StatefulWidget {
   final UserModel user;
 
-  const JanitorHomeScreen({super.key, required this.user});
+  const AttendantHomeScreen({super.key, required this.user});
 
   @override
-  State<JanitorHomeScreen> createState() => _JanitorHomeScreenState();
+  State<AttendantHomeScreen> createState() => _AttendantHomeScreenState();
 }
 
-class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
-  // Placeholder dynamic coaches.
-  // In reality, this list should be fetched from the API based on the janitor's workerId.
-  final List<Map<String, dynamic>> myCoaches = [
-    {'coach': 'B1', 'tasks': 5, 'completed': 1, 'status': 'in_progress'},
-    {'coach': 'B2', 'tasks': 5, 'completed': 0, 'status': 'pending'},
+class _AttendantHomeScreenState extends State<AttendantHomeScreen> {
+  // Placeholder dynamic coaches for Attendant (AC Coaches only)
+  final List<Map<String, dynamic>> myAcCoaches = [
+    {'coach': 'A1', 'tasks': 4, 'completed': 1, 'status': 'in_progress'},
+    {'coach': 'A2', 'tasks': 4, 'completed': 0, 'status': 'pending'},
   ];
 
   @override
@@ -32,7 +31,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'My Duty (Janitor)',
+          'My Duty (Attendant)',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -57,7 +56,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(
-              'My Assigned Coaches',
+              'My Assigned AC Coaches',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -65,15 +64,15 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
               ),
             ),
           ),
-          if (myCoaches.isEmpty)
+          if (myAcCoaches.isEmpty)
             _buildEmptyState()
           else
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: myCoaches.length,
+                itemCount: myAcCoaches.length,
                 itemBuilder: (context, index) {
-                  return _buildCoachTile(myCoaches[index]);
+                  return _buildCoachTile(myAcCoaches[index]);
                 },
               ),
             ),
@@ -81,11 +80,12 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // Open global complaints screen
+          // Quick navigate to Linen module
+          Navigator.push(context, MaterialPageRoute(builder: (_) => AttendantLinenScreen(user: widget.user)));
         },
         backgroundColor: kRailwayBlue,
-        icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
-        label: const Text('Report Issue', style: TextStyle(color: Colors.white)),
+        icon: const Icon(Icons.local_laundry_service, color: Colors.white),
+        label: const Text('Manage Linen', style: TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -156,9 +156,9 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildOverviewCard('Pending', '5', Icons.pending_actions, Colors.orange),
-              _buildOverviewCard('Completed', '1', Icons.check_circle, Colors.green),
-              _buildOverviewCard('Complaints', '0', Icons.report_problem, Colors.red),
+              _buildOverviewCard('Linen Tasks', '2', Icons.local_laundry_service, Colors.orange),
+              _buildOverviewCard('Completed', '0', Icons.check_circle, Colors.green),
+              _buildOverviewCard('Requests', '1', Icons.person_pin_circle, Colors.red),
             ],
           ),
         ],
@@ -202,7 +202,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
             Icon(Icons.check_circle_outline, size: 80, color: Colors.grey[300]),
             const SizedBox(height: 16),
             const Text(
-              'No coaches assigned yet.',
+              'No AC coaches assigned.',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -268,7 +268,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.train, color: kRailwayBlue, size: 32),
+                      const Icon(Icons.airline_seat_recline_extra, color: kRailwayBlue, size: 32),
                       const SizedBox(width: 12),
                       Text(
                         'Coach ${coach['coach']}',
@@ -302,7 +302,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Tasks: ${coach['completed']} / ${coach['tasks']}',
+                    'Safety/Linen Tasks: ${coach['completed']} / ${coach['tasks']}',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[700],
@@ -342,7 +342,7 @@ class _JanitorHomeScreenState extends State<JanitorHomeScreen> {
                     ),
                   ),
                   child: const Text(
-                    'View Checklist',
+                    'View Coach Tasks',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

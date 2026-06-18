@@ -1,303 +1,23 @@
-import 'package:flutter/material.dart';
-import 'package:crm_train/model/user_model.dart';
-import 'package:crm_train/model/run_instance_model.dart';
-import 'package:crm_train/model/railway_worker_model.dart';
-import 'package:crm_train/repositories/obhs_repository.dart';
-import 'package:crm_train/utills/app_colors.dart';
+import sys
+import re
 
-class CaManageAssignmentsScreen extends StatefulWidget {
-  final UserModel user;
-  final String? runInstanceId;
-  final RunInstanceModel? initialInstance;
+file_path = r'lib\view\obhs_screens\mcc\ca_manage_assignments_screen.dart'
+with open(file_path, 'r', encoding='utf-8') as f:
+    content = f.read()
 
-  const CaManageAssignmentsScreen({
-    super.key,
-    required this.user,
-    this.runInstanceId,
-    this.initialInstance,
-  });
+# Replace tasks usage in UI
+content = content.replace(
+    'children: (coach.tasks ?? allTasks).map((t) {',
+    'children: [...(coach.janitorTasks ?? []), ...(coach.attendantTasks ?? [])].map((t) {'
+)
 
-  @override
-  State<CaManageAssignmentsScreen> createState() => _CaManageAssignmentsScreenState();
-}
+# Replace _openEditDialog completely
+pattern = r'(  void _openEditDialog\(int index\) \{.*?)^\}'
+match = re.search(pattern, content, re.DOTALL | re.MULTILINE)
 
-class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
-  List<CoachAssignment> coaches = [];
-  List<RailwayWorkerModel> workers = [];
-  bool isLoading = true;
-  String? errorMessage;
-  RunInstanceModel? currentInstance;
-
-  final List<String> allTasks = [
-    'Toilet Cleaning',
-    'Aisle Mopping',
-    'Garbage Collection',
-    'Window Cleaning',
-    'Mirror Cleaning',
-    'Linen Distribution'
-  ];
-
-  bool _isAcCoach(String coachName) {
-    final upper = coachName.toUpperCase();
-    return upper.startsWith('A') || 
-           upper.startsWith('B') || 
-           upper.startsWith('H') || 
-           upper.startsWith('M') || 
-           upper.startsWith('C') || 
-           upper.startsWith('E');
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    try {
-      setState(() { isLoading = true; errorMessage = null; });
-
-      final fetchedWorkers = await OBHSRepository.getWorkers();
-      RunInstanceModel? instance;
-
-      if (widget.initialInstance != null) {
-        instance = widget.initialInstance;
-      } else {
-        final allRuns = await OBHSRepository.getAllRunInstances();
-        if (widget.runInstanceId != null) {
-          instance = allRuns.cast<RunInstanceModel?>().firstWhere(
-            (r) => r?.runInstanceId == widget.runInstanceId || r?.id == widget.runInstanceId,
-            orElse: () => null,
-          );
-        } else {
-          // Auto-pick first active or PLANNED instance
-          instance = allRuns.cast<RunInstanceModel?>().firstWhere(
-            (r) => r?.status == 'Active' || r?.status == 'PLANNED' || r?.status == 'ALLOCATED' || r?.status == 'READY',
-            orElse: () => allRuns.isNotEmpty ? allRuns.first : null,
-          );
-        }
-      }
-
-      if (instance == null) {
-        setState(() {
-          errorMessage = 'Run instance not found.';
-          isLoading = false;
-        });
-        return;
-      }
-
-      setState(() {
-        currentInstance = instance;
-        coaches = List.from(instance!.coaches);
-        workers = fetchedWorkers;
-        isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Failed to load data: $e';
-        isLoading = false;
-      });
-    }
-  }
-
-  List<RailwayWorkerModel> get _janitors =>
-      workers.where((w) => w.role == 'janitor' || w.userType == 'worker').toList();
-
-  List<RailwayWorkerModel> get _attendants =>
-      workers.where((w) => w.role == 'attendant' || w.userType == 'worker').toList();
-
-  String _workerName(String? workerId) {
-    if (workerId == null) return 'Not Assigned';
-    final match = workers.cast<RailwayWorkerModel?>().firstWhere(
-      (w) => w?.uid == workerId, orElse: () => null);
-    return match?.fullName ?? 'Unknown';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          'Manage Tasks & Assignments',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: kRailwayBlue,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : errorMessage != null
-              ? Center(child: Text(errorMessage!, style: const TextStyle(color: kErrorRed)))
-              : Column(
-                  children: [
-                    _buildTrainHeader(),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: coaches.length,
-                        itemBuilder: (context, index) =>
-                            _buildCoachAssignmentCard(coaches[index], index),
-                      ),
-                    ),
-                  ],
-                ),
-    );
-  }
-
-  Widget _buildTrainHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        color: kRailwayBlue,
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Train: ${currentInstance?.trainNo ?? 'N/A'} - ${currentInstance?.trainName ?? ''}',
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Assign Janitors to all coaches and Attendants to AC coaches. Edit specific tasks required for each coach.',
-            style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCoachAssignmentCard(CoachAssignment coach, int index) {
-    final coachLabel = coach.coachPosition.toString();
-    final bool isAc = _isAcCoach(coach.coachType);
-    final janitorName = _workerName(coach.janitorId);
-    final attendantName = coach.attendantId != null ? _workerName(coach.attendantId) : null;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: kRailwayBlue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        coach.coachType.isEmpty ? 'C$coachLabel' : '${coach.coachType}$coachLabel',
-                        style: const TextStyle(color: kRailwayBlue, fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    if (isAc)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue[200]!),
-                        ),
-                        child: Text('AC Coach',
-                            style: TextStyle(fontSize: 10, color: Colors.blue[800], fontWeight: FontWeight.bold)),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.orange[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange[200]!),
-                        ),
-                        child: Text('Non-AC',
-                            style: TextStyle(fontSize: 10, color: Colors.orange[800], fontWeight: FontWeight.bold)),
-                      ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit, color: kRailwayBlue),
-                  onPressed: () => _openEditDialog(index),
-                  tooltip: 'Edit Tasks & Assignment',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.cleaning_services, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Janitor: $janitorName',
-                    style: TextStyle(
-                      fontWeight: coach.janitorId == null ? FontWeight.normal : FontWeight.bold,
-                      color: coach.janitorId == null ? kErrorRed : Colors.black87,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.local_laundry_service, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    isAc
-                        ? 'Attendant: ${attendantName ?? "Not Assigned"}'
-                        : 'Attendant: Not Applicable (Non-AC)',
-                    style: TextStyle(
-                      fontWeight: isAc && attendantName != null ? FontWeight.bold : FontWeight.normal,
-                      color: !isAc ? Colors.grey : (attendantName == null ? kWarningOrange : Colors.black87),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text('Assigned Tasks:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [...(coach.janitorTasks ?? []), ...(coach.attendantTasks ?? [])].map((t) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Text(t, style: const TextStyle(fontSize: 11)),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openEditDialog(int index) {
+if match:
+    old_method = match.group(1) + '}\n'
+    new_method = '''  void _openEditDialog(int index) {
     final coach = coaches[index];
     final bool isAc = _isAcCoach(coach.coachType);
 
@@ -548,3 +268,11 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
       },
     );
   }
+'''
+    
+    content = content.replace(old_method, new_method)
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+else:
+    print("Method _openEditDialog not found!")

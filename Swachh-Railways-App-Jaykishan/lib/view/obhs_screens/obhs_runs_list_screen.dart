@@ -1,6 +1,7 @@
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:crm_train/utills/app_colors.dart';
 import '../../model/run_instance_model.dart';
 import '../../repositories/obhs_repository.dart';
 import '../../model/railway_worker_model.dart';
@@ -584,7 +585,7 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
 
   Widget _buildInstanceCard(RunInstanceModel instance) {
     final assignedCount =
-        instance.coaches.where((c) => c.workerId != null).length;
+        instance.coaches.where((c) => c.janitorId != null).length;
     final totalCount = instance.coaches.length;
 
     return InkWell(
@@ -1047,8 +1048,8 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                                     children: [
                                       Row(
                                         children: [
-                                          if (coach.workerId != null)
-                                            Text('Worker: ${coach.workerName}',
+                                          if (coach.janitorId != null)
+                                            Text('Worker: ${coach.janitorName}',
                                               style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                                             )
                                           else
@@ -1069,10 +1070,10 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                                             style: TextStyle(fontSize: 10, color: Colors.grey[500]),
                                           ),
                                         ),
-                                      if (coach.tasks != null && coach.tasks!.isNotEmpty)
+                                      if ((coach.janitorTasks != null && coach.janitorTasks!.isNotEmpty) || (coach.attendantTasks != null && coach.attendantTasks!.isNotEmpty))
                                         Padding(
                                           padding: const EdgeInsets.only(top: 2),
-                                          child: Text('Tasks: ${coach.tasks!.join(', ')}',
+                                          child: Text('Tasks: ${[...(coach.janitorTasks ?? []), ...(coach.attendantTasks ?? [])].join(', ')}',
                                             style: TextStyle(fontSize: 10, color: Colors.grey[400]),
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -1125,23 +1126,39 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
     );
 
     try {
-      final workers = await OBHSRepository.getWorkers();
+      final workers = await OBHSRepository.getRailwayWorkers();
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
 
       // Initial state for dialog
-      RailwayWorkerModel? selectedJanitor = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.workerId, orElse: () => null);
+      RailwayWorkerModel? selectedJanitor = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.janitorId, orElse: () => null);
       RailwayWorkerModel? selectedAttendant = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.attendantId, orElse: () => null);
-      List<String> selectedTasks = List.from(coach.tasks ?? ['Toilet Cleaning', 'Aisle Mopping', 'Garbage Collection']);
+      List<String> selectedJanitorTasks = List.from(coach.janitorTasks ?? ['Floor Cleaning', 'Toilet Cleaning', 'Dustbin Cleaning']);
+      List<String> selectedAttendantTasks = List.from(coach.attendantTasks ?? ['Passenger Assistance', 'Linen Distribution']);
 
-      final List<String> allTasks = [
+      final List<String> allJanitorTasks = [
+        'Floor Cleaning',
         'Toilet Cleaning',
-        'Aisle Mopping',
-        'Garbage Collection',
-        'Window Cleaning',
-        'Mirror Cleaning',
-        'Linen Distribution'
+        'Wash Basin Cleaning',
+        'Dustbin Cleaning',
+        'Vestibule Cleaning',
+        'Emergency Cleaning',
+        'Bio-Toilet Cleaning',
+        'Coach Deep Cleaning',
       ];
+
+      final List<String> allAttendantTasks = [
+        'Passenger Assistance',
+        'Linen Distribution',
+        'Linen Collection',
+        'Coach Monitoring',
+        'Water Availability Check',
+        'Toilet Monitoring',
+        'Passenger Complaint Handling',
+        'Minor Cleaning Checks',
+      ];
+      
+      bool isJanitorTab = true;
 
       await showDialog(
         context: context,
@@ -1157,73 +1174,139 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Assign Janitor', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<RailwayWorkerModel>(
-                          value: selectedJanitor,
-                          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                          items: workers.map((w) => DropdownMenuItem(value: w, child: Text(w.fullName))).toList(),
-                          onChanged: (val) => setStateDialog(() => selectedJanitor = val),
-                          hint: const Text('Select Janitor'),
-                        ),
-                        const SizedBox(height: 20),
-                        
+                        // Role Selector Toggle
                         Row(
                           children: [
-                            const Text('Assign Attendant', style: TextStyle(fontWeight: FontWeight.bold)),
-                            if (!isAc) 
-                              const Padding(
-                                padding: EdgeInsets.only(left: 8.0),
-                                child: Text('(AC Only)', style: TextStyle(color: Colors.red, fontSize: 12)),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setStateDialog(() => isJanitorTab = true),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isJanitorTab ? kRailwayBlue : Colors.grey[200],
+                                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                                    border: Border.all(color: isJanitorTab ? kRailwayBlue : Colors.grey[300]!),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text('Janitor', style: TextStyle(color: isJanitorTab ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                                ),
                               ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setStateDialog(() => isJanitorTab = false),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: !isJanitorTab ? kRailwayBlue : Colors.grey[200],
+                                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                                    border: Border.all(color: !isJanitorTab ? kRailwayBlue : Colors.grey[300]!),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text('Attendant', style: TextStyle(color: !isJanitorTab ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ),
                           ],
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<RailwayWorkerModel>(
-                          value: selectedAttendant,
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            fillColor: isAc ? Colors.white : Colors.grey[200],
-                            filled: !isAc,
-                          ),
-                          items: isAc 
-                              ? workers.map((w) => DropdownMenuItem(value: w, child: Text(w.fullName))).toList()
-                              : const [],
-                          onChanged: isAc ? (val) => setStateDialog(() => selectedAttendant = val) : null,
-                          hint: Text(isAc ? 'Select Attendant' : 'Not Applicable'),
-                          disabledHint: const Text('Non-AC Coach'),
                         ),
                         const SizedBox(height: 20),
                         
-                        const Text('Edit Coach Tasks', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey[300]!),
-                            borderRadius: BorderRadius.circular(8),
+                        if (isJanitorTab) ...[
+                          const Text('Assign Janitor', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<RailwayWorkerModel>(
+                            value: selectedJanitor,
+                            decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                            items: workers.map((w) => DropdownMenuItem(value: w, child: Text(w.fullName))).toList(),
+                            onChanged: (val) => setStateDialog(() => selectedJanitor = val),
+                            hint: const Text('Select Janitor'),
                           ),
-                          child: Column(
-                            children: allTasks.map((task) {
-                              final isSelected = selectedTasks.contains(task);
-                              return CheckboxListTile(
-                                title: Text(task, style: const TextStyle(fontSize: 14)),
-                                value: isSelected,
-                                activeColor: kRailwayBlue,
-                                dense: true,
-                                onChanged: (checked) {
-                                  setStateDialog(() {
-                                    if (checked == true) {
-                                      selectedTasks.add(task);
-                                    } else {
-                                      selectedTasks.remove(task);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
+                          const SizedBox(height: 20),
+                          const Text('Janitor Tasks (Cleaning)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              children: allJanitorTasks.map((task) {
+                                final isSelected = selectedJanitorTasks.contains(task);
+                                return CheckboxListTile(
+                                  title: Text(task, style: const TextStyle(fontSize: 14)),
+                                  value: isSelected,
+                                  activeColor: kRailwayBlue,
+                                  dense: true,
+                                  onChanged: (checked) {
+                                    setStateDialog(() {
+                                      if (checked == true) {
+                                        selectedJanitorTasks.add(task);
+                                      } else {
+                                        selectedJanitorTasks.remove(task);
+                                      }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
                           ),
-                        ),
+                        ] else ...[
+                          Row(
+                            children: [
+                              const Text('Assign Attendant', style: TextStyle(fontWeight: FontWeight.bold)),
+                              if (!isAc) 
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8.0),
+                                  child: Text('(AC Only)', style: TextStyle(color: Colors.red, fontSize: 12)),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<RailwayWorkerModel>(
+                            value: selectedAttendant,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              fillColor: isAc ? Colors.white : Colors.grey[200],
+                              filled: !isAc,
+                            ),
+                            items: isAc 
+                                ? workers.map((w) => DropdownMenuItem(value: w, child: Text(w.fullName))).toList()
+                                : const [],
+                            onChanged: isAc ? (val) => setStateDialog(() => selectedAttendant = val) : null,
+                            hint: Text(isAc ? 'Select Attendant' : 'Not Applicable'),
+                            disabledHint: const Text('Non-AC Coach'),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text('Attendant Tasks (Linen/Safety)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              children: allAttendantTasks.map((task) {
+                                final isSelected = selectedAttendantTasks.contains(task);
+                                return CheckboxListTile(
+                                  title: Text(task, style: const TextStyle(fontSize: 14)),
+                                  value: isSelected,
+                                  activeColor: kRailwayBlue,
+                                  dense: true,
+                                  onChanged: isAc ? (checked) {
+                                    setStateDialog(() {
+                                      if (checked == true) {
+                                        selectedAttendantTasks.add(task);
+                                      } else {
+                                        selectedAttendantTasks.remove(task);
+                                      }
+                                    });
+                                  } : null,
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1237,24 +1320,22 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                     onPressed: () async {
                       Navigator.pop(ctx);
                       
-                      // Show saving...
                       showDialog(
                         context: context,
                         barrierDismissible: false,
                         builder: (context) => const Center(child: CircularProgressIndicator()),
                       );
 
-                      // Modify the instance coaches locally
                       final updatedCoaches = List<CoachAssignment>.from(instance.coaches);
                       updatedCoaches[coachIndex] = updatedCoaches[coachIndex].copyWith(
-                        workerId: selectedJanitor?.uid,
-                        workerName: selectedJanitor?.fullName,
+                        janitorId: selectedJanitor?.uid,
+                        janitorName: selectedJanitor?.fullName,
                         attendantId: selectedAttendant?.uid,
                         attendantName: selectedAttendant?.fullName,
-                        tasks: selectedTasks,
+                        janitorTasks: selectedJanitorTasks,
+                        attendantTasks: selectedAttendantTasks,
                       );
 
-                      // Update in backend
                       await OBHSRepository.updateRunInstance(
                         runInstanceId: instance.runInstanceId ?? instance.id ?? '',
                         coaches: updatedCoaches,
@@ -1281,7 +1362,10 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
 
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // close loading dialog
+        // Find navigator safely
+        if (Navigator.canPop(context)) {
+            Navigator.pop(context); // close loading dialog
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
