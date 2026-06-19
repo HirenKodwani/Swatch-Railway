@@ -3037,79 +3037,6 @@ const convertToDecimalDays = (timeStr) => {
   return d + (h / 24) + (m / 1440);
 };
 
-async function generateInitialWeeklyRuns(train, instanceIds) {
-  const { trainNo, trainName, days, outboundDurationStr, layoverDestStr, inboundDurationStr, journeyStartTime } = train;
-  const daysMap = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
-  const targetDays = (days || []).map(d => daysMap[d.toLowerCase()]);
-  
-  const outboundDurationDays = convertToDecimalDays(outboundDurationStr);
-  const layoverDestDays = convertToDecimalDays(layoverDestStr);
-  
-  let instanceIndex = 0;
-  const batch = db.batch();
-
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const runDate = new Date(today);
-    runDate.setDate(today.getDate() + dayOffset);
-    
-    if (targetDays.includes(runDate.getDay())) {
-      const instanceId = instanceIds[instanceIndex % instanceIds.length];
-      instanceIndex++;
-
-      // 1. OUTBOUND RUN
-      const outboundDateStr = runDate.toISOString().split('T')[0];
-      const outboundRunId = `${trainNo}_OUT_${outboundDateStr}`;
-      
-      const [startH, startM] = (journeyStartTime || "10:00").split(':').map(Number);
-      const outboundStart = new Date(runDate);
-      outboundStart.setHours(startH, startM, 0, 0);
-
-      const outboundEnd = new Date(outboundStart.getTime() + (outboundDurationDays * 24 * 60 * 60 * 1000));
-      
-      batch.set(db.collection('RunInstance').doc(outboundRunId), {
-        uid: outboundRunId,
-        instanceId,
-        trainNo,
-        trainName,
-        trainType: 'Outbound',
-        departureDate: outboundDateStr,
-        scheduledDeparture: outboundStart.toISOString(),
-        scheduledArrival: outboundEnd.toISOString(),
-        status: 'PLANNED',
-        coaches: [], // Will be filled during allocation
-        parentTrainId: train.uid,
-        createdAt: new Date().toISOString()
-      });
-
-      // 2. INBOUND RUN (After Layover)
-      const inboundStart = new Date(outboundEnd.getTime() + (layoverDestDays * 24 * 60 * 60 * 1000));
-      const inboundDateStr = inboundStart.toISOString().split('T')[0];
-      const inboundRunId = `${trainNo}_IN_${inboundDateStr}`;
-      
-      const inboundDurationDays = convertToDecimalDays(inboundDurationStr);
-      const inboundEnd = new Date(inboundStart.getTime() + (inboundDurationDays * 24 * 60 * 60 * 1000));
-
-      batch.set(db.collection('RunInstance').doc(inboundRunId), {
-        uid: inboundRunId,
-        instanceId,
-        trainNo,
-        trainName,
-        trainType: 'Inbound',
-        departureDate: inboundDateStr,
-        scheduledDeparture: inboundStart.toISOString(),
-        scheduledArrival: inboundEnd.toISOString(),
-        status: 'PLANNED',
-        coaches: [],
-        parentTrainId: train.uid,
-        createdAt: new Date().toISOString()
-      });
-    }
-  }
-  await batch.commit();
-}
-
 app.post('/api/trains', verifyToken, async (req, res) => {
   try {
     const allowedFields = [
@@ -3209,18 +3136,16 @@ app.post('/api/trains', verifyToken, async (req, res) => {
 
     if (isOBHSEnabled && requiredInstances > 0) {
       const batch = db.batch();
-      const instances = [];
       for (let i = 0; i < requiredInstances; i++) {
         const instanceLetter = String.fromCharCode(65 + i);
         const instanceId = `${trainNo}-${trainName}-Inst-${instanceLetter}`;
-        instances.push(instanceId);
         
         batch.set(db.collection('TrainPairs').doc(instanceId), {
           instanceId: instanceId,
           instanceName: `Instance ${instanceLetter}`,
           trainNo: trainNo,
           trainName: trainName,
-          status: 'Active',
+          status: 'Inactive',
           inboundTrainNo: inboundTrainNo,
           outboundTrainNo: outboundTrainNo,
           rotationPattern: `Round-Robin`,
@@ -3229,13 +3154,6 @@ app.post('/api/trains', verifyToken, async (req, res) => {
         });
       }
       await batch.commit();
-
-      // AUTO-GENERATE RUNS FOR THE FIRST WEEK
-      try {
-        await generateInitialWeeklyRuns(newTrain, instances);
-      } catch (genErr) {
-        console.error('(AutoRunGen) Failed:', genErr.message);
-      }
     }
 
     res.status(201).send({
