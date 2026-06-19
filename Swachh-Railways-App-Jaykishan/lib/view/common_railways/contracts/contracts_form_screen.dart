@@ -202,7 +202,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                         _buildMultiSelectDropdown(
                           "Work Categories *",
                           "Select Categories",
-                          ["Premise Cleaning", "Coach Cleaning", "CTS Form", "OBHS Form"],
+                          ["Premise Cleaning", "Coach Cleaning", "CTS Form", "OBHS Form", "Station Cleaning"],
                           selectedWorkCategories,
                               (values) {
                             if (!isEditMode) {

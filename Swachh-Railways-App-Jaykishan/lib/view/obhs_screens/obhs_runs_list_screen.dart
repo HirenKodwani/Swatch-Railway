@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import '../../model/run_instance_model.dart';
+import '../../model/train_model.dart';
 import '../../repositories/obhs_repository.dart';
 import '../../model/railway_worker_model.dart';
 import 'obhs_create_run_screen.dart';
@@ -197,6 +198,123 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
     }
   }
 
+  Future<void> _showGenerateScheduleDialog() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final trains = await OBHSRepository.getOBHSTrains();
+      if (!mounted) return;
+      Navigator.pop(context); // close loading
+      
+      if (trains.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No trains available for OBHS.')));
+        return;
+      }
+
+      String? localSelectedTrainId = trains.first.uid;
+      DateTime startDate = DateTime.now();
+      DateTime endDate = DateTime.now().add(const Duration(days: 30));
+
+      await showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Generate Schedule'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: localSelectedTrainId,
+                      decoration: const InputDecoration(labelText: 'Select Train'),
+                      items: trains.map((t) => DropdownMenuItem(
+                        value: t.uid,
+                        child: Text('${t.trainNo} - ${t.trainName}'),
+                      )).toList(),
+                      onChanged: (v) => setDialogState(() => localSelectedTrainId = v),
+                      isExpanded: true,
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Start Date'),
+                      subtitle: Text(DateFormat('yyyy-MM-dd').format(startDate)),
+                      trailing: const Icon(Icons.calendar_today, size: 20),
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: startDate,
+                          firstDate: DateTime.now().subtract(const Duration(days: 7)),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (d != null) setDialogState(() => startDate = d);
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('End Date'),
+                      subtitle: Text(DateFormat('yyyy-MM-dd').format(endDate)),
+                      trailing: const Icon(Icons.calendar_today, size: 20),
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: endDate,
+                          firstDate: startDate,
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (d != null) setDialogState(() => endDate = d);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _generateSchedule(localSelectedTrainId!, startDate, endDate);
+                  },
+                  child: const Text('Generate'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } catch(e) {
+      if (mounted) {
+        Navigator.pop(context); // close loading
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: kErrorRed));
+      }
+    }
+  }
+
+  Future<void> _generateSchedule(String trainId, DateTime startDate, DateTime endDate) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await OBHSRepository.generateSchedule(trainId: trainId, startDate: startDate, endDate: endDate);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Schedule generated successfully', style: TextStyle(color: Colors.white)), backgroundColor: kSuccessGreen));
+        _loadRunInstances();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: kErrorRed));
+      }
+    }
+  }
+
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'active':
@@ -248,6 +366,11 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
         elevation: 0.5,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome, color: Colors.white),
+            tooltip: 'Generate Schedule',
+            onPressed: _showGenerateScheduleDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadRunInstances,

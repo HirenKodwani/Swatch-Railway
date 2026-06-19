@@ -1061,6 +1061,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
   File? _photoFile;
   bool _isRandomInspection = false;
   bool _isSubmitting = false;
+  String _selectedRaterType = 'Official'; // For official mode
   final TextEditingController _inspectorController = TextEditingController();
   final TextEditingController _passengerNameController =
       TextEditingController();
@@ -1184,6 +1185,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
           workerId: _selectedWorkerId!,
           workerName: worker.fullName,
           coachNo: _selectedCoach!,
+          raterType: _selectedRaterType,
           ratings: intRatings,
           remarks: _remarksController.text.trim(),
           photoUrl: photoUrl,
@@ -1413,6 +1415,25 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                       activeThumbColor: Colors.purple,
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Rater Type Dropdown
+              _sectionTitle('Rater Type'),
+              const SizedBox(height: 8),
+              _inputContainer(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedRaterType,
+                    isExpanded: true,
+                    items: ['Official', 'TTE', 'PSME', 'Supervisor/Admin']
+                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _selectedRaterType = v);
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 16),

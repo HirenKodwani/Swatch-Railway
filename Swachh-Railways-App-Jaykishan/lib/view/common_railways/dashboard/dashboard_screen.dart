@@ -25,6 +25,7 @@ import '../audit/audit_log_screen.dart';
 import '../billing/billing_dashboard_screen.dart';
 import '../billing/contract_billing_config_screen.dart';
 import '../cleaning_forms/cleaning_form_dashboard.dart';
+import '../../station_cleaning_screens/station_cleaning_runs_list_screen.dart';
 import '../station_management/station_dashboard_screen.dart';
 import '../report/common_report_screen.dart';
 import '../ratings/admin_ratings_screen.dart';
@@ -448,7 +449,8 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "children": [
           {"title": "Coach Cleaning", "route": "coach_cleaning"},
           {"title": "Premise Cleaning", "route": "premise_cleaning"},
-          {"title": "Station Cleaning", "route": "station_cleaning"},
+          {"title": "Station Cleaning Forms", "route": "station_cleaning"},
+          {"title": "Station Cleaning Runs", "route": "station_cleaning_runs"},
         ]
       },
       {
@@ -527,6 +529,9 @@ class _CommonDashboardState extends State<CommonDashboard> {
         break;
       case "station_cleaning":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "station_cleaning_runs":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationCleaningRunsListScreen()));
         break;
       case "obhs_attendance":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSAttendanceListScreen()));

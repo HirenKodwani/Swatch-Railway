@@ -1065,7 +1065,7 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
       email, password, role, userType,
       fullName, designation, mobile,
       zone, division, depot,
-      entityId
+      entityId, trainId, trainIds, worker_type
     } = req.body;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
 
@@ -1081,6 +1081,22 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
     if (mobile) {
       const mobileQuery = await db.collection('users').where('mobile', '==', mobile).get();
       if (!mobileQuery.empty) return res.status(400).send({ error: "Mobile Number already registered." });
+    }
+
+    const roleUpper = role.toUpperCase();
+    if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
+      if (!division || !trainId) {
+        return res.status(400).send({ error: "Division and Train ID are mandatory for Contractor Supervisor." });
+      }
+      if (Array.isArray(trainId) || (trainIds && trainIds.length > 1)) {
+        return res.status(400).send({ error: "Contractor Supervisor can only be mapped to ONE train." });
+      }
+    }
+
+    if (roleUpper === 'RAILWAY SUPERVISOR') {
+      if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
+        return res.status(400).send({ error: "Division and at least one Train ID are mandatory for Railway Supervisor." });
+      }
     }
 
     let entityData = null;
@@ -1143,6 +1159,9 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
 
       entityId: entityId || null,
       entityDetails: entityData,
+      trainId: trainId || null,
+      trainIds: trainIds || (trainId ? [trainId] : []),
+      worker_type: worker_type || null,
 
       createdBy: creatorId,
       createdByName: creatorName,
@@ -1180,7 +1199,7 @@ app.put('/api/admin/updateUser/:uid', verifyToken, async (req, res) => {
     const { uid } = req.params;
     const {
       fullName, designation, mobile, zone, division, depot,
-      role, userType, password, entityId
+      role, userType, password, entityId, trainId, trainIds, worker_type
     } = req.body;
     const { uid: editorId, name, fullName: editorAuthName, role: editorRole } = req.user;
     const editorName = editorAuthName || name || editorRole || 'Admin';
@@ -1194,6 +1213,26 @@ app.put('/api/admin/updateUser/:uid', verifyToken, async (req, res) => {
 
     const currentData = doc.data();
     const targetUserName = fullName || currentData.fullName || 'Unknown User';
+    const finalRole = role || currentData.role;
+    const finalRoleUpper = finalRole ? finalRole.toUpperCase() : '';
+    const finalDivision = division || currentData.division;
+    const finalTrainId = trainId || currentData.trainId;
+    const finalTrainIds = trainIds || currentData.trainIds;
+
+    if (finalRoleUpper === 'CTS' || finalRoleUpper === 'CONTRACTOR SUPERVISOR') {
+      if (!finalDivision || !finalTrainId) {
+        return res.status(400).send({ error: "Division and Train ID are mandatory for Contractor Supervisor." });
+      }
+      if (Array.isArray(finalTrainId) || (finalTrainIds && finalTrainIds.length > 1)) {
+        return res.status(400).send({ error: "Contractor Supervisor can only be mapped to ONE train." });
+      }
+    }
+
+    if (finalRoleUpper === 'RAILWAY SUPERVISOR') {
+      if (!finalDivision || (!finalTrainId && (!finalTrainIds || finalTrainIds.length === 0))) {
+        return res.status(400).send({ error: "Division and at least one Train ID are mandatory for Railway Supervisor." });
+      }
+    }
 
     const updateData = {};
     if (fullName !== undefined) updateData.fullName = fullName;
@@ -1204,6 +1243,9 @@ app.put('/api/admin/updateUser/:uid', verifyToken, async (req, res) => {
     if (depot !== undefined) updateData.depot = depot;
     if (role !== undefined) updateData.role = role;
     if (userType !== undefined) updateData.userType = userType.toLowerCase();
+    if (trainId !== undefined) updateData.trainId = trainId;
+    if (trainIds !== undefined) updateData.trainIds = trainIds;
+    if (worker_type !== undefined) updateData.worker_type = worker_type;
 
     if (password) {
       try {
@@ -3508,18 +3550,36 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
     const pairData = trainPairDoc.data();
 
     const coachesWithNames = await Promise.all(coaches.map(async (c) => {
-      let workerName = "Unknown Worker";
-      if (c.workerId) {
-        const workerDoc = await db.collection('users').doc(c.workerId).get();
+      const actualJanitorId = c.janitorId || c.workerId || null;
+      let janitorName = c.janitorName || "Unknown Worker";
+      
+      if (actualJanitorId && (!c.janitorName || c.janitorName === "Unknown Worker")) {
+        const workerDoc = await db.collection('users').doc(actualJanitorId).get();
         if (workerDoc.exists) {
-          workerName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker";
+          janitorName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker";
         }
       }
+
+      let actualAttendantName = c.attendantName || null;
+      if (c.attendantId && !actualAttendantName) {
+        const attDoc = await db.collection('users').doc(c.attendantId).get();
+        if (attDoc.exists) {
+          actualAttendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
+        }
+      }
+
       return {
         coachPosition: c.coachPosition || null,
         coachType: c.coachType || null,
-        workerId: c.workerId || null,
-        workerName: workerName,
+        janitorId: actualJanitorId,
+        janitorName: janitorName,
+        workerId: actualJanitorId,
+        workerName: janitorName,
+        attendantId: c.attendantId || null,
+        attendantName: actualAttendantName,
+        janitorTasks: c.janitorTasks || [],
+        attendantTasks: c.attendantTasks || [],
+        tasks: c.tasks || c.janitorTasks || [],
         attendanceStatus: 'Pending'
       };
     }));
@@ -3535,6 +3595,16 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
           return res.status(400).send({
             error: 'Coach Assignment Limit',
             details: `Worker ${c.workerId} has been assigned to more than 2 coaches. Maximum 2 coaches per janitor allowed.`
+          });
+        }
+      }
+      
+      if (c.coachPosition) {
+        const isAC = /^[ABHME]/i.test(c.coachPosition) || (c.coachType && c.coachType.toUpperCase().includes('AC'));
+        if (isAC && !c.attendantId) {
+          return res.status(400).send({
+            error: 'Train Formation Error',
+            details: `AC Coach ${c.coachPosition} must have an Attendant assigned.`
           });
         }
       }
@@ -3629,38 +3699,47 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
       };
 
       const coachesWithNames = await Promise.all(coaches.map(async (c) => {
-        let workerName = "Unknown Worker";
+        const actualJanitorId = c.janitorId || c.workerId || null;
+        let janitorName = c.janitorName || "Unknown Worker";
         
-        if (c.workerId) {
-          const workerDoc = await db.collection('users').doc(c.workerId).get();
+        if (actualJanitorId && (!c.janitorName || c.janitorName === "Unknown Worker")) {
+          const workerDoc = await db.collection('users').doc(actualJanitorId).get();
           if (workerDoc.exists) {
-            workerName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker";
+            janitorName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker";
           }
         }
 
         // Resolve attendant name if attendantId provided
-        let attendantName = c.attendantName || null;
-        if (c.attendantId && !attendantName) {
+        let actualAttendantName = c.attendantName || null;
+        if (c.attendantId && !actualAttendantName) {
           const attDoc = await db.collection('users').doc(c.attendantId).get();
           if (attDoc.exists) {
-            attendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
+            actualAttendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
           }
         }
 
-        // Validate: attendant only allowed on AC coaches
-        if (c.attendantId && !isACCoach(c.coachType)) {
+        // Validate: AC coaches MUST have an attendant
+        const isAC = isACCoach(c.coachType) || (c.coachPosition && /^[ABHMC]/i.test(c.coachPosition));
+        if (c.attendantId && !isAC) {
           throw new Error(`Attendant cannot be assigned to Non-AC coach ${c.coachPosition || c.coachNo}. Attendants only allowed on AC coaches.`);
+        }
+        if (isAC && !c.attendantId) {
+          throw new Error(`AC Coach ${c.coachPosition || c.coachNo} must have an Attendant assigned.`);
         }
 
         return {
           coachPosition: c.coachPosition || null,
           coachNo: c.coachNo || null,
           coachType: c.coachType || null,
-          workerId: c.workerId || null,
-          workerName: workerName,
+          janitorId: actualJanitorId,
+          janitorName: janitorName,
+          workerId: actualJanitorId,
+          workerName: janitorName,
           attendantId: c.attendantId || null,
-          attendantName: attendantName,
-          tasks: c.tasks || []
+          attendantName: actualAttendantName,
+          janitorTasks: c.janitorTasks || [],
+          attendantTasks: c.attendantTasks || [],
+          tasks: c.tasks || c.janitorTasks || []
         };
       }));
 
@@ -4073,11 +4152,6 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     });
 
   } catch (error) {
-    if (error.code === 'FAILED_PRECONDITION') {
-      return res.status(400).json({ 
-        error: 'Firestore Index Missing', 
-        details: 'Composite index (parentTrainId + status + createdAt) is required.' 
-      });
     }
     console.error('(RunInstance) Error fetching data:', error);
     res.status(500).send({ 
@@ -4086,6 +4160,127 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     });
   }
 });
+
+
+// =======================================================
+// == API 4.5.5: Generate Run Instances Schedule automatically
+// =======================================================
+app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res) => {
+  try {
+    const { trainId } = req.params;
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).send({ error: "startDate and endDate are required (YYYY-MM-DD)." });
+    }
+
+    const trainDoc = await db.collection('trains').doc(trainId).get();
+    if (!trainDoc.exists) {
+      return res.status(404).send({ error: "Train not found." });
+    }
+
+    const trainData = trainDoc.data();
+    const days = trainData.days || [];
+    
+    if (days.length === 0) {
+      return res.status(400).send({ error: "Train has no assigned running days." });
+    }
+
+    const trainPairsSnapshot = await db.collection('TrainPairs')
+      .where('parentTrainId', '==', trainId)
+      .get();
+      
+    if (trainPairsSnapshot.empty) {
+      return res.status(400).send({ error: "No Rake Instances (TrainPairs) found for this train. Please update train to generate pairs." });
+    }
+
+    const trainPairs = [];
+    trainPairsSnapshot.forEach(doc => trainPairs.push({ id: doc.id, ...doc.data() }));
+    // Sort them so Inst-A comes before Inst-B
+    trainPairs.sort((a, b) => a.id.localeCompare(b.id));
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start) || isNaN(end) || start > end) {
+      return res.status(400).send({ error: "Invalid date range." });
+    }
+
+    const dayMap = {
+      'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
+      'Thursday': 4, 'Friday': 5, 'Saturday': 6
+    };
+    
+    const validDays = days.map(d => dayMap[d]);
+
+    const generatedInstances = [];
+    let pairIndex = 0;
+    
+    // Check existing RunInstances to avoid duplicates
+    const existingRunsSnapshot = await db.collection('RunInstance')
+      .where('parentTrainId', '==', trainId)
+      .get();
+      
+    const existingDates = new Set();
+    existingRunsSnapshot.forEach(doc => {
+      existingDates.add(doc.data().departureDate);
+    });
+
+    const batch = db.batch();
+    const { uid, name, email, role } = req.user;
+    const userName = name || email || role || 'System';
+    
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (validDays.includes(d.getDay())) {
+        const dateStr = d.toISOString().split('T')[0];
+        
+        if (existingDates.has(dateStr)) {
+          continue; // Skip if already generated
+        }
+        
+        const pair = trainPairs[pairIndex % trainPairs.length];
+        pairIndex++;
+        
+        const runInstanceRef = db.collection('RunInstance').doc();
+        
+        const newRunData = {
+          runInstanceId: runInstanceRef.id,
+          instanceId: pair.id,
+          departureDate: dateStr,
+          trainNo: pair.trainNo || trainData.trainNo || trainData.trainNumber,
+          trainName: pair.trainName || trainData.trainName,
+          inboundTrainNo: pair.inboundTrainNo || trainData.inboundTrainNo || null,
+          outboundTrainNo: pair.outboundTrainNo || trainData.outboundTrainNo || null,
+          parentTrainId: trainId,
+          coaches: [], // Empty initially
+          numberOfCoaches: 0,
+          createdAt: new Date().toISOString(),
+          createdBy: uid,
+          createdByName: userName,
+          status: 'Active'
+        };
+        
+        batch.set(runInstanceRef, newRunData);
+        generatedInstances.push(newRunData);
+      }
+    }
+    
+    if (generatedInstances.length > 0) {
+      await batch.commit();
+    }
+
+    res.status(200).send({
+      message: `Generated ${generatedInstances.length} new instances successfully.`,
+      count: generatedInstances.length,
+      data: generatedInstances
+    });
+
+  } catch (error) {
+    console.error('(Generate Schedule) Error:', error);
+    res.status(500).send({ error: 'Failed to generate schedule', details: error.message });
+  }
+});
+
 
 
 // =======================================================
@@ -4204,6 +4399,125 @@ app.delete('/api/run-instances/:runInstanceId', verifyToken, async (req, res) =>
     res.status(500).json({ error: 'Failed to delete run instance', details: error.message });
   }
 });
+
+// =======================================================
+// == STATION CLEANING RUN APIs
+// =======================================================
+app.post('/api/station-runs', verifyToken, async (req, res) => {
+  try {
+    const data = req.body;
+    if (!data.stationId || !data.stationName || !data.date || !data.shift) {
+      return res.status(400).json({ error: 'Missing required fields for station run' });
+    }
+    
+    // Add metadata
+    data.status = 'Pending';
+    data.createdAt = new Date().toISOString();
+    data.updatedAt = data.createdAt;
+    
+    // Generate an ID (e.g., SCR-stationCode-date-shift)
+    const runId = `SCR-${data.stationName.substring(0, 3).toUpperCase()}-${Date.now()}`;
+    data.runInstanceId = runId;
+
+    await db.collection('StationCleaningRuns').doc(runId).set(data);
+    res.status(201).json({ success: true, message: 'Station Run created successfully', data });
+  } catch (error) {
+    console.error('(StationRun) Error creating:', error);
+    res.status(500).json({ error: 'Failed to create Station Run', details: error.message });
+  }
+});
+
+app.get('/api/station-runs', verifyToken, async (req, res) => {
+  try {
+    const snapshot = await db.collection('StationCleaningRuns').orderBy('createdAt', 'desc').get();
+    const runs = [];
+    snapshot.forEach(doc => {
+      runs.push({ id: doc.id, ...doc.data() });
+    });
+    res.status(200).json({ success: true, data: runs });
+  } catch (error) {
+    console.error('(StationRun) Error fetching:', error);
+    res.status(500).json({ error: 'Failed to fetch Station Runs', details: error.message });
+  }
+});
+
+app.put('/api/station-runs/:runId', verifyToken, async (req, res) => {
+  try {
+    const { runId } = req.params;
+    const data = req.body;
+    data.updatedAt = new Date().toISOString();
+    
+    const ref = db.collection('StationCleaningRuns').doc(runId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Station Run not found' });
+    }
+    
+    await ref.update(data);
+    res.status(200).json({ success: true, message: 'Station Run updated successfully' });
+  } catch (error) {
+    console.error('(StationRun) Error updating:', error);
+    res.status(500).json({ error: 'Failed to update Station Run', details: error.message });
+  }
+});
+
+app.delete('/api/station-runs/:runId', verifyToken, async (req, res) => {
+  try {
+    const { runId } = req.params;
+    const ref = db.collection('StationCleaningRuns').doc(runId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Station Run not found' });
+    }
+    
+    await ref.delete();
+    res.status(200).json({ success: true, message: 'Station Run deleted successfully' });
+  } catch (error) {
+    console.error('(StationRun) Error deleting:', error);
+    res.status(500).json({ error: 'Failed to delete Station Run', details: error.message });
+  }
+});
+
+// =======================================================
+// == STATION CLEANING TASKS APIs
+// =======================================================
+
+app.post('/api/station-tasks/submit', verifyToken, async (req, res) => {
+  try {
+    const data = req.body;
+    if (!data.runInstanceId || !data.platformNumber) {
+      return res.status(400).json({ error: 'Missing runInstanceId or platformNumber' });
+    }
+    data.status = 'Completed'; // worker submitted
+    data.submittedAt = new Date().toISOString();
+    
+    // Save to station_tasks collection
+    const result = await db.collection('station_tasks').add(data);
+    res.status(201).json({ success: true, message: 'Task submitted', taskId: result.id });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to submit task', details: error.message });
+  }
+});
+
+app.get('/api/station-tasks/pending-review', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.query;
+    let query = db.collection('station_tasks').where('status', '==', 'Completed');
+    if (runInstanceId) {
+      query = query.where('runInstanceId', '==', runInstanceId);
+    }
+    
+    const snapshot = await query.get();
+    const tasks = [];
+    snapshot.forEach(doc => {
+      tasks.push({ id: doc.id, ...doc.data() });
+    });
+    res.status(200).json({ success: true, count: tasks.length, data: tasks });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch pending tasks', details: error.message });
+  }
+});
+
 // =======================================================
 // == OBHS TASK APIs — superseded by newer handlers below
 // =======================================================
@@ -4214,13 +4528,23 @@ app.delete('/api/run-instances/:runInstanceId', verifyToken, async (req, res) =>
 // 3. Get Pending Review Tasks for Supervisor
 app.get('/api/tasks/pending-review', verifyToken, async (req, res) => {
   try {
-    // Should ideally filter by supervisor's assigned train/division
-    const snapshot = await db.collection('task_instances')
-      .where('status', '==', 'SUBMITTED')
-      .get();
+    const { runInstanceId } = req.query;
+    
+    let query = db.collection('obhs_tasks')
+      .where('status', '==', 'Completed');
+      
+    if (runInstanceId) {
+      query = query.where('runInstanceId', '==', runInstanceId);
+    }
+    
+    const snapshot = await query.get();
     
     const tasks = [];
-    snapshot.forEach(doc => tasks.push(doc.data()));
+    snapshot.forEach(doc => {
+      const task = doc.data();
+      task.id = doc.id;
+      tasks.push(task);
+    });
     res.status(200).json({ success: true, count: tasks.length, data: tasks });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -4237,7 +4561,7 @@ app.post('/api/tasks/:taskId/approve', verifyToken, async (req, res) => {
        return res.status(400).json({ error: "Supervisor score is required" });
     }
 
-    const taskRef = db.collection('task_instances').doc(taskId);
+    const taskRef = db.collection('obhs_tasks').doc(taskId);
     await taskRef.update({
       status: 'APPROVED',
       supervisorScore: Number(supervisorScore),
@@ -4262,7 +4586,7 @@ app.post('/api/tasks/:taskId/reject', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Rejection reason is mandatory' });
     }
 
-    const taskRef = db.collection('task_instances').doc(taskId);
+    const taskRef = db.collection('obhs_tasks').doc(taskId);
     await taskRef.update({
       status: 'REJECTED',
       rejectionReason: rejectionReason,
@@ -8672,65 +8996,45 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     const { uid: workerId, fullName: workerName } = req.user; 
     const finalWorkerName = workerName || 'Unknown Worker';
 
-    // ─── ATTENDANCE WINDOW VALIDATION (Railway Board Policy) ──────────
-    // Window opens: (Min(Scheduled/Actual) Departure) - 60 min
-    // Deadline: (Actual Departure IF AVAILABLE ELSE Scheduled) - 45 min
-    // If train is delayed, Actual Departure shifts the deadline automatically.
-    let attendanceWindowError = null;
+    // ─── ATTENDANCE WINDOW VALIDATION (First-Worker Anchor Logic) ──────────
     let isLateAttendance = false;
-    let timingDetails = {};
+    let lateByMinutes = 0;
+    let firstAttendanceTime = null;
     
     try {
-      if (runInstanceId) {
+      if (runInstanceId && attendanceType === 'start') {
         const runSnap = await db.collection('RunInstance').doc(runInstanceId).get();
         if (runSnap.exists) {
           const runData = runSnap.data();
           
-          const schedArrival = runData.scheduledArrival ? new Date(runData.scheduledArrival) : null;
-          const actualArrival = runData.actualArrival ? new Date(runData.actualArrival) : null;
-          const schedDeparture = runData.scheduledDeparture ? new Date(runData.scheduledDeparture) : null;
-          const actualDeparture = runData.actualDeparture ? new Date(runData.actualDeparture) : null;
+          firstAttendanceTime = runData.first_attendance_time;
+          const currentTimestamp = new Date(deviceTimestamp || new Date().toISOString());
           
-          const effectiveArrival = actualArrival || schedArrival;
-          const effectiveDeparture = actualDeparture || schedDeparture;
-          
-          timingDetails = {
-            scheduledArrival: runData.scheduledArrival,
-            actualArrival: runData.actualArrival,
-            scheduledDeparture: runData.scheduledDeparture,
-            actualDeparture: runData.actualDeparture,
-            delayMinutes: runData.delayMinutes || 0,
-            platform: runData.platform || 'N/A'
-          };
-
-          if (effectiveDeparture) {
-            const now = new Date();
+          if (!firstAttendanceTime) {
+            // This is the first worker! Anchor the attendance window.
+            firstAttendanceTime = currentTimestamp.toISOString();
+            await db.collection('RunInstance').doc(runInstanceId).update({
+              first_attendance_time: firstAttendanceTime,
+              updatedAt: new Date().toISOString()
+            });
+            console.log(`(Attendance Anchor) RunInstance ${runInstanceId} anchored at ${firstAttendanceTime}`);
+          } else {
+            // Compare current timestamp against anchor
+            const anchorTime = new Date(firstAttendanceTime);
+            const diffMs = currentTimestamp.getTime() - anchorTime.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
             
-            // Window open logic: 60 mins before departure
-            const windowOpen = new Date(effectiveDeparture.getTime() - 60 * 60 * 1000); 
-            
-            // If it's a 'start' attendance, we check if it's too early
-            if (attendanceType === 'start' && now < windowOpen) {
-              attendanceWindowError = `Attendance window opens at ${windowOpen.toLocaleTimeString()}. Train is scheduled for ${effectiveDeparture.toLocaleTimeString()}.`;
-            }
-            
-            // Late check: Deadline is 45 mins before effective departure
-            const deadline = new Date(effectiveDeparture.getTime() - 45 * 60 * 1000);
-            if (now > deadline) {
+            // 15 minutes window from first attendance
+            if (diffMins > 15) {
               isLateAttendance = true;
+              lateByMinutes = diffMins - 15; // Late by amount exceeding 15 min window
+              console.log(`(Attendance Engine) Worker ${workerId} is late by ${lateByMinutes} mins. Anchor: ${firstAttendanceTime}`);
             }
           }
         }
       }
     } catch (winErr) {
       console.error('(Attendance Timing Engine) Error:', winErr);
-    }
-
-    if (attendanceWindowError) {
-      return res.status(403).send({
-        error: 'Attendance Window Not Open',
-        details: attendanceWindowError
-      });
     }
     
     // ─── GPS GEO-FENCING & SHIFT-TIMING VALIDATION ─────────────────────
@@ -8832,7 +9136,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       mobileNumber: mobileNumber || null,
       deviceId: deviceId || null,
       isLate: isLateAttendance,
-      timingSnapshot: timingDetails,
+      lateByMinutes: lateByMinutes,
+      firstAttendanceReference: firstAttendanceTime,
       status: isLateAttendance ? 'LATE' : 'PRESENT'
     };
 
@@ -8856,7 +9161,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         isMidMarked: false,
         isEndMarked: false,
         attendanceStatus: isLateAttendance ? 'LATE' : 'PRESENT',
-        timingSnapshot: timingDetails,
+        lateByMinutes: lateByMinutes,
+        firstAttendanceReference: firstAttendanceTime,
         identityAuditStatus: "PENDING_VERIFICATION", 
         startAttendance: attendanceEntry,
         midAttendance: null,
@@ -10179,6 +10485,7 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
       workerId,           // Unique UID of the ground worker being inspected
       workerName,         // Name of the ground worker being inspected
       coachNo,            // e.g., "S2", "A1"
+      raterType,          // 'Official', 'TTE', 'PSME', 'Supervisor/Admin'
       ratings,            // Object containing the 5 parameters
       remarks,            // Optional
       photoUrl            // Optional
@@ -10284,6 +10591,7 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
       trainNo: trainNo,
       trainName: trainName,
       coachNo: coachNo,
+      raterType: raterType || 'Official',
       
       // Official Specific Fields
       inspectorName: inspectorName.trim(),
@@ -14395,6 +14703,89 @@ app.get('/api/obhs/analytics/penalty-risk', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('(PenaltyRisk) Error:', error);
     res.status(500).json({ error: 'Failed to get penalty risk report', details: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// == COMPREHENSIVE REPORT API (WITH RBAC)
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get('/api/obhs/reports/comprehensive/:runInstanceId', verifyToken, async (req, res) => {
+  try {
+    const { runInstanceId } = req.params;
+    const userRole = req.user.role ? req.user.role.toUpperCase() : '';
+    const userTrainId = req.user.trainId;
+    const userTrainIds = req.user.trainIds || [];
+
+    const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+    if (!runDoc.exists) return res.status(404).json({ error: 'RunInstance not found' });
+    const runData = runDoc.data();
+
+    // ─── RBAC ENFORCEMENT ───
+    if (userRole === 'CTS' || userRole === 'CONTRACTOR SUPERVISOR') {
+      if (runData.parentTrainId !== userTrainId) {
+        return res.status(403).json({ error: 'Access denied. You can only view reports for your assigned train.' });
+      }
+    } else if (userRole === 'RAILWAY SUPERVISOR') {
+      if (!userTrainIds.includes(runData.parentTrainId) && runData.parentTrainId !== userTrainId) {
+        return res.status(403).json({ error: 'Access denied. Train not in your assigned trains list.' });
+      }
+    } else if (!userRole.includes('ADMIN') && !userRole.includes('COMPANY MASTER')) {
+      return res.status(403).json({ error: 'Access denied. Insufficient privileges.' });
+    }
+
+    // ─── AGGREGATION ───
+    const attendSnap = await db.collection('obhs_attendance').where('runInstanceId', '==', runInstanceId).get();
+    const attendance = { total: 0, present: 0, late: 0, missed: 0, records: [] };
+    attendSnap.forEach(doc => {
+      const d = doc.data();
+      attendance.total++;
+      if (d.status === 'LATE') attendance.late++;
+      else if (d.status === 'PRESENT') attendance.present++;
+      attendance.records.push({ workerName: d.workerName, status: d.status, lateByMinutes: d.lateByMinutes });
+    });
+
+    const taskSnap = await db.collection('obhs_tasks').where('runInstanceId', '==', runInstanceId).get();
+    const tasks = { total: 0, completed: 0, overdue: 0, missed: 0 };
+    taskSnap.forEach(doc => {
+      const d = doc.data();
+      tasks.total++;
+      if (d.status === 'COMPLETED' || d.status === 'APPROVED') tasks.completed++;
+      else if (d.status === 'OVERDUE') tasks.overdue++;
+      else tasks.missed++;
+    });
+
+    const complaintSnap = await db.collection('obhs_complaints').where('runInstanceId', '==', runInstanceId).get();
+    const complaints = { total: 0, open: 0, resolved: 0 };
+    complaintSnap.forEach(doc => {
+      const d = doc.data();
+      complaints.total++;
+      if (d.status === 'OPEN') complaints.open++;
+      else complaints.resolved++;
+    });
+
+    const ratingSnap = await db.collection('obhs_feedbacks').where('runInstanceId', '==', runInstanceId).get();
+    const ratings = { total: 0, sum: 0, average: 0 };
+    ratingSnap.forEach(doc => {
+      const d = doc.data();
+      ratings.total++;
+      ratings.sum += (d.passengerScore || d.officialScore || 0);
+    });
+    if (ratings.total > 0) ratings.average = (ratings.sum / ratings.total).toFixed(2);
+
+    res.status(200).json({
+      success: true,
+      runInstanceId,
+      trainId: runData.parentTrainId,
+      date: runData.departureDate,
+      attendance,
+      tasks,
+      complaints,
+      ratings
+    });
+  } catch (error) {
+    console.error('(ComprehensiveReport) Error:', error);
+    res.status(500).json({ error: 'Failed to generate comprehensive report', details: error.message });
   }
 });
 

@@ -231,6 +231,43 @@ class OBHSRepository {
     }
   }
 
+  static Future<void> generateSchedule({
+    required String trainId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        throw Exception('AUTH_ERROR');
+      }
+
+      final requestBody = {
+        'startDate': '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}',
+        'endDate': '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}',
+      };
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/api/trains/$trainId/generate-schedule'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(requestBody),
+        ),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) {
+        rethrow;
+      }
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
 
   static Future<RunInstanceModel> updateRunInstance({
     required String runInstanceId,
