@@ -771,20 +771,6 @@ class WorkerController extends GetxController {
       final position = await _getAttendanceLocation();
       final imageUrl = await WorkerRepository.uploadMedia(photo.path);
 
-      // ── BIOMETRIC & GPS VERIFICATION (Module 2) ──────────────────
-      final bioResponse = await WorkerRepository.verifyBiometricAttendance(
-        selfieUrl: imageUrl,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        runInstanceId: runInstanceId,
-        type: type.toUpperCase(),
-      );
-
-      if (bioResponse['success'] != true) {
-        throw Exception(bioResponse['error'] ?? 'Biometric verification failed');
-      }
-      debugPrint('[Biometric] Match: ${bioResponse['matchPercentage']}%');
-
       final response = await WorkerRepository.markAttendance(
         type: type,
         runInstanceId: runInstanceId,
