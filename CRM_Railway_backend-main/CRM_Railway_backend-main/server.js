@@ -8373,7 +8373,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         if (runSnap.exists) {
           const runData = runSnap.data();
           if (runData.scheduledDeparture) {
-            const schedDeparture = new Date(runData.scheduledDeparture);
+            const parsedStr = runData.scheduledDeparture.replace(/\.000Z$/, '+05:30').replace(/Z$/, '+05:30');
+            const schedDeparture = new Date(parsedStr);
             const windowOpen = new Date(schedDeparture.getTime() - 60 * 60 * 1000); // -60min
             const now = new Date();
             
@@ -8415,12 +8416,14 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         const runData = runInstanceDoc.data();
         const parentTrainId = runData.parentTrainId;
 
-        // Resolve station from train's origin
+        // Resolve station based on attendance type
         let stationName = '';
-        if (parentTrainId) {
+        if (parentTrainId && attendanceType !== 'mid') {
           const trainDoc = await db.collection('trains').doc(parentTrainId).get();
           if (trainDoc.exists) {
-            stationName = trainDoc.data().origin || '';
+            stationName = (attendanceType === 'end')
+              ? (trainDoc.data().destination || '')
+              : (trainDoc.data().origin || '');
           }
         }
 
@@ -8442,8 +8445,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       }
     }
 
-    // GPS Geo-fence check
-    if (latitude && longitude && resolvedStationLat && resolvedStationLng) {
+    // GPS Geo-fence check (skip for transit / mid check-in)
+    if (attendanceType !== 'mid' && latitude && longitude && resolvedStationLat && resolvedStationLng) {
       const workerLat = parseFloat(latitude);
       const workerLng = parseFloat(longitude);
       const distance = haversineDistance(workerLat, workerLng, resolvedStationLat, resolvedStationLng);
@@ -8475,7 +8478,9 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
           const [startH, startM] = startTime.split(':').map(Number);
           const [endH, endM] = endTime.split(':').map(Number);
           const now = new Date();
-          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          const kolkataTimeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+          const [nowH, nowM] = kolkataTimeStr.split(':').map(Number);
+          const currentMinutes = nowH * 60 + nowM;
           const startMinutes = startH * 60 + startM;
           const endMinutes = endH * 60 + endM;
 
@@ -8762,6 +8767,8 @@ app.get('/api/obhs/attendance/status', verifyToken, async (req, res) => {
       isMidMarked: data.isMidMarked || false,
       isEndMarked: data.isEndMarked || false,
       identityAuditStatus: data.identityAuditStatus || "PENDING_VERIFICATION",
+      createdAt: data.createdAt || null,
+      updatedAt: data.updatedAt || null,
       message: "Attendance state maps fetched successfully."
     });
 
@@ -8803,7 +8810,11 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       'beforePhoto', 
       'afterPhoto',
       'comment',
-      'deviceTimestamp'
+      'deviceTimestamp',
+      'gpsLatitude',
+      'gpsLongitude',
+      'deviceId',
+      'mobileNumber'
     ];
 
     const bodyKeys = Object.keys(req.body);
@@ -8985,8 +8996,8 @@ app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
         const trainDoc = await db.collection('trains').doc(parentTrainId).get();
         if (trainDoc.exists && trainDoc.data().journeyStartTime) {
           const journeyStartTime = trainDoc.data().journeyStartTime; // Format: "18:46:00"
-          // Combine departureDate and journeyStartTime into a valid ISO string
-          tripStartDate = new Date(`${departureDate}T${journeyStartTime}.000Z`);
+          // Combine departureDate and journeyStartTime into a valid ISO string with +05:30 offset for IST
+          tripStartDate = new Date(`${departureDate}T${journeyStartTime}+05:30`);
         } else if (runData.createdAt) {
           tripStartDate = new Date(runData.createdAt);
         }
@@ -15828,7 +15839,7 @@ app.get('/api/v2/journey/timeline/:runInstanceId', verifyToken, async (req, res)
 
     const run = runDoc.data();
     const actualDeparture = run.actualDeparture ? new Date(run.actualDeparture) : null;
-    const scheduledDeparture = run.scheduledDeparture ? new Date(run.scheduledDeparture) : null;
+    const scheduledDeparture = run.scheduledDeparture ? new Date(run.scheduledDeparture.replace(/\.000Z$/, '+05:30').replace(/Z$/, '+05:30')) : null;
     const delayMs = actualDeparture && scheduledDeparture
       ? actualDeparture.getTime() - scheduledDeparture.getTime()
       : 0;

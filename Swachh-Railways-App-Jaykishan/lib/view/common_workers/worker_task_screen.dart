@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -1204,6 +1205,20 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
         throw Exception('No run instance assigned for task submit.');
       }
 
+      // Check and request location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permission is permanently denied. Enable it in settings.');
+      }
+
+      // Fetch current location for GPS evidence
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+
       final beforeUrl = await WorkerRepository.uploadMedia(beforePhoto!.path);
       final afterUrl = await WorkerRepository.uploadMedia(afterPhoto!.path);
 
@@ -1216,6 +1231,8 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
         beforePhoto: beforeUrl,
         afterPhoto: afterUrl,
         comment: commentController.text.trim(),
+        gpsLatitude: position.latitude,
+        gpsLongitude: position.longitude,
       );
 
       if (response['success'] == true) {
