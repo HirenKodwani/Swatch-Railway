@@ -144,158 +144,158 @@ app.get('/', (req, res) => {
 });
 
 async function getDailyReportData() {
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+  const today = new Date();
+  const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+  const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-    try {
-        const adminSnapshot = await admin.firestore().collection('users')
-            .where('role', '==', 'admin') 
-            .get();
+  try {
+    const adminSnapshot = await admin.firestore().collection('users')
+      .where('role', '==', 'admin')
+      .get();
 
-        if (adminSnapshot.empty) {
-            console.log("No admins found in the database.");
-            return;
-        }
-
-        for (const doc of adminSnapshot.docs) {
-            const adminInfo = doc.data();
-            const adminDivision = adminInfo.division; 
-            const adminEmail = adminInfo.email;
-
-            if (!adminDivision) {
-                console.log(`Skipping admin ${adminEmail} because division is not set.`);
-                continue;
-            }
-
-            const coachSnapshot = await admin.firestore().collection('coachForms')
-                .where('submittedByDivision', '==', adminDivision)
-                .where('createdAt', '>=', startOfDay)
-                .where('createdAt', '<=', endOfDay)
-                .get();
-
-            const coachData = coachSnapshot.docs.map(d => d.data());
-
-            const premisesSnapshot = await admin.firestore().collection('premisesForms')
-                .where('submittedByDivision', '==', adminDivision)
-                .where('createdAt', '>=', startOfDay)
-                .where('createdAt', '<=', endOfDay)
-                .get();
-
-            const premisesData = premisesSnapshot.docs.map(d => d.data());
-
-            // Always send email, even if no data
-            const coachBuffer = coachData.length > 0 ? await generateCoachExcelBuffer(coachData) : null;
-            const premisesBuffer = premisesData.length > 0 ? await generatePremisesExcelBuffer(premisesData) : null;
-
-            await sendEmailWithAttachments(adminEmail, adminDivision, coachBuffer, premisesBuffer, {
-                coachCount: coachData.length,
-                premisesCount: premisesData.length
-            });
-        }
-    } catch (error) {
-        console.error("Error in Automated Reporting Loop:", error);
+    if (adminSnapshot.empty) {
+      console.log("No admins found in the database.");
+      return;
     }
+
+    for (const doc of adminSnapshot.docs) {
+      const adminInfo = doc.data();
+      const adminDivision = adminInfo.division;
+      const adminEmail = adminInfo.email;
+
+      if (!adminDivision) {
+        console.log(`Skipping admin ${adminEmail} because division is not set.`);
+        continue;
+      }
+
+      const coachSnapshot = await admin.firestore().collection('coachForms')
+        .where('submittedByDivision', '==', adminDivision)
+        .where('createdAt', '>=', startOfDay)
+        .where('createdAt', '<=', endOfDay)
+        .get();
+
+      const coachData = coachSnapshot.docs.map(d => d.data());
+
+      const premisesSnapshot = await admin.firestore().collection('premisesForms')
+        .where('submittedByDivision', '==', adminDivision)
+        .where('createdAt', '>=', startOfDay)
+        .where('createdAt', '<=', endOfDay)
+        .get();
+
+      const premisesData = premisesSnapshot.docs.map(d => d.data());
+
+      // Always send email, even if no data
+      const coachBuffer = coachData.length > 0 ? await generateCoachExcelBuffer(coachData) : null;
+      const premisesBuffer = premisesData.length > 0 ? await generatePremisesExcelBuffer(premisesData) : null;
+
+      await sendEmailWithAttachments(adminEmail, adminDivision, coachBuffer, premisesBuffer, {
+        coachCount: coachData.length,
+        premisesCount: premisesData.length
+      });
+    }
+  } catch (error) {
+    console.error("Error in Automated Reporting Loop:", error);
+  }
 }
 
 // --- COACH EXCEL GENERATOR (Exact mapping from your Firestore) ---
 async function generateCoachExcelBuffer(data) {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Coach Cleaning Report');
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Coach Cleaning Report');
 
-    // Header Styling
-    const headerStyle = {
-        font: { bold: true, color: { argb: 'FFFFFF' } },
-        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '1F4E78' } },
-        alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
-        border: { outline: { style: 'thin' } }
-    };
+  // Header Styling
+  const headerStyle = {
+    font: { bold: true, color: { argb: 'FFFFFF' } },
+    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '1F4E78' } },
+    alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
+    border: { outline: { style: 'thin' } }
+  };
 
-    // Define Columns
-    sheet.columns = [
-        { header: 'Date', key: 'date', width: 15 },
-        { header: 'Train Details', key: 'train', width: 30 },
-        { header: 'Work Type', key: 'workType', width: 20 },
-        { header: 'ACWP Status', key: 'acwp', width: 15 },
-        { header: 'Total Penalty', key: 'penalty', width: 15 },
-        { header: 'Internal (A)', key: 'intA', width: 12 },
-        { header: 'Intensive (NA)', key: 'intNA', width: 12 },
-        { header: 'Status', key: 'status', width: 15 }
-    ];
+  // Define Columns
+  sheet.columns = [
+    { header: 'Date', key: 'date', width: 15 },
+    { header: 'Train Details', key: 'train', width: 30 },
+    { header: 'Work Type', key: 'workType', width: 20 },
+    { header: 'ACWP Status', key: 'acwp', width: 15 },
+    { header: 'Total Penalty', key: 'penalty', width: 15 },
+    { header: 'Internal (A)', key: 'intA', width: 12 },
+    { header: 'Intensive (NA)', key: 'intNA', width: 12 },
+    { header: 'Status', key: 'status', width: 15 }
+  ];
 
-    // Apply Style to Header Row
-    sheet.getRow(1).eachCell((cell) => { cell.style = headerStyle; });
+  // Apply Style to Header Row
+  sheet.getRow(1).eachCell((cell) => { cell.style = headerStyle; });
 
-    // Add Data Rows
-    data.forEach(item => {
-        sheet.addRow({
-            date: item.formDateTime ? item.formDateTime.split('T')[0] : 'N/A',
-            train: `${item.submittedTo?.trainNumber || ''} - ${item.submittedTo?.trainName || ''}`,
-            workType: item.ratingDetails?.workType || 'N/A',
-            acwp: item.ratingDetails?.acwpStatus || 'N/A',
-            penalty: item.summary?.totalPenalty || 0,
-            intA: item.summary?.internal?.A || 0,
-            intNA: item.summary?.intensive?.NA || 0,
-            status: item.status || 'LOCKED'
-        });
+  // Add Data Rows
+  data.forEach(item => {
+    sheet.addRow({
+      date: item.formDateTime ? item.formDateTime.split('T')[0] : 'N/A',
+      train: `${item.submittedTo?.trainNumber || ''} - ${item.submittedTo?.trainName || ''}`,
+      workType: item.ratingDetails?.workType || 'N/A',
+      acwp: item.ratingDetails?.acwpStatus || 'N/A',
+      penalty: item.summary?.totalPenalty || 0,
+      intA: item.summary?.internal?.A || 0,
+      intNA: item.summary?.intensive?.NA || 0,
+      status: item.status || 'LOCKED'
     });
+  });
 
-    return await workbook.xlsx.writeBuffer();
+  return await workbook.xlsx.writeBuffer();
 }
 
 // --- PREMISES EXCEL GENERATOR (Exact mapping from your Firestore) ---
 async function generatePremisesExcelBuffer(data) {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Premises Report');
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Premises Report');
 
-    const headerStyle = {
-        font: { bold: true, color: { argb: 'FFFFFF' } },
-        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4472C4' } },
-        alignment: { vertical: 'middle', horizontal: 'center' }
-    };
+  const headerStyle = {
+    font: { bold: true, color: { argb: 'FFFFFF' } },
+    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4472C4' } },
+    alignment: { vertical: 'middle', horizontal: 'center' }
+  };
 
-    sheet.columns = [
-        { header: 'Date', key: 'date', width: 15 },
-        { header: 'Location', key: 'location', width: 20 },
-        { header: 'Area (Sq Mtrs)', key: 'area', width: 15 },
-        { header: 'Housekeeping Score', key: 'hkScore', width: 20 },
-        { header: 'Pit-Line Score', key: 'pitScore', width: 15 },
-        { header: 'Garbage Score', key: 'gbScore', width: 15 },
-        { header: 'Overall Score', key: 'overall', width: 15 },
-        { header: 'Status', key: 'status', width: 15 }
-    ];
+  sheet.columns = [
+    { header: 'Date', key: 'date', width: 15 },
+    { header: 'Location', key: 'location', width: 20 },
+    { header: 'Area (Sq Mtrs)', key: 'area', width: 15 },
+    { header: 'Housekeeping Score', key: 'hkScore', width: 20 },
+    { header: 'Pit-Line Score', key: 'pitScore', width: 15 },
+    { header: 'Garbage Score', key: 'gbScore', width: 15 },
+    { header: 'Overall Score', key: 'overall', width: 15 },
+    { header: 'Status', key: 'status', width: 15 }
+  ];
 
-    sheet.getRow(1).eachCell((cell) => { cell.style = headerStyle; });
+  sheet.getRow(1).eachCell((cell) => { cell.style = headerStyle; });
 
-    data.forEach(item => {
-        sheet.addRow({
-            date: item.formDateTime ? item.formDateTime.split('T')[0] : 'N/A',
-            location: item.location || 'N/A',
-            area: item.area || 0,
-            hkScore: item.summary?.housekeepingScore || '0',
-            pitScore: item.summary?.pitLineScore || '0',
-            gbScore: item.summary?.garbageDisposalScore || '0',
-            overall: item.summary?.overallScore || '0',
-            status: item.status || 'N/A'
-        });
+  data.forEach(item => {
+    sheet.addRow({
+      date: item.formDateTime ? item.formDateTime.split('T')[0] : 'N/A',
+      location: item.location || 'N/A',
+      area: item.area || 0,
+      hkScore: item.summary?.housekeepingScore || '0',
+      pitScore: item.summary?.pitLineScore || '0',
+      gbScore: item.summary?.garbageDisposalScore || '0',
+      overall: item.summary?.overallScore || '0',
+      status: item.status || 'N/A'
     });
+  });
 
-    return await workbook.xlsx.writeBuffer();
+  return await workbook.xlsx.writeBuffer();
 }
 
 // --- STEP 4.1: FINAL EMAIL LOGIC WITH VERIFIED DOMAIN ---
 async function sendEmailWithAttachments(email, division, coachBuffer, premisesBuffer, stats = { coachCount: 0, premisesCount: 0 }) {
-    const todayDate = new Date().toISOString().split('T')[0];
+  const todayDate = new Date().toISOString().split('T')[0];
 
-    try {
-        const hasData = stats.coachCount > 0 || stats.premisesCount > 0;
-        
-        await resend.emails.send({
-            // Using your verified domain
-            from: 'Swachh Railways <reports@swachhrailways.com>', 
-            to: [email],
-            subject: `Daily Cleaning Report | ${division} | ${todayDate}`,
-            html: `
+  try {
+    const hasData = stats.coachCount > 0 || stats.premisesCount > 0;
+
+    await resend.emails.send({
+      // Using your verified domain
+      from: 'Swachh Railways <reports@swachhrailways.com>',
+      to: [email],
+      subject: `Daily Cleaning Report | ${division} | ${todayDate}`,
+      html: `
                 <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 8px;">
                     <h2 style="color: #1F4E78; border-bottom: 2px solid #1F4E78; padding-bottom: 10px;">Daily Summary Report</h2>
                     
@@ -335,15 +335,15 @@ async function sendEmailWithAttachments(email, division, coachBuffer, premisesBu
                     <p style="font-size: 0.8em; color: #666; margin-top: 4px;">Powered by Backend Automation</p>
                 </div>
             `,
-            attachments: [
-                ...(coachBuffer ? [{ filename: `Coach_Report_${division}_${todayDate}.xlsx`, content: coachBuffer.toString('base64') }] : []),
-                ...(premisesBuffer ? [{ filename: `Premises_Report_${division}_${todayDate}.xlsx`, content: premisesBuffer.toString('base64') }] : [])
-            ],
-        });
-        console.log(`Report successfully emailed to Admin: ${email} (${division})`);
-    } catch (error) {
-        console.error(`Error sending email to ${email}:`, error);
-    }
+      attachments: [
+        ...(coachBuffer ? [{ filename: `Coach_Report_${division}_${todayDate}.xlsx`, content: coachBuffer.toString('base64') }] : []),
+        ...(premisesBuffer ? [{ filename: `Premises_Report_${division}_${todayDate}.xlsx`, content: premisesBuffer.toString('base64') }] : [])
+      ],
+    });
+    console.log(`Report successfully emailed to Admin: ${email} (${division})`);
+  } catch (error) {
+    console.error(`Error sending email to ${email}:`, error);
+  }
 }
 
 
@@ -366,7 +366,7 @@ const upload = multer({
 });
 
 // Firebase admin pehle se upar initialized hai, direct use karein
-const bucket = admin.storage().bucket('swachh-railways.firebasestorage.app'); 
+const bucket = admin.storage().bucket('swachh-railways.firebasestorage.app');
 
 // =======================================================
 // == API 4.10: Upload Camera Image to Firebase Storage (Fixed & Multi-Key Compatible)
@@ -380,7 +380,7 @@ app.post('/api/media/upload', verifyToken, (req, res, next) => {
       console.error('(Upload Error):', err);
       return res.status(400).send({ error: err.message });
     }
-    
+
     if (req.files) {
       req.file = (req.files['file'] && req.files['file'][0]) || (req.files['image'] && req.files['image'][0]);
     }
@@ -393,7 +393,7 @@ app.post('/api/media/upload', verifyToken, (req, res, next) => {
     }
 
     const originalExt = req.file.originalname.split('.').pop() || 'jpg';
-    const uniqueToken = uuidv4(); 
+    const uniqueToken = uuidv4();
     const fileName = `obhs_tasks/${uuidv4()}_${Date.now()}.${originalExt}`;
     const fileUpload = bucket.file(fileName);
 
@@ -401,7 +401,7 @@ app.post('/api/media/upload', verifyToken, (req, res, next) => {
       metadata: {
         contentType: req.file.mimetype,
         metadata: {
-          firebaseStorageDownloadTokens: uniqueToken 
+          firebaseStorageDownloadTokens: uniqueToken
         }
       }
     });
@@ -418,7 +418,7 @@ app.post('/api/media/upload', verifyToken, (req, res, next) => {
         const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media&token=${uniqueToken}`;
 
         console.log(`(Media Storage) File uploaded successfully and activated: ${fileName}`);
-        
+
         return res.status(200).json({
           success: true,
           message: "Image uploaded successfully.",
@@ -457,7 +457,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     otpStore.set(phone, otp);
     setTimeout(() => otpStore.delete(phone), 300000);
 
@@ -512,8 +512,8 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
     // 4. Status Check: Only 'APPROVED' users can login
     if (userData.status !== 'APPROVED') {
-      return res.status(403).json({ 
-        error: `Your account status is ${userData.status}. Please contact Admin for access.` 
+      return res.status(403).json({
+        error: `Your account status is ${userData.status}. Please contact Admin for access.`
       });
     }
 
@@ -558,9 +558,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
   } catch (error) {
     console.error('(Login) Failed to verify Mobile OTP:', error);
-    res.status(500).json({ 
-      error: 'Internal Server Error', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Internal Server Error',
+      details: error.message
     });
   }
 });
@@ -580,7 +580,7 @@ app.post('/api/passenger/send-otp', async (req, res) => {
 
     // Generate 6-digit random OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     // Store OTP in your existing memory-cache (otpStore) with 5-minute expiry
     otpStore.set(phone, otp);
     setTimeout(() => otpStore.delete(phone), 300000);
@@ -591,9 +591,9 @@ app.post('/api/passenger/send-otp', async (req, res) => {
 
     if (response.data.Status === "Success") {
       console.log(`(Passenger Verification) OTP ${otp} sent to ${phone}`);
-      return res.status(200).json({ 
-        success: true, 
-        message: "OTP has been sent to passenger mobile number." 
+      return res.status(200).json({
+        success: true,
+        message: "OTP has been sent to passenger mobile number."
       });
     } else {
       throw new Error(response.data.Details || "Failed to send SMS via 2Factor");
@@ -639,9 +639,9 @@ app.post('/api/passenger/verify-otp', async (req, res) => {
 
   } catch (error) {
     console.error('(Passenger OTP Verification) Failed:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error', 
-      details: error.message 
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      details: error.message
     });
   }
 });
@@ -681,9 +681,9 @@ app.post('/api/passenger/create-task', async (req, res) => {
 
   } catch (error) {
     console.error('(Passenger Task Creation) Failed:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error', 
-      details: error.message 
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      details: error.message
     });
   }
 });
@@ -692,7 +692,7 @@ app.post('/api/passenger/create-task', async (req, res) => {
 app.post('/api/cts/create-emergency-task', verifyToken, async (req, res) => {
   try {
     const { trainNo, coachNo, taskType, description, priority } = req.body;
-    
+
     // Role check: Only CTS/Supervisor can create emergency tasks
     if (!['CTS', 'Railway Supervisor', 'Railway Admin'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Only CTS/Supervisors can create emergency tasks' });
@@ -736,19 +736,19 @@ app.post('/api/cts/create-emergency-task', verifyToken, async (req, res) => {
 app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
   try {
     const { trainNo, coachNo } = req.query;
-    
+
     let query = db.collection('passenger_tasks');
-    
+
     if (trainNo) {
       query = query.where('trainNo', '==', trainNo);
     }
-    
+
     if (coachNo) {
       query = query.where('coachNo', '==', coachNo);
     }
 
     const snapshot = await query.orderBy('createdAt', 'desc').get();
-    
+
     const tasks = [];
     snapshot.forEach(doc => {
       tasks.push({ uid: doc.id, ...doc.data() });
@@ -762,9 +762,9 @@ app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('(Get Passenger Tasks) Failed:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error', 
-      details: error.message 
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      details: error.message
     });
   }
 });
@@ -781,7 +781,7 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     otpStore.set(email, otp);
     console.log(`(Resend) Generated OTP ${otp} for ${email}`);
 
@@ -930,7 +930,7 @@ app.post('/api/auth/login', async (req, res) => {
     let activeRunInstanceId = null;
     try {
       if (userData.uid) {
-        
+
         const runInstanceSnapshot = await db.collection('RunInstance')
           .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
           .get();
@@ -947,7 +947,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
       }
     } catch (runError) {
-      
+
       console.error('(Login) Optional RunInstance fetch failed:', runError);
     }
 
@@ -1519,7 +1519,7 @@ app.get('/api/admin/users', verifyToken, async (req, res) => {
     }
 
     const snapshot = await query.get();
-    
+
     let userList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
 
@@ -1541,7 +1541,7 @@ app.get('/api/admin/users', verifyToken, async (req, res) => {
 
       if (filterStatus) {
         if (s === filterStatus.toUpperCase()) {
-            userList.push({ ...d, uid: doc.id });
+          userList.push({ ...d, uid: doc.id });
         }
       } else {
         userList.push({ ...d, uid: doc.id });
@@ -1567,7 +1567,7 @@ app.get('/api/admin/railway-workers', verifyToken, async (req, res) => {
   try {
     const { status: filterStatus, division, zone } = req.query;
     const { role: requesterRole, zone: requesterZone, division: requesterDivision } = req.user;
-    
+
     const userRole = (requesterRole || '').trim().toLowerCase();
 
     let query = db.collection('users').where('role', '==', 'Railway Worker');
@@ -1575,17 +1575,17 @@ app.get('/api/admin/railway-workers', verifyToken, async (req, res) => {
     if (userRole === 'company master' || userRole === 'super admin' || userRole === 'admin') {
       if (zone) query = query.where('zone', '==', zone);
       if (division) query = query.where('division', '==', division);
-    } 
+    }
     else if (userRole === 'railway master') {
       query = query.where('zone', '==', requesterZone);
       if (division) query = query.where('division', '==', division);
-    } 
+    }
     else {
       query = query.where('division', '==', requesterDivision);
     }
 
     const snapshot = await query.get();
-    
+
     let workerList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
 
@@ -1615,9 +1615,9 @@ app.get('/api/admin/railway-workers', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('(Workers) Error fetching railway workers:', error);
-    res.status(500).send({ 
-      success: false, 
-      error: error.message 
+    res.status(500).send({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -1643,14 +1643,14 @@ app.get('/api/worker/profile', verifyToken, async (req, res) => {
     const runsSnapshot = await db.collection('RunInstance')
       .where('coaches', 'array-contains-any', [
         { workerId: uid }, // Ye query tabhi work karegi agar array objects exactly match karein
-      ]) 
+      ])
       // NOTE: Firestore mein object search thoda tricky hota hai, 
       // isliye safe side ke liye hum saare 'Scheduled' aur 'Active' runs nikal kar filter karenge.
       .get();
 
     // Kyunki Firestore 'array-contains' objects ke partial fields par kaam nahi karta, 
     // isliye hum better approach use karenge:
-    
+
     const allRunsSnapshot = await db.collection('RunInstance')
       .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
       .get();
@@ -1661,7 +1661,7 @@ app.get('/api/worker/profile', verifyToken, async (req, res) => {
       const runData = doc.data();
       // Check if this worker is in the coaches array of this run
       const assignedCoach = runData.coaches.find(c => c.workerId === uid);
-      
+
       if (assignedCoach) {
         assignedRuns.push({
           runInstanceId: runData.runInstanceId,
@@ -1701,10 +1701,10 @@ app.get('/api/worker/profile', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('(Worker Profile) Error:', error);
-    res.status(500).send({ 
-      success: false, 
-      error: 'Failed to fetch profile', 
-      details: error.message 
+    res.status(500).send({
+      success: false,
+      error: 'Failed to fetch profile',
+      details: error.message
     });
   }
 });
@@ -2219,7 +2219,7 @@ app.post('/api/contractors', verifyToken, async (req, res) => {
 
     if (!companyName || !registrationType) {
       return res.status(400).send({
-        error: "companyName and registrationType are required." 
+        error: "companyName and registrationType are required."
       });
     }
 
@@ -2672,7 +2672,7 @@ app.post('/api/contracts', verifyToken, async (req, res) => {
     if (!duplicateSnap.empty) {
       const locationName = depot ? `Depot: ${depot}` : `Division: ${division}`;
       return res.status(400).send({
-        error: `Restriction: This Contractor already has a contract in this ${locationName}. Same company cannot have multiple contracts in the same division/depot.` 
+        error: `Restriction: This Contractor already has a contract in this ${locationName}. Same company cannot have multiple contracts in the same division/depot.`
       });
     }
 
@@ -2761,7 +2761,7 @@ app.put('/api/contractors/:uid', verifyToken, async (req, res) => {
         if (currentData.status !== 'APPROVED') {
           updates.approvedBy = userId;
           updates.approvedByName = editorName;
-          updates.approvedAt = new Date().toISOString(); 
+          updates.approvedAt = new Date().toISOString();
           updates.approved_at = null;
 
           updates.rejectedBy = null; updates.rejectedByName = null; updates.rejectedAt = null;
@@ -2812,7 +2812,7 @@ app.put('/api/contractors/:uid', verifyToken, async (req, res) => {
 app.put('/api/contracts/:uid', verifyToken, async (req, res) => {
   try {
     const { uid } = req.params;
-    const updates = req.body; 
+    const updates = req.body;
     const { uid: userId, name, fullName, email, role } = req.user;
 
     const editorName = fullName || name || email || role || 'Unknown';
@@ -2855,7 +2855,7 @@ app.get('/api/contracts', verifyToken, async (req, res) => {
 
     console.log(`(Contract Fetch) User: ${userRole} | Zone: ${userZone} | Div: ${userDivision}`);
     if (userType === 'railway') {
-      
+
       if (userRole === 'company master' || userRole === 'super admin') {
         if (queryZone) query = query.where('zone', '==', queryZone);
         if (queryDivision) query = query.where('division', '==', queryDivision);
@@ -2863,19 +2863,19 @@ app.get('/api/contracts', verifyToken, async (req, res) => {
 
       else if (userRole === 'railway master') {
         if (!userZone) return res.status(403).send({ error: "Zone missing in profile." });
-        
+
         query = query.where('zone', '==', userZone);
-        
+
         if (queryDivision) query = query.where('division', '==', queryDivision);
       }
 
       else if (userRole.includes('admin') || userRole.includes('supervisor')) {
         if (!userDivision) return res.status(403).send({ error: "Division missing in profile." });
-        
+
         query = query.where('division', '==', userDivision);
       }
     }
-    
+
     else if (userType === 'contractor') {
       const contractorEntityId = req.user.entityId;
       if (!contractorEntityId) return res.status(403).send({ error: "Entity linkage missing." });
@@ -3016,7 +3016,7 @@ app.get('/api/contracts/by-entity/:entityId', async (req, res) => {
       return res.status(400).json({ error: 'Query requires an index.' });
     }
     console.error('(Contract) Error fetching contracts:', error);
-    res.status(500).send({ error: 'Failed to fetch contracts'});
+    res.status(500).send({ error: 'Failed to fetch contracts' });
   }
 });
 
@@ -3031,9 +3031,9 @@ app.get('/api/contracts/by-entity/:entityId', async (req, res) => {
 const convertToDecimalDays = (timeStr) => {
   if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes(':')) return 0;
   const parts = timeStr.split(':');
-  const d = parseFloat(parts[0]) || 0; 
-  const h = parseFloat(parts[1]) || 0; 
-  const m = parseFloat(parts[2]) || 0; 
+  const d = parseFloat(parts[0]) || 0;
+  const h = parseFloat(parts[1]) || 0;
+  const m = parseFloat(parts[2]) || 0;
   return d + (h / 24) + (m / 1440);
 };
 
@@ -3088,7 +3088,7 @@ app.post('/api/trains', verifyToken, async (req, res) => {
       finalCycleTime = calculatedC > 0 ? calculatedC : (Number(cycleLength) || 0);
 
       // Frequency (F) = Interval between departures
-      const F = 7 / days.length; 
+      const F = 7 / days.length;
 
       // Required Instances = Ceiling(Cycle / Frequency)
       requiredInstances = Math.ceil(finalCycleTime / F);
@@ -3106,7 +3106,7 @@ app.post('/api/trains', verifyToken, async (req, res) => {
     }
 
     const docRef = db.collection('trains').doc();
-    
+
     const newTrain = {
       uid: docRef.id,
       trainNo: trainNo || null,
@@ -3122,7 +3122,7 @@ app.post('/api/trains', verifyToken, async (req, res) => {
       outboundTrainNo: isOBHSEnabled ? outboundTrainNo : null,
       inboundTrainNo: isOBHSEnabled ? inboundTrainNo : null,
       cycleLength: isOBHSEnabled ? Number(finalCycleTime.toFixed(4)) : (cycleLength || null),
-      requiredInstances: isOBHSEnabled ? requiredInstances : null, 
+      requiredInstances: isOBHSEnabled ? requiredInstances : null,
       journeyStartTime: isOBHSEnabled ? (journeyStartTime || null) : null,
       createdBy: uid,
       createdByName: userName,
@@ -3139,7 +3139,7 @@ app.post('/api/trains', verifyToken, async (req, res) => {
       for (let i = 0; i < requiredInstances; i++) {
         const instanceLetter = String.fromCharCode(65 + i);
         const instanceId = `${trainNo}-${trainName}-Inst-${instanceLetter}`;
-        
+
         batch.set(db.collection('TrainPairs').doc(instanceId), {
           instanceId: instanceId,
           instanceName: `Instance ${instanceLetter}`,
@@ -3183,12 +3183,12 @@ async function generateTaskInstancesForRun(runData) {
   let taskCount = 0;
 
   const departureDate = runData.departureDate || new Date().toISOString().split('T')[0];
-  
+
   // Cleaning frequency schedule (24h format)
   // Cleaning frequency schedule (24h format) - Updated to 1-hour intervals
   const cleaningTimes = [
-    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', 
-    '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', 
+    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
+    '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00',
     '20:00', '21:00'
   ];
   const garbageTimes = ['07:00', '10:00', '13:00', '16:00', '19:00'];
@@ -3211,7 +3211,7 @@ async function generateTaskInstancesForRun(runData) {
         taskTypeName = 'coach_cleaning';
         displayName = 'Compartment Cleaning';
       }
-      
+
       const headerId = `${runData.runInstanceId}_${taskTypeName}_${timeSlot.replace(':', '')}`;
       const headerRef = db.collection('task_headers').doc(headerId);
       batch.set(headerRef, {
@@ -3231,7 +3231,7 @@ async function generateTaskInstancesForRun(runData) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
-      
+
       // Create child task detail for this coach/header
       const detailId = `${headerId}_${coachNo}`;
       const detailRef = db.collection('task_details').doc(detailId);
@@ -3264,12 +3264,12 @@ async function generateTaskInstancesForRun(runData) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
-      
+
       // Update header with child task id
       batch.update(headerRef, {
         childTaskIds: admin.firestore.FieldValue.arrayUnion(detailId)
       });
-      
+
       taskCount++;
     }
 
@@ -3470,7 +3470,7 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
     const coachesWithNames = await Promise.all(coaches.map(async (c) => {
       const actualJanitorId = c.janitorId || c.workerId || null;
       let janitorName = c.janitorName || "Unknown Worker";
-      
+
       if (actualJanitorId && (!c.janitorName || c.janitorName === "Unknown Worker")) {
         const workerDoc = await db.collection('users').doc(actualJanitorId).get();
         if (workerDoc.exists) {
@@ -3503,7 +3503,7 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
     }));
 
     const { uid, name, email, role } = req.user;
-    
+
     // Enforce maximum 2 coaches per worker (Railway Board policy)
     const workerCoachCount = {};
     for (const c of coachesWithNames) {
@@ -3516,7 +3516,7 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
           });
         }
       }
-      
+
       if (c.coachPosition) {
         const isAC = /^[ABHME]/i.test(c.coachPosition) || (c.coachType && c.coachType.toUpperCase().includes('AC'));
         if (isAC && !c.attendantId) {
@@ -3527,9 +3527,9 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
         }
       }
     }
-    
+
     const userName = name || email || role || 'Unknown';
-    const runInstanceRef = db.collection('RunInstance').doc(); 
+    const runInstanceRef = db.collection('RunInstance').doc();
 
     const newRunData = {
       runInstanceId: runInstanceRef.id,
@@ -3543,8 +3543,8 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
       journeyStartTime: pairData.journeyStartTime || null,
       journeyEndTime: pairData.journeyEndTime || null,
       scheduledDeparture: `${departureDate}T${pairData.journeyStartTime || '00:00:00'}.000Z`,
-      
-      numberOfCoaches: coachesWithNames.length, 
+
+      numberOfCoaches: coachesWithNames.length,
       coaches: coachesWithNames,
 
       status: 'PLANNED',
@@ -3552,7 +3552,7 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
       taskExecutionScore: 0,
       actualDeparture: null,
       actualArrival: null,
-      
+
       createdAt: new Date().toISOString(),
       createdBy: uid,
       createdByName: userName
@@ -3606,20 +3606,20 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
     };
 
     if (coaches && Array.isArray(coaches)) {
-      
+
       // AC coach prefix check for attendant validation
       const isACCoach = (coachType) => {
         if (!coachType) return false;
         const upper = coachType.toUpperCase();
         return ['A', 'B', 'H', 'M', 'C', 'E', 'AC', 'A1', 'B1', 'H1', 'M1', 'C1', 'E1',
-                '2AC', '3AC', '1AC', 'AC', '2A', '3A', '1A', 'EA', 'EC', 'AB', 'HA', 'MA']
+          '2AC', '3AC', '1AC', 'AC', '2A', '3A', '1A', 'EA', 'EC', 'AB', 'HA', 'MA']
           .includes(upper) || /^[ABHMC]\d*$/.test(upper);
       };
 
       const coachesWithNames = await Promise.all(coaches.map(async (c) => {
         const actualJanitorId = c.janitorId || c.workerId || null;
         let janitorName = c.janitorName || "Unknown Worker";
-        
+
         if (actualJanitorId && (!c.janitorName || c.janitorName === "Unknown Worker")) {
           const workerDoc = await db.collection('users').doc(actualJanitorId).get();
           if (workerDoc.exists) {
@@ -3673,8 +3673,8 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
           .get();
 
         if (!pendingTasksSnapshot.empty) {
-          return res.status(400).send({ 
-            error: `Cannot close run instance. There are still ${pendingTasksSnapshot.size} pending or unreviewed tasks.` 
+          return res.status(400).send({
+            error: `Cannot close run instance. There are still ${pendingTasksSnapshot.size} pending or unreviewed tasks.`
           });
         }
       }
@@ -3723,7 +3723,7 @@ app.post('/api/run-instances/:runInstanceId/activate', verifyToken, async (req, 
     }
 
     const departureTime = actualDeparture || new Date().toISOString();
-    
+
     await runInstanceRef.update({
       actualDeparture: departureTime,
       status: 'Active',
@@ -3829,14 +3829,14 @@ app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, 
 app.put('/api/trains/:uid', verifyToken, async (req, res) => {
   try {
     const { uid } = req.params;
-    
+
     const allowedFields = [
-      'trainNo', 'trainName', 'origin', 'destination', 'days', 
+      'trainNo', 'trainName', 'origin', 'destination', 'days',
       'zone', 'division', 'depot', 'status', 'TrainApplicableFor',
       'outboundTrainNo', 'inboundTrainNo', 'returnOffset', 'cycleLength',
       'outboundDurationStr', 'inboundDurationStr', 'layoverDestStr', 'layoverOriginStr'
     ];
-    
+
     const bodyKeys = Object.keys(req.body);
     for (const key of bodyKeys) {
       if (!allowedFields.includes(key)) {
@@ -3847,8 +3847,8 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
       }
     }
 
-    const { 
-      trainNo, trainName, origin, destination, days, 
+    const {
+      trainNo, trainName, origin, destination, days,
       zone, division, depot, status, TrainApplicableFor,
       outboundTrainNo, inboundTrainNo, returnOffset, cycleLength,
       outboundDurationStr, inboundDurationStr, layoverDestStr, layoverOriginStr
@@ -3904,15 +3904,15 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
     if (outboundTrainNo !== undefined) updateData.outboundTrainNo = outboundTrainNo;
     if (inboundTrainNo !== undefined) updateData.inboundTrainNo = inboundTrainNo;
     if (status) updateData.status = status;
-    
+
     // Fixed: isOBHSNow variable used here
     if (isOBHSNow) {
-        updateData.cycleLength = Number(newFinalCycleTime.toFixed(4));
-        updateData.requiredInstances = newRequiredInstances;
-        if (outboundDurationStr) updateData.outboundDurationStr = outboundDurationStr;
-        if (inboundDurationStr) updateData.inboundDurationStr = inboundDurationStr;
-        if (layoverDestStr) updateData.layoverDestStr = layoverDestStr;
-        if (layoverOriginStr) updateData.layoverOriginStr = layoverOriginStr;
+      updateData.cycleLength = Number(newFinalCycleTime.toFixed(4));
+      updateData.requiredInstances = newRequiredInstances;
+      if (outboundDurationStr) updateData.outboundDurationStr = outboundDurationStr;
+      if (inboundDurationStr) updateData.inboundDurationStr = inboundDurationStr;
+      if (layoverDestStr) updateData.layoverDestStr = layoverDestStr;
+      if (layoverOriginStr) updateData.layoverOriginStr = layoverOriginStr;
     }
 
     updateData.updatedBy = editorId;
@@ -3938,7 +3938,7 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
       for (let i = 0; i < newRequiredInstances; i++) {
         const instanceLetter = String.fromCharCode(65 + i);
         const instanceId = `${finalTrainNo}-${finalTrainName}-Inst-${instanceLetter}`;
-        
+
         createBatch.set(db.collection('TrainPairs').doc(instanceId), {
           instanceId: instanceId,
           instanceName: `Instance ${instanceLetter}`,
@@ -3977,9 +3977,9 @@ app.get('/api/train-pairs/train/:parentTrainId', verifyToken, async (req, res) =
     const { status } = req.query;
 
     if (!parentTrainId) {
-      return res.status(400).send({ 
-        error: "Missing parameter", 
-        details: "parentTrainId is required to fetch pairs." 
+      return res.status(400).send({
+        error: "Missing parameter",
+        details: "parentTrainId is required to fetch pairs."
       });
     }
 
@@ -3993,10 +3993,10 @@ app.get('/api/train-pairs/train/:parentTrainId', verifyToken, async (req, res) =
     const snapshot = await query.get();
 
     if (snapshot.empty) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: "No Train Pairs found for this Train ID.",
         count: 0,
-        data: [] 
+        data: []
       });
     }
 
@@ -4019,9 +4019,9 @@ app.get('/api/train-pairs/train/:parentTrainId', verifyToken, async (req, res) =
 
   } catch (error) {
     console.error('(TrainPairs) Error fetching data:', error);
-    res.status(500).send({ 
-      error: 'Failed to fetch train pairs', 
-      details: error.message 
+    res.status(500).send({
+      error: 'Failed to fetch train pairs',
+      details: error.message
     });
   }
 });
@@ -4035,9 +4035,9 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     const { parentTrainId } = req.params;
     const { status } = req.query;
     if (!parentTrainId) {
-      return res.status(400).send({ 
-        error: "Missing parameter", 
-        details: "parentTrainId is required to fetch instances." 
+      return res.status(400).send({
+        error: "Missing parameter",
+        details: "parentTrainId is required to fetch instances."
       });
     }
 
@@ -4051,10 +4051,10 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     const snapshot = await query.orderBy('createdAt', 'desc').get();
 
     if (snapshot.empty) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: "No Run Instances found matching the criteria.",
         count: 0,
-        data: [] 
+        data: []
       });
     }
 
@@ -4070,14 +4070,14 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     });
 
   } catch (error) {
-    }
-    console.error('(RunInstance) Error fetching data:', error);
-    res.status(500).send({ 
-      error: 'Failed to fetch run instances', 
-      details: error.message 
-    });
   }
-});
+  console.error('(RunInstance) Error fetching data:', error);
+  res.status(500).send({
+    error: 'Failed to fetch run instances',
+    details: error.message
+  });
+}
+);
 
 
 // =======================================================
@@ -4099,7 +4099,7 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
 
     const trainData = trainDoc.data();
     const days = trainData.days || [];
-    
+
     if (days.length === 0) {
       return res.status(400).send({ error: "Train has no assigned running days." });
     }
@@ -4107,7 +4107,7 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
     const trainPairsSnapshot = await db.collection('TrainPairs')
       .where('parentTrainId', '==', trainId)
       .get();
-      
+
     if (trainPairsSnapshot.empty) {
       return res.status(400).send({ error: "No Rake Instances (TrainPairs) found for this train. Please update train to generate pairs." });
     }
@@ -4119,7 +4119,7 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
 
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     if (isNaN(start) || isNaN(end) || start > end) {
       return res.status(400).send({ error: "Invalid date range." });
     }
@@ -4128,17 +4128,17 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
       'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
       'Thursday': 4, 'Friday': 5, 'Saturday': 6
     };
-    
+
     const validDays = days.map(d => dayMap[d]);
 
     const generatedInstances = [];
     let pairIndex = 0;
-    
+
     // Check existing RunInstances to avoid duplicates
     const existingRunsSnapshot = await db.collection('RunInstance')
       .where('parentTrainId', '==', trainId)
       .get();
-      
+
     const existingDates = new Set();
     existingRunsSnapshot.forEach(doc => {
       existingDates.add(doc.data().departureDate);
@@ -4147,20 +4147,20 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
     const batch = db.batch();
     const { uid, name, email, role } = req.user;
     const userName = name || email || role || 'System';
-    
+
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       if (validDays.includes(d.getDay())) {
         const dateStr = d.toISOString().split('T')[0];
-        
+
         if (existingDates.has(dateStr)) {
           continue; // Skip if already generated
         }
-        
+
         const pair = trainPairs[pairIndex % trainPairs.length];
         pairIndex++;
-        
+
         const runInstanceRef = db.collection('RunInstance').doc();
-        
+
         const newRunData = {
           runInstanceId: runInstanceRef.id,
           instanceId: pair.id,
@@ -4177,12 +4177,12 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
           createdByName: userName,
           status: 'Active'
         };
-        
+
         batch.set(runInstanceRef, newRunData);
         generatedInstances.push(newRunData);
       }
     }
-    
+
     if (generatedInstances.length > 0) {
       await batch.commit();
     }
@@ -4220,10 +4220,10 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
     const snapshot = await query.orderBy('createdAt', 'desc').get();
 
     if (snapshot.empty) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         success: true,
-        count: 0, 
-        data: [] 
+        count: 0,
+        data: []
       });
     }
 
@@ -4242,17 +4242,17 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
   } catch (error) {
     // Indexing error handling
     if (error.code === 'FAILED_PRECONDITION') {
-      return res.status(400).json({ 
-        error: 'Firestore Index Missing', 
-        details: 'Composite index is required for filtering and sorting.' 
+      return res.status(400).json({
+        error: 'Firestore Index Missing',
+        details: 'Composite index is required for filtering and sorting.'
       });
     }
 
     console.error('(RunInstance) Error fetching all data:', error);
-    res.status(500).send({ 
+    res.status(500).send({
       success: false,
-      error: 'Failed to fetch all run instances', 
-      details: error.message 
+      error: 'Failed to fetch all run instances',
+      details: error.message
     });
   }
 });
@@ -4309,7 +4309,7 @@ app.delete('/api/run-instances/:runInstanceId', verifyToken, async (req, res) =>
     if (data && data.instanceId) {
       try {
         await db.collection('TrainPairs').doc(data.instanceId).update({ status: 'Available' });
-      } catch (_) {}
+      } catch (_) { }
     }
     res.status(200).json({ success: true, message: 'Run instance deleted successfully' });
   } catch (error) {
@@ -4327,12 +4327,12 @@ app.post('/api/station-runs', verifyToken, async (req, res) => {
     if (!data.stationId || !data.stationName || !data.date || !data.shift) {
       return res.status(400).json({ error: 'Missing required fields for station run' });
     }
-    
+
     // Add metadata
     data.status = 'Pending';
     data.createdAt = new Date().toISOString();
     data.updatedAt = data.createdAt;
-    
+
     // Generate an ID (e.g., SCR-stationCode-date-shift)
     const runId = `SCR-${data.stationName.substring(0, 3).toUpperCase()}-${Date.now()}`;
     data.runInstanceId = runId;
@@ -4364,13 +4364,13 @@ app.put('/api/station-runs/:runId', verifyToken, async (req, res) => {
     const { runId } = req.params;
     const data = req.body;
     data.updatedAt = new Date().toISOString();
-    
+
     const ref = db.collection('StationCleaningRuns').doc(runId);
     const doc = await ref.get();
     if (!doc.exists) {
       return res.status(404).json({ error: 'Station Run not found' });
     }
-    
+
     await ref.update(data);
     res.status(200).json({ success: true, message: 'Station Run updated successfully' });
   } catch (error) {
@@ -4387,7 +4387,7 @@ app.delete('/api/station-runs/:runId', verifyToken, async (req, res) => {
     if (!doc.exists) {
       return res.status(404).json({ error: 'Station Run not found' });
     }
-    
+
     await ref.delete();
     res.status(200).json({ success: true, message: 'Station Run deleted successfully' });
   } catch (error) {
@@ -4408,7 +4408,7 @@ app.post('/api/station-tasks/submit', verifyToken, async (req, res) => {
     }
     data.status = 'Completed'; // worker submitted
     data.submittedAt = new Date().toISOString();
-    
+
     // Save to station_tasks collection
     const result = await db.collection('station_tasks').add(data);
     res.status(201).json({ success: true, message: 'Task submitted', taskId: result.id });
@@ -4424,7 +4424,7 @@ app.get('/api/station-tasks/pending-review', verifyToken, async (req, res) => {
     if (runInstanceId) {
       query = query.where('runInstanceId', '==', runInstanceId);
     }
-    
+
     const snapshot = await query.get();
     const tasks = [];
     snapshot.forEach(doc => {
@@ -4447,16 +4447,16 @@ app.get('/api/station-tasks/pending-review', verifyToken, async (req, res) => {
 app.get('/api/tasks/pending-review', verifyToken, async (req, res) => {
   try {
     const { runInstanceId } = req.query;
-    
+
     let query = db.collection('obhs_tasks')
       .where('status', '==', 'Completed');
-      
+
     if (runInstanceId) {
       query = query.where('runInstanceId', '==', runInstanceId);
     }
-    
+
     const snapshot = await query.get();
-    
+
     const tasks = [];
     snapshot.forEach(doc => {
       const task = doc.data();
@@ -4476,7 +4476,7 @@ app.post('/api/tasks/:taskId/approve', verifyToken, async (req, res) => {
     const { supervisorScore, supervisorComments } = req.body; // Score out of 10
 
     if (supervisorScore === undefined) {
-       return res.status(400).json({ error: "Supervisor score is required" });
+      return res.status(400).json({ error: "Supervisor score is required" });
     }
 
     const taskRef = db.collection('obhs_tasks').doc(taskId);
@@ -4526,12 +4526,12 @@ app.post('/api/tasks/:taskId/passenger-feedback', async (req, res) => {
 
     const taskRef = db.collection('task_instances').doc(taskId);
     const doc = await taskRef.get();
-    
+
     if (!doc.exists) return res.status(404).json({ error: 'Task not found' });
-    
+
     const taskData = doc.data();
     const supScore = taskData.supervisorScore || 0;
-    
+
     // Weightage: Passenger = 70%, Supervisor = 30%
     const pScore = Number(passengerScore);
     const consolidatedScore = (pScore * 0.7) + (supScore * 0.3);
@@ -4544,10 +4544,10 @@ app.post('/api/tasks/:taskId/passenger-feedback', async (req, res) => {
       feedbackReceivedAt: new Date().toISOString()
     });
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message: 'Feedback submitted successfully',
-      consolidatedScore 
+      consolidatedScore
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -4560,7 +4560,7 @@ app.post('/api/tasks/:taskId/passenger-feedback', async (req, res) => {
 app.get('/api/trains', verifyToken, async (req, res) => {
   try {
     const { role, zone: userZone, division: userDivision } = req.user;
-    const { status, zone: queryZone, division: queryDivision, applicableFor } = req.query; 
+    const { status, zone: queryZone, division: queryDivision, applicableFor } = req.query;
 
     const userRole = (role || '').trim().toLowerCase();
     let query = db.collection('trains');
@@ -4606,9 +4606,9 @@ app.get('/api/trains', verifyToken, async (req, res) => {
       return trainA.localeCompare(trainB, undefined, { numeric: true });
     });
 
-    res.status(200).json({ 
-      count: trainList.length, 
-      trains: trainList 
+    res.status(200).json({
+      count: trainList.length,
+      trains: trainList
     });
 
   } catch (error) {
@@ -4628,7 +4628,7 @@ app.get('/api/trains/:uid', async (req, res) => {
 
     const docRef = db.collection('trains').doc(uid);
     const doc = await docRef.get();
-    
+
     if (!doc.exists) return res.status(404).send({ error: "Train not found." });
 
     const trainData = doc.data();
@@ -4651,7 +4651,7 @@ app.get('/api/trains/number/:trainNo', async (req, res) => {
 
     const trainsRef = db.collection('trains');
     const snapshot = await trainsRef.where('trainNo', '==', trainNo).limit(1).get();
-    
+
     if (snapshot.empty) {
       return res.status(404).send({ error: "Train not found with this number." });
     }
@@ -4688,7 +4688,7 @@ const generateFormId = async (formType, division) => {
   const year = String(now.getFullYear()).substring(2);
   const dateStr = `${day}${month}${year}`;
 
-  const counterId = `${div}-${type}-${dateStr}`; 
+  const counterId = `${div}-${type}-${dateStr}`;
   const counterRef = db.collection('counters').doc(counterId);
 
   let sequentialNumber = 1;
@@ -4760,16 +4760,16 @@ app.post('/api/coach-forms', verifyToken, async (req, res) => {
     if (!hasCoachAccess) {
       return res.status(403).send({ error: "This Contract does not allow Coach Cleaning work." });
     }
-    
+
 
     let trainName = null;
-    let fetchedTrainNo = ""; 
+    let fetchedTrainNo = "";
     if (trainId) {
       const trainDoc = await db.collection('trains').doc(trainId).get();
       if (trainDoc.exists) {
         const tData = trainDoc.data();
         trainName = tData.trainName || null;
-        fetchedTrainNo = tData.trainNo || tData.trainNumber || ""; 
+        fetchedTrainNo = tData.trainNo || tData.trainNumber || "";
       }
     }
 
@@ -4879,9 +4879,9 @@ app.get('/api/coach-forms', verifyToken, async (req, res) => {
       query = query.where('status', 'in', ['SCORED', 'LOCKED', 'AUTO-APPROVED', 'REJECTED_BY_RAILWAY']);
     }
     else {
-     
+
       query = query.where('status', 'in', ['SUBMITTED', 'RE-SUBMITTED', 'APPROVED_BY_RAILWAY', 'SCORING_IN_PROGRESS']);
-      
+
       console.log(`(CoachForm) Active View for ${role}`);
     }
 
@@ -4990,7 +4990,7 @@ app.put('/api/coach-forms/:formId/save-scoring-draft', verifyToken, async (req, 
 
       return { ...coach, penalty: coachPenalty };
     }) : [];
-    
+
 
     await formDocRef.update({
       status: 'SCORING_IN_PROGRESS',
@@ -5079,18 +5079,18 @@ app.post('/api/coach-forms/:formId/submit-scoring', verifyToken, async (req, res
 
       return { ...coach, penalty: coachPenalty };
     });
-   
+
     await formDocRef.update({
-      status: 'SCORED', 
+      status: 'SCORED',
       scoringInProgress: false,
       ratingDetails: {
         workType: workType,
         acwpStatus: acwpStatus,
         coachEvaluationTable: processedEvaluationTable,
         totalPenalty: totalPenalty,
-        summary: summary 
+        summary: summary
       },
-      railwaySignature: { 
+      railwaySignature: {
         name: railwaySignatureName || railwaySupervisor.fullName,
         date: railwaySignatureDate || new Date().toISOString()
       },
@@ -5219,7 +5219,7 @@ app.put('/api/coach-forms/:formId/resubmit', verifyToken, async (req, res) => {
 app.post('/api/coach-forms/:formId/reject', verifyToken, async (req, res) => {
   try {
     const { formId } = req.params;
-    const { rejectionComments } = req.body; 
+    const { rejectionComments } = req.body;
     const railwaySupervisor = req.user;
 
     if (!rejectionComments) {
@@ -5243,7 +5243,7 @@ app.post('/api/coach-forms/:formId/reject', verifyToken, async (req, res) => {
       status: 'REJECTED_BY_RAILWAY',
       rejectionComments: rejectionComments,
       rejectedAt: admin.firestore.FieldValue.serverTimestamp()
-      
+
     });
 
     console.log(`(CoachForm) Form ${formId} has been REJECTED.`);
@@ -5441,19 +5441,19 @@ app.get('/api/all-forms/stats', verifyToken, async (req, res) => {
     if (fetchCoach) {
       promises.push(buildQuery('coachForms').get());
     } else {
-      promises.push(Promise.resolve({ empty: true, forEach: () => {} }));
+      promises.push(Promise.resolve({ empty: true, forEach: () => { } }));
     }
 
     if (fetchPremises) {
       promises.push(buildQuery('premisesForms').get());
     } else {
-      promises.push(Promise.resolve({ empty: true, forEach: () => {} }));
+      promises.push(Promise.resolve({ empty: true, forEach: () => { } }));
     }
 
     if (fetchCTS) {
       promises.push(buildQuery('ctsForms').get());
     } else {
-      promises.push(Promise.resolve({ empty: true, forEach: () => {} }));
+      promises.push(Promise.resolve({ empty: true, forEach: () => { } }));
     }
 
     const [coachSnapshot, premiseSnapshot, ctsSnapshot] = await Promise.all(promises);
@@ -5631,7 +5631,7 @@ app.get('/api/premises-forms', verifyToken, async (req, res) => {
       } else {
         query = query.where('submittedTo.railwayEmployeeId', '==', uid);
       }
-    } 
+    }
     else if (userType === 'contractor') {
       if (!entityId) return res.status(403).send({ error: "Company ID missing." });
       query = query.where('submittedByEntityId', '==', entityId);
@@ -5650,10 +5650,10 @@ app.get('/api/premises-forms', verifyToken, async (req, res) => {
     // =========================================================
     if (status) {
       query = query.where('status', '==', status);
-    } 
+    }
     else if (type === 'history') {
       query = query.where('status', 'in', ['SCORED', 'LOCKED', 'AUTO-APPROVED', 'REJECTED_BY_RAILWAY']);
-    } 
+    }
     else {
       query = query.where('status', 'in', ['SUBMITTED', 'RE-SUBMITTED', 'APPROVED_BY_RAILWAY', 'SCORING_IN_PROGRESS']);
     }
@@ -6586,7 +6586,7 @@ app.get('/api/filter/supervisors', verifyToken, async (req, res) => {
 const checkAndApprove = async (collectionName) => {
   try {
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
-    
+
     const snapshot = await db.collection(collectionName)
       .where('status', '==', 'SCORED')
       .get();
@@ -6599,7 +6599,7 @@ const checkAndApprove = async (collectionName) => {
     snapshot.forEach(doc => {
       const data = doc.data();
       let shouldApprove = false;
-      
+
       if (data.ratedAt) {
         let ratedDate;
         if (typeof data.ratedAt.toDate === 'function') {
@@ -6607,12 +6607,12 @@ const checkAndApprove = async (collectionName) => {
         } else {
           ratedDate = new Date(data.ratedAt);
         }
-        
+
         if (!isNaN(ratedDate.getTime()) && ratedDate < thirtyMinAgo) {
           shouldApprove = true;
         }
       }
-      
+
       if (shouldApprove) {
         batch.update(doc.ref, {
           status: 'AUTO-APPROVED',
@@ -6723,7 +6723,7 @@ cron.schedule('*/15 * * * *', async () => {
   try {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
-    
+
     // Get active journey IDs
     const activeRunsSnap = await db.collection('RunInstance')
       .where('status', '==', 'Active')
@@ -6737,7 +6737,7 @@ cron.schedule('*/15 * * * *', async () => {
       .where('status', 'in', ['PLANNED'])
       .where('scheduledDate', '==', today)
       .get();
-    
+
     const headerBatch = db.batch();
     let updateCount = 0;
     headerSnapshot.forEach(doc => {
@@ -6746,9 +6746,9 @@ cron.schedule('*/15 * * * *', async () => {
       if (!activeRunIds.has(data.runInstanceId)) return;
 
       const [h, m] = (data.scheduledTime || '00:00').split(':').map(Number);
-      const scheduledDate = new Date(`${today}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
+      const scheduledDate = new Date(`${today}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
       if (now > scheduledDate) {
-        headerBatch.update(doc.ref, { 
+        headerBatch.update(doc.ref, {
           status: 'OVERDUE',
           updatedAt: now.toISOString()
         });
@@ -6764,7 +6764,7 @@ cron.schedule('*/15 * * * *', async () => {
     const complaintSnapshot = await db.collection('obhs_complaints')
       .where('status', '==', 'OPEN')
       .get();
-    
+
     const complaintBatch = db.batch();
     let escalatedCount = 0;
     complaintSnapshot.forEach(doc => {
@@ -6780,7 +6780,7 @@ cron.schedule('*/15 * * * *', async () => {
         'Electrical': 60
       };
       const slaMinutes = slaMap[data.category] || 60;
-      
+
       if (elapsedMinutes > slaMinutes && !data.slaEscalated) {
         complaintBatch.update(doc.ref, {
           slaEscalated: true,
@@ -6807,7 +6807,7 @@ cron.schedule('*/5 * * * *', async () => {
   try {
     const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    
+
     // Only process tasks for ACTIVE journeys
     const activeRunsSnap = await db.collection('RunInstance')
       .where('status', '==', 'Active')
@@ -6820,15 +6820,15 @@ cron.schedule('*/5 * * * *', async () => {
     const detailSnapshot = await db.collection('task_details')
       .where('status', '==', 'PLANNED')
       .get();
-    
+
     const detailBatch = db.batch();
     let openCount = 0;
     let dueSoonCount = 0;
     let skippedCount = 0;
-    
+
     detailSnapshot.forEach(doc => {
       const data = doc.data();
-      
+
       // Skip tasks belonging to non-active journeys
       if (!activeRunIds.has(data.runInstanceId)) {
         skippedCount++;
@@ -6838,22 +6838,22 @@ cron.schedule('*/5 * * * *', async () => {
       const [h, m] = (data.scheduledTime || '00:00').split(':').map(Number);
       const taskMinutes = h * 60 + m;
       const diff = taskMinutes - nowMinutes;
-      
+
       if (diff <= 0 && diff > -120) {
-        detailBatch.update(doc.ref, { 
+        detailBatch.update(doc.ref, {
           status: 'OPEN',
           updatedAt: now.toISOString()
         });
         openCount++;
       } else if (diff > 0 && diff <= 15) {
-        detailBatch.update(doc.ref, { 
+        detailBatch.update(doc.ref, {
           status: 'DUE_SOON',
           updatedAt: now.toISOString()
         });
         dueSoonCount++;
       }
     });
-    
+
     if (openCount + dueSoonCount > 0) {
       await detailBatch.commit();
       console.log(`[Cron] Task status updated: ${openCount} OPEN, ${dueSoonCount} DUE_SOON (${skippedCount} skipped - not active)`);
@@ -6993,7 +6993,7 @@ app.get('/api/reports/train-performance', verifyToken, async (req, res) => {
       const data = doc.data();
       const formDate = new Date(data.formDateTime);
 
-      
+
       let include = true;
       if (start && formDate < start) include = false;
       if (end && formDate > end) include = false;
@@ -7063,14 +7063,14 @@ app.get('/api/dashboard/user-stats', verifyToken, async (req, res) => {
     const { selectedZone, selectedDivision, selectedDepot } = req.query;
 
     const userSnap = await db.collection('users').get();
-    const stats = { 
-        totalRegistered: 0, 
-        approvedUsers: 0, 
-        pendingApproval: 0, 
-        draftUsers: 0, 
-        rejectedUsers: 0,
-        railwayStaff: 0,
-        contractorStaff: 0
+    const stats = {
+      totalRegistered: 0,
+      approvedUsers: 0,
+      pendingApproval: 0,
+      draftUsers: 0,
+      rejectedUsers: 0,
+      railwayStaff: 0,
+      contractorStaff: 0
     };
 
     userSnap.docs.forEach(doc => {
@@ -7080,31 +7080,31 @@ app.get('/api/dashboard/user-stats', verifyToken, async (req, res) => {
       let isVisible = false;
 
       if (docId === loggedInUid || d.uid === loggedInUid) {
-          isVisible = true;
+        isVisible = true;
       }
       else if (userRole.includes('company master') || userRole.includes('super admin')) {
+        let match = true;
+        if (selectedZone && d.zone !== selectedZone) match = false;
+        if (selectedDivision && d.division !== selectedDivision) match = false;
+        if (selectedDepot && d.depot !== selectedDepot) match = false;
+        isVisible = match;
+      }
+      else if (userRole.includes('master')) {
+        const belongsToMyZone = d.zone && userZone && d.zone.toString().trim() === userZone.toString().trim();
+        if (belongsToMyZone) {
           let match = true;
-          if (selectedZone && d.zone !== selectedZone) match = false;
           if (selectedDivision && d.division !== selectedDivision) match = false;
           if (selectedDepot && d.depot !== selectedDepot) match = false;
           isVisible = match;
-      }
-      else if (userRole.includes('master')) {
-          const belongsToMyZone = d.zone && userZone && d.zone.toString().trim() === userZone.toString().trim();
-          if (belongsToMyZone) {
-              let match = true;
-              if (selectedDivision && d.division !== selectedDivision) match = false;
-              if (selectedDepot && d.depot !== selectedDepot) match = false;
-              isVisible = match;
-          }
+        }
       }
       else if (userRole.includes('admin') || userRole.includes('supervisor')) {
-          const belongsToMyDiv = d.division && userDiv && d.division.toString().trim() === userDiv.toString().trim();
-          if (belongsToMyDiv) {
-              let match = true;
-              if (selectedDepot && d.depot !== selectedDepot) match = false;
-              isVisible = match;
-          }
+        const belongsToMyDiv = d.division && userDiv && d.division.toString().trim() === userDiv.toString().trim();
+        if (belongsToMyDiv) {
+          let match = true;
+          if (selectedDepot && d.depot !== selectedDepot) match = false;
+          isVisible = match;
+        }
       }
 
       if (isVisible) {
@@ -7133,104 +7133,104 @@ app.get('/api/dashboard/user-stats', verifyToken, async (req, res) => {
 // DASHBOARD SYSTEM OVERVIEW STATS (TOKEN BASED)
 // ==========================================
 app.get("/api/stats/system-overview", async (req, res) => {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ success: false, error: "No token provided" });
-        }
-
-        const token = authHeader.split(' ')[1];
-        
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (err) {
-            return res.status(401).json({ success: false, error: "Invalid or expired token" });
-        }
-
-        const userId = decoded.uid;
-        const role = decoded.role;
-        const userDivision = decoded.division;
-        const userEntityId = decoded.entityId;
-
-        console.log(`--- Dashboard Stats Request ---`);
-        console.log(`User: ${decoded.fullName} | Role: ${role} | Div: ${userDivision}`);
-
-        const [
-            divisionsSnap,
-            depotsSnap,
-            usersSnap,
-            companiesSnap,
-            contractsSnap,
-            formsSnap
-        ] = await Promise.all([
-            db.collection("divisions").get(),
-            db.collection("depots").get(),
-            db.collection("users").get(),
-            db.collection("companies").get(),
-            db.collection("contracts").get(),
-            db.collection("forms_processed").get()
-        ]);
-
-        const allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const allContracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const allDepots = depotsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const allForms = formsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        let stats = {
-            divisions: 0,
-            depots: 0,
-            railwayEmployees: 0,
-            contractorEmployees: 0,
-            registeredEntities: 0,
-            activeContracts: 0,
-            totalFormProcessed: allForms.length || 0
-        };
-
-        
-        const normalizedRole = role ? role.toLowerCase() : "";
-
-        if (normalizedRole === 'admin') {
-            stats.divisions = divisionsSnap.size;
-            stats.depots = depotsSnap.size;
-            stats.registeredEntities = companiesSnap.size;
-            stats.railwayEmployees = allUsers.filter(u => u.userType === 'railway' || u.role === 'Railway Supervisor').length;
-            stats.contractorEmployees = allUsers.filter(u => u.userType === 'contractor').length;
-            stats.activeContracts = allContracts.filter(c => c.status === 'Active' || c.status === 'active').length;
-        }
-
-        else if (normalizedRole.includes('railway') || normalizedRole.includes('supervisor')) {
-            const assignedDiv = userDivision;
-
-            stats.divisions = assignedDiv ? 1 : 0;
-            stats.depots = allDepots.filter(d => d.division === assignedDiv).length;
-            stats.railwayEmployees = allUsers.filter(u => u.division === assignedDiv && (u.userType === 'railway' || u.role === 'Railway Supervisor')).length;
-            stats.contractorEmployees = allUsers.filter(u => u.division === assignedDiv && u.userType === 'contractor').length;
-            stats.activeContracts = allContracts.filter(c => c.division === assignedDiv && (c.status === 'Active' || c.status === 'active')).length;
-            stats.totalFormProcessed = allForms.filter(f => f.division === assignedDiv).length;
-            stats.registeredEntities = [...new Set(allContracts.filter(c => c.division === assignedDiv).map(c => c.entityId))].length;
-        }
-
-        else if (normalizedRole.includes('company')) {
-            const entityId = userEntityId; 
-
-            stats.registeredEntities = 1;
-            stats.contractorEmployees = allUsers.filter(u => u.entityId === entityId).length;
-            stats.activeContracts = allContracts.filter(c => c.entityId === entityId && (c.status === 'Active' || c.status === 'active')).length;
-            stats.totalFormProcessed = allForms.filter(f => f.entityId === entityId).length;
-            
-            const myContracts = allContracts.filter(c => c.entityId === entityId);
-            stats.divisions = [...new Set(myContracts.map(c => c.division))].length;
-            stats.depots = [...new Set(myContracts.map(c => c.depot))].length;
-        }
-
-        console.log("Response Stats:", stats);
-        res.json({ success: true, data: stats });
-
-    } catch (error) {
-        console.error("Dashboard Stats Error:", error);
-        res.status(500).json({ success: false, error: error.message });
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: "No token provided" });
     }
+
+    const token = authHeader.split(' ')[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, error: "Invalid or expired token" });
+    }
+
+    const userId = decoded.uid;
+    const role = decoded.role;
+    const userDivision = decoded.division;
+    const userEntityId = decoded.entityId;
+
+    console.log(`--- Dashboard Stats Request ---`);
+    console.log(`User: ${decoded.fullName} | Role: ${role} | Div: ${userDivision}`);
+
+    const [
+      divisionsSnap,
+      depotsSnap,
+      usersSnap,
+      companiesSnap,
+      contractsSnap,
+      formsSnap
+    ] = await Promise.all([
+      db.collection("divisions").get(),
+      db.collection("depots").get(),
+      db.collection("users").get(),
+      db.collection("companies").get(),
+      db.collection("contracts").get(),
+      db.collection("forms_processed").get()
+    ]);
+
+    const allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allContracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allDepots = depotsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allForms = formsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    let stats = {
+      divisions: 0,
+      depots: 0,
+      railwayEmployees: 0,
+      contractorEmployees: 0,
+      registeredEntities: 0,
+      activeContracts: 0,
+      totalFormProcessed: allForms.length || 0
+    };
+
+
+    const normalizedRole = role ? role.toLowerCase() : "";
+
+    if (normalizedRole === 'admin') {
+      stats.divisions = divisionsSnap.size;
+      stats.depots = depotsSnap.size;
+      stats.registeredEntities = companiesSnap.size;
+      stats.railwayEmployees = allUsers.filter(u => u.userType === 'railway' || u.role === 'Railway Supervisor').length;
+      stats.contractorEmployees = allUsers.filter(u => u.userType === 'contractor').length;
+      stats.activeContracts = allContracts.filter(c => c.status === 'Active' || c.status === 'active').length;
+    }
+
+    else if (normalizedRole.includes('railway') || normalizedRole.includes('supervisor')) {
+      const assignedDiv = userDivision;
+
+      stats.divisions = assignedDiv ? 1 : 0;
+      stats.depots = allDepots.filter(d => d.division === assignedDiv).length;
+      stats.railwayEmployees = allUsers.filter(u => u.division === assignedDiv && (u.userType === 'railway' || u.role === 'Railway Supervisor')).length;
+      stats.contractorEmployees = allUsers.filter(u => u.division === assignedDiv && u.userType === 'contractor').length;
+      stats.activeContracts = allContracts.filter(c => c.division === assignedDiv && (c.status === 'Active' || c.status === 'active')).length;
+      stats.totalFormProcessed = allForms.filter(f => f.division === assignedDiv).length;
+      stats.registeredEntities = [...new Set(allContracts.filter(c => c.division === assignedDiv).map(c => c.entityId))].length;
+    }
+
+    else if (normalizedRole.includes('company')) {
+      const entityId = userEntityId;
+
+      stats.registeredEntities = 1;
+      stats.contractorEmployees = allUsers.filter(u => u.entityId === entityId).length;
+      stats.activeContracts = allContracts.filter(c => c.entityId === entityId && (c.status === 'Active' || c.status === 'active')).length;
+      stats.totalFormProcessed = allForms.filter(f => f.entityId === entityId).length;
+
+      const myContracts = allContracts.filter(c => c.entityId === entityId);
+      stats.divisions = [...new Set(myContracts.map(c => c.division))].length;
+      stats.depots = [...new Set(myContracts.map(c => c.depot))].length;
+    }
+
+    console.log("Response Stats:", stats);
+    res.json({ success: true, data: stats });
+
+  } catch (error) {
+    console.error("Dashboard Stats Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 // =======================================================
 // == 17. DEDICATED TRAIN STATS API FOR DASHBOARD
@@ -7243,7 +7243,7 @@ app.get('/api/dashboard/train-stats', verifyToken, async (req, res) => {
     const { selectedZone, selectedDivision, selectedDepot } = req.query;
 
     const trainSnap = await db.collection('trains').get();
-    
+
     const stats = {
       totalTrains: 0,
       activeTrains: 0,
@@ -7261,8 +7261,8 @@ app.get('/api/dashboard/train-stats', verifyToken, async (req, res) => {
         if (selectedDivision && d.division !== selectedDivision) match = false;
         if (selectedDepot && d.depot !== selectedDepot) match = false;
         isVisible = match;
-      } 
-      
+      }
+
       else if (userRole.includes('master')) {
         const isMyZone = d.zone && userZone && d.zone.toString().trim() === userZone.toString().trim();
         if (isMyZone) {
@@ -7283,7 +7283,7 @@ app.get('/api/dashboard/train-stats', verifyToken, async (req, res) => {
 
       if (isVisible) {
         const s = (d.status || '').toString().trim().toUpperCase();
-        
+
         stats.totalTrains++;
 
         if (s === 'ACTIVE') {
@@ -7334,7 +7334,7 @@ app.get('/api/dashboard/stats', verifyToken, async (req, res) => {
 
     userSnap.docs.forEach(doc => {
       const d = doc.data();
-      
+
       let isVisible = false;
       if (userRole.includes('master')) {
         if (d.zone === userZone) isVisible = true;
@@ -7346,13 +7346,13 @@ app.get('/api/dashboard/stats', verifyToken, async (req, res) => {
 
       if (isVisible) {
         const status = d.status;
-        
+
         stats.user.total++;
 
         if (status === 'APPROVED') stats.user.approved++;
         else if (status === 'PENDING') stats.user.pending++;
         else if (status === 'DRAFT') stats.user.draft++;
-        
+
         if (d.userType === 'railway') stats.user.railway++;
         if (d.userType === 'contractor') stats.user.contractor++;
       }
@@ -7762,7 +7762,7 @@ app.get('/api/reports/premises-stats', verifyToken, async (req, res) => {
     const responseData = {
       cards: {
         totalPremisesCleaned: stats.totalForms,
-        totalAreaCleaned: stats.totalAreaCleaned.toFixed(2), 
+        totalAreaCleaned: stats.totalAreaCleaned.toFixed(2),
         totalAreaUncleaned: 0,
         manpowerDeployed: stats.totalManpower
       },
@@ -7786,7 +7786,7 @@ app.get('/api/reports/premises-stats', verifyToken, async (req, res) => {
       },
       manpowerAllocation: {
         dailyAverage: dailyAvgManpower,
-        peakHours: 0 
+        peakHours: 0
       }
     };
 
@@ -7830,8 +7830,8 @@ app.post('/api/cts-forms', verifyToken, async (req, res) => {
     const railwayEmployeeName = userDoc?.exists ? (userDoc.data().fullName || userDoc.data().name || "Unknown") : "N/A";
 
     const stationName = contractorSupervisor.division || "Unknown Station";
-    const agreementNo = contractData.contractNumber || "N/A"; 
-    
+    const agreementNo = contractData.contractNumber || "N/A";
+
     const agreementDate = contractData.startDate || "N/A";
     const contractorName = contractData.agencyName || contractData.entityName || "N/A";
     const jobDate = new Date().toISOString().split('T')[0];
@@ -7870,7 +7870,7 @@ app.post('/api/cts-forms', verifyToken, async (req, res) => {
       nominatedLocation: nominatedLocation || null,
       occupiedToilets: occupiedToilets || 0,
       notes: notes || "",
-      
+
       submittedTo: {
         railwayEmployeeId: submittedTo?.railwayEmployeeId || null,
         railwayEmployeeName: railwayEmployeeName,
@@ -7889,7 +7889,7 @@ app.post('/api/cts-forms', verifyToken, async (req, res) => {
       submittedByDepot: contractorSupervisor.depot || null,
       submittedByEntityId: contractorSupervisor.entityId || null,
       submittedByEntityName: contractorSupervisor.entityName || contractorName,
-      
+
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
@@ -7963,7 +7963,7 @@ app.get('/api/cts-forms', verifyToken, async (req, res) => {
     }
 
     const snapshot = await query.orderBy('createdAt', 'desc').get();
-    
+
     const list = [];
     snapshot.forEach(doc => {
       list.push({ id: doc.id, ...doc.data() });
@@ -7991,7 +7991,7 @@ app.post('/api/cts-forms/:formId/approve-manpower', verifyToken, async (req, res
     const railwaySupervisor = req.user;
     const formDocRef = db.collection('ctsForms').doc(formId);
     const doc = await formDocRef.get();
-    
+
     if (!doc.exists) {
       return res.status(404).send({ error: 'CTS Form not found.' });
     }
@@ -8023,7 +8023,7 @@ app.post('/api/cts-forms/:formId/approve-manpower', verifyToken, async (req, res
 app.post('/api/cts-forms/:formId/reject', verifyToken, async (req, res) => {
   try {
     const { formId } = req.params;
-    const { rejectionComments } = req.body; 
+    const { rejectionComments } = req.body;
     const railwaySupervisor = req.user;
 
     if (!rejectionComments) {
@@ -8032,7 +8032,7 @@ app.post('/api/cts-forms/:formId/reject', verifyToken, async (req, res) => {
 
     const formDocRef = db.collection('ctsForms').doc(formId);
     const doc = await formDocRef.get();
-    
+
     if (!doc.exists) return res.status(404).send({ error: 'CTS Form not found.' });
 
     const formData = doc.data();
@@ -8073,7 +8073,7 @@ app.post('/api/cts-forms/:formId/submit-scoring', verifyToken, async (req, res) 
     const {
       inspectionHeader,
       coachEvaluationTable,
-      machinesUsed, 
+      machinesUsed,
       chemicals,
       railwaySignatureName,
       railwaySignatureDate
@@ -8087,7 +8087,7 @@ app.post('/api/cts-forms/:formId/submit-scoring', verifyToken, async (req, res) 
 
     const formDocRef = db.collection('ctsForms').doc(formId);
     const doc = await formDocRef.get();
-    
+
     if (!doc.exists) return res.status(404).send({ error: 'CTS Form not found.' });
 
     const formData = doc.data();
@@ -8102,10 +8102,10 @@ app.post('/api/cts-forms/:formId/submit-scoring', verifyToken, async (req, res) 
 
     let totalAllCoachesScore = 0;
     const processedEvaluation = coachEvaluationTable.map(coach => {
-      const coachTotal = (Number(coach.jetCleaningScore) || 0) + 
-                         (Number(coach.basinCleaningScore) || 0) + 
-                         (Number(coach.disposalScore) || 0);
-      
+      const coachTotal = (Number(coach.jetCleaningScore) || 0) +
+        (Number(coach.basinCleaningScore) || 0) +
+        (Number(coach.disposalScore) || 0);
+
       totalAllCoachesScore += coachTotal;
 
       let coachGrade = 'D';
@@ -8117,7 +8117,7 @@ app.post('/api/cts-forms/:formId/submit-scoring', verifyToken, async (req, res) 
     });
 
     const averageScore = processedEvaluation.length > 0 ? (totalAllCoachesScore / processedEvaluation.length).toFixed(2) : 0;
-    
+
     let overallGrade = 'Fail';
     if (averageScore >= 8) overallGrade = 'A';
     else if (averageScore >= 6) overallGrade = 'B';
@@ -8146,7 +8146,7 @@ app.post('/api/cts-forms/:formId/submit-scoring', verifyToken, async (req, res) 
     });
 
     console.log(`(CTS-Form) Form ${formId} has been SCORED with Avg: ${averageScore}.`);
-    res.status(200).send({ 
+    res.status(200).send({
       message: 'CTS Scoring submitted successfully with chemical details.',
       averageScore,
       overallGrade
@@ -8168,7 +8168,7 @@ app.post('/api/cts-forms/:formId/accept-rating', verifyToken, async (req, res) =
 
     const formDocRef = db.collection('ctsForms').doc(formId);
     const doc = await formDocRef.get();
-    
+
     if (!doc.exists) return res.status(404).send({ error: 'CTS Form not found.' });
 
     const formData = doc.data();
@@ -8223,7 +8223,7 @@ app.put('/api/cts-forms/:formId/resubmit', verifyToken, async (req, res) => {
 
     const formDocRef = db.collection('ctsForms').doc(formId);
     const doc = await formDocRef.get();
-    
+
     if (!doc.exists) return res.status(404).send({ error: 'CTS Form not found.' });
 
     const existingData = doc.data();
@@ -8302,7 +8302,7 @@ app.get('/api/reports/cts-stats', verifyToken, async (req, res) => {
     console.log(`(CTS-Stats) Fetching UI Breakdown for ${role}...`);
 
     let query = db.collection('ctsForms')
-      .where('status', 'in', ['LOCKED', 'AUTO-APPROVED']); 
+      .where('status', 'in', ['LOCKED', 'AUTO-APPROVED']);
 
     const userRole = (role || '').toLowerCase();
     const isMaster = userRole.includes('master');
@@ -8369,7 +8369,7 @@ app.get('/api/reports/cts-stats', verifyToken, async (req, res) => {
 
       if (include) {
         stats.totalTrains++;
-        
+
         const attended = Number(data.coachesAttended) || 0;
         const inRake = Number(data.coachesInRake) || 0;
         stats.totalCoachesCleaned += attended;
@@ -8381,9 +8381,9 @@ app.get('/api/reports/cts-stats', verifyToken, async (req, res) => {
         }
 
         stats.resources.manpowerTotal += (data.attendanceStaff ? data.attendanceStaff.length : 0);
-        
+
         const rating = data.ratingDetails || {};
-        const chemicalsArray = rating.chemicals || []; 
+        const chemicalsArray = rating.chemicals || [];
         chemicalsArray.forEach(c => {
           stats.resources.chemicalQuantity += (parseFloat(c.quantity) || 0);
         });
@@ -8396,7 +8396,7 @@ app.get('/api/reports/cts-stats', verifyToken, async (req, res) => {
           else if (g.includes('(B)')) stats.grades.B++;
           else if (g.includes('(C)')) stats.grades.C++;
           else stats.grades.D++;
-          
+
           stats.ops.totalScoreSum += (Number(summary.averageScore) || 0);
           stats.ops.scoredFormsCount++;
         }
@@ -8503,7 +8503,7 @@ app.get('/api/reports/cts-data', verifyToken, async (req, res) => {
     if (supervisorId) query = query.where('submittedById', '==', supervisorId);
 
     const snapshot = await query.get();
-    
+
     const allTrainNumbers = snapshot.docs.map(doc => doc.data().trainNumber).filter(Boolean);
     const uniqueTrainNumbers = [...new Set(allTrainNumbers)];
     let trainNamesMap = {};
@@ -8560,40 +8560,40 @@ app.get('/api/reports/cts-data', verifyToken, async (req, res) => {
         });
 
         let totalChemical = 0;
-        const chemicalsArray = rating.chemicals || []; 
+        const chemicalsArray = rating.chemicals || [];
         chemicalsArray.forEach(c => totalChemical += (parseFloat(c.quantity) || 0));
 
         const formatDateTime = (isoStr) => {
-          if(!isoStr) return 'N/A';
+          if (!isoStr) return 'N/A';
           try {
             const d = new Date(isoStr);
             const datePart = d.toLocaleDateString('en-GB');
             const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
             return `${datePart} ${timePart}`;
-          } catch(e) { return 'N/A'; }
+          } catch (e) { return 'N/A'; }
         };
 
         reportData.push({
           date: formDate ? formDate.toLocaleDateString('en-GB') : 'N/A',
           trainNo: data.trainNumber || 'N/A',
           trainName: trainNamesMap[data.trainNumber] || data.submittedTo?.trainName || 'N/A',
-          
+
           actualArrival: formatDateTime(data.actArrival),
           actualDeparture: formatDateTime(data.actDeparture),
           workStart: formatDateTime(data.workStart),
           workEnd: formatDateTime(data.workEnd),
-          
+
           contractorSupervisor: data.submittedByName || 'N/A',
           railwaySupervisor: data.submittedTo?.railwayEmployeeName || 'N/A',
-          
+
           totalCoaches: data.coachesInRake || 0,
           attendedCoaches: data.coachesAttended || 0,
           unattendedCoaches: (Number(data.coachesInRake) || 0) - (Number(data.coachesAttended) || 0),
-          
+
           late: data.lateYN || 'No',
           garbageDisposed: data.garbageDisposed ? 'Yes' : 'No',
           location: data.nominatedLocation || 'N/A',
-          
+
           machinesUsedCount: Array.isArray(rating.machinesUsed) ? rating.machinesUsed.length : 0,
           chemicalUsedLiter: totalChemical.toFixed(2),
 
@@ -8641,7 +8641,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -8714,11 +8714,11 @@ async function compareFaces(image1Url, image2Url) {
       const command = new CompareFacesCommand({
         SourceImage: { Bytes: fileBuffer1 },
         TargetImage: { Bytes: fileBuffer2 },
-        SimilarityThreshold: 85 
+        SimilarityThreshold: 85
       });
 
       const data = await rekognition.send(command);
-      
+
       if (data.FaceMatches && data.FaceMatches.length > 0) {
         const matchScore = data.FaceMatches[0].Similarity;
         console.log(` [AWS Rekognition Success] Face structure verified. Match score: ${matchScore}%`);
@@ -8730,7 +8730,7 @@ async function compareFaces(image1Url, image2Url) {
 
     } catch (awsException) {
       let errorAlertMessage = "Biometric analysis failed due to poor image properties.";
-      
+
       if (awsException.message.includes("contains no faces") || awsException.name === "InvalidParameterException") {
         errorAlertMessage = "Face not detected! Please ensure the photo is clear, well-lit, and contains a visible human face.";
       } else if (awsException.name === "ImageTooLargeException") {
@@ -8752,14 +8752,14 @@ async function compareFaces(image1Url, image2Url) {
 // =======================================================
 app.post('/api/obhs/attendance/report-issue', verifyToken, async (req, res) => {
   try {
-    const { 
-      runInstanceId, 
-      issueType, 
-      remark, 
-      photoUrl, 
-      latitude, 
-      longitude, 
-      attendanceType 
+    const {
+      runInstanceId,
+      issueType,
+      remark,
+      photoUrl,
+      latitude,
+      longitude,
+      attendanceType
     } = req.body;
 
     if (!runInstanceId || !issueType) {
@@ -8856,8 +8856,8 @@ app.post('/api/obhs/attendance/exceptions/action', verifyToken, async (req, res)
 
     // If APPROVED or EXCUSED, we might want to automatically mark the worker as PRESENT in the main attendance table
     if (action === 'APPROVED' || action === 'EXCUSED' || action === 'MARK_PRESENT') {
-        const exception = doc.data();
-        // Logic to update/create attendance record could go here
+      const exception = doc.data();
+      // Logic to update/create attendance record could go here
     }
 
     res.status(200).send({
@@ -8874,11 +8874,11 @@ app.post('/api/obhs/attendance/exceptions/action', verifyToken, async (req, res)
 app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
   try {
     const allowedFields = [
-      'runInstanceId', 
-      'attendanceType', 
-      'imageUrl', 
-      'latitude', 
-      'longitude', 
+      'runInstanceId',
+      'attendanceType',
+      'imageUrl',
+      'latitude',
+      'longitude',
       'deviceTimestamp',
       'mobileNumber',
       'deviceId'
@@ -8897,37 +8897,37 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     const { runInstanceId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId } = req.body;
 
     if (!runInstanceId || !attendanceType || !imageUrl || !deviceTimestamp) {
-      return res.status(400).send({ 
-        error: "Missing fields.", 
-        details: "runInstanceId, attendanceType, imageUrl, and deviceTimestamp are required." 
+      return res.status(400).send({
+        error: "Missing fields.",
+        details: "runInstanceId, attendanceType, imageUrl, and deviceTimestamp are required."
       });
     }
 
     const validTypes = ['start', 'mid', 'end'];
     if (!validTypes.includes(attendanceType)) {
-      return res.status(400).send({ 
-        error: "Invalid attendanceType.", 
-        details: "Allowed values are: 'start', 'mid', 'end'" 
+      return res.status(400).send({
+        error: "Invalid attendanceType.",
+        details: "Allowed values are: 'start', 'mid', 'end'"
       });
     }
 
-    const { uid: workerId, fullName: workerName } = req.user; 
+    const { uid: workerId, fullName: workerName } = req.user;
     const finalWorkerName = workerName || 'Unknown Worker';
 
     // ─── ATTENDANCE WINDOW VALIDATION (First-Worker Anchor Logic) ──────────
     let isLateAttendance = false;
     let lateByMinutes = 0;
     let firstAttendanceTime = null;
-    
+
     try {
       if (runInstanceId && attendanceType === 'start') {
         const runSnap = await db.collection('RunInstance').doc(runInstanceId).get();
         if (runSnap.exists) {
           const runData = runSnap.data();
-          
+
           firstAttendanceTime = runData.first_attendance_time;
           const currentTimestamp = new Date(deviceTimestamp || new Date().toISOString());
-          
+
           if (!firstAttendanceTime) {
             // This is the first worker! Anchor the attendance window.
             firstAttendanceTime = currentTimestamp.toISOString();
@@ -8941,7 +8941,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
             const anchorTime = new Date(firstAttendanceTime);
             const diffMs = currentTimestamp.getTime() - anchorTime.getTime();
             const diffMins = Math.floor(diffMs / 60000);
-            
+
             // 15 minutes window from first attendance
             if (diffMins > 15) {
               isLateAttendance = true;
@@ -8954,7 +8954,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     } catch (winErr) {
       console.error('(Attendance Timing Engine) Error:', winErr);
     }
-    
+
     // ─── GPS GEO-FENCING & SHIFT-TIMING VALIDATION ─────────────────────
     let resolvedStationLat = null;
     let resolvedStationLng = null;
@@ -9062,9 +9062,9 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     // --- CASE 1: INITIAL SUBSCRIPTION LOOP ('start' execution) ---
     if (!attendanceDoc.exists) {
       if (attendanceType !== 'start') {
-        return res.status(400).send({ 
-          error: "Workflow Violation", 
-          details: "You must submit 'start' attendance first." 
+        return res.status(400).send({
+          error: "Workflow Violation",
+          details: "You must submit 'start' attendance first."
         });
       }
 
@@ -9075,13 +9075,13 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         workerName: finalWorkerName,
         mobileNumber: mobileNumber || null,
         deviceId: deviceId || null,
-        isStartMarked: true,       
+        isStartMarked: true,
         isMidMarked: false,
         isEndMarked: false,
         attendanceStatus: isLateAttendance ? 'LATE' : 'PRESENT',
         lateByMinutes: lateByMinutes,
         firstAttendanceReference: firstAttendanceTime,
-        identityAuditStatus: "PENDING_VERIFICATION", 
+        identityAuditStatus: "PENDING_VERIFICATION",
         startAttendance: attendanceEntry,
         midAttendance: null,
         endAttendance: null,
@@ -9114,7 +9114,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       } catch (readyErr) {
         console.error('(Attendance->READY) Error:', readyErr.message);
       }
-    } 
+    }
     // --- CASE 2: INCREMENTAL VERIFICATION LOOPS ('mid' or 'end') ---
     else {
       const currentData = attendanceDoc.data();
@@ -9127,15 +9127,15 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       // Extract baseline primary reference image
       const baseStartPhoto = currentData.startAttendance?.photoUrl;
       if (!baseStartPhoto) {
-        return res.status(400).send({ 
-          error: "Workflow Corrupted", 
-          details: "Baseline profile image missing from DB. Try restarting the trip shift lifecycle." 
+        return res.status(400).send({
+          error: "Workflow Corrupted",
+          details: "Baseline profile image missing from DB. Try restarting the trip shift lifecycle."
         });
       }
 
       // --- AWS REKOGNITION BIOMETRIC EVALUATION ENGINE ---
       const faceVerification = await compareFaces(baseStartPhoto, imageUrl);
-      
+
       if (!faceVerification.matched) {
         // Soft logging the infraction state directly into document logs before throwing 401
         await attendanceRef.update({
@@ -9155,7 +9155,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
           return res.status(400).send({ error: "Mid attendance already submitted for this trip." });
         }
         updateData.midAttendance = attendanceEntry;
-        updateData.isMidMarked = true; 
+        updateData.isMidMarked = true;
         updateData.identityAuditStatus = "MID_VERIFIED";
       }
 
@@ -9165,7 +9165,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
           return res.status(400).send({ error: "End attendance already submitted for this trip." });
         }
         updateData.endAttendance = attendanceEntry;
-        updateData.isEndMarked = true; 
+        updateData.isEndMarked = true;
         updateData.identityAuditStatus = "VERIFIED_SUCCESS";
       }
 
@@ -9187,7 +9187,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       newValue: { attendanceType, isLate: isLateAttendance, mobileNumber, deviceId },
       details: `${attendanceType} attendance marked - ${isLateAttendance ? 'LATE' : 'ON TIME'}`
     });
-    
+
     // Update coach attendance status in RunInstance
     try {
       if (runInstanceId) {
@@ -9229,7 +9229,7 @@ app.post('/api/obhs/attendance/verify-face', verifyToken, async (req, res) => {
     }
 
     const faceVerification = await compareFaces(image1Url, image2Url);
-    
+
     if (!faceVerification.matched) {
       return res.status(400).send({
         success: false,
@@ -9357,11 +9357,11 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
   try {
     const allowedFields = [
       'taskId',
-      'runInstanceId', 
-      'taskType', 
+      'runInstanceId',
+      'taskType',
       'coachNo',
-      'frequencyIndex', 
-      'beforePhoto', 
+      'frequencyIndex',
+      'beforePhoto',
       'afterPhoto',
       'comment',
       'deviceTimestamp',
@@ -9376,14 +9376,14 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       }
     }
 
-    const { 
+    const {
       taskId: incomingTaskId,
-      runInstanceId, 
-      taskType, 
-      coachNo, 
-      frequencyIndex, 
-      beforePhoto, 
-      afterPhoto, 
+      runInstanceId,
+      taskType,
+      coachNo,
+      frequencyIndex,
+      beforePhoto,
+      afterPhoto,
       gpsLatitude,
       gpsLongitude,
       comment,
@@ -9392,9 +9392,9 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
 
     // Validate mandatory fields
     if (!runInstanceId || !taskType || !coachNo || !beforePhoto || !afterPhoto || !deviceTimestamp) {
-      return res.status(400).send({ 
-        error: "Missing mandatory fields.", 
-        details: "runInstanceId, taskType, coachNo, beforePhoto, afterPhoto, and deviceTimestamp are required." 
+      return res.status(400).send({
+        error: "Missing mandatory fields.",
+        details: "runInstanceId, taskType, coachNo, beforePhoto, afterPhoto, and deviceTimestamp are required."
       });
     }
 
@@ -9409,7 +9409,7 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
     const taskId = incomingTaskId || `${runInstanceId}_${coachNo}_${taskType.replace(/\s+/g, '')}_${Date.now()}`;
 
     const taskRef = db.collection('obhs_tasks').doc(taskId);
-    
+
     // Check if task already exists to prevent duplicate submissions
     const existingTask = await taskRef.get();
     if (existingTask.exists) {
@@ -9422,14 +9422,14 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       coachNo,
       taskType,
       frequencyIndex: frequencyIndex || null,
-      
+
       // User mapping
       submittedBy: {
         id: userId,
         name: userName || 'Unknown User',
         role: role
       },
-      
+
       // Evidence
       beforePhoto,
       afterPhoto,
@@ -9437,7 +9437,7 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
       gpsLongitude: finalGpsLng,
       comment: comment || "",
       status: 'Completed',
-      
+
       // Timing metadata
       deviceTimestamp,
       serverCreatedAt: new Date().toISOString()
@@ -9454,7 +9454,7 @@ app.post('/api/obhs/tasks/submit', verifyToken, async (req, res) => {
     };
     const mappedType = taskTypeMap[taskType] || taskType.toLowerCase().replace(/\s+/g, '_');
     const detailId = `${runInstanceId}_${mappedType}_${frequencyIndex ? frequencyIndex.replace(':', '') : ''}_${coachNo}`.replace(/\s+/g, '');
-    
+
     try {
       const detailRef = db.collection('task_details').doc(detailId);
       const detailDoc = await detailRef.get();
@@ -9534,7 +9534,7 @@ app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
     // Note: Collection name updated to 'RunInstance' to match your exact DB structure
     const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
     let tripStartDate = new Date();
-    
+
     if (runDoc.exists) {
       const runData = runDoc.data();
       const parentTrainId = runData.parentTrainId;
@@ -9671,9 +9671,9 @@ app.get('/api/obhs/tasks/board', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('(OBHS Task Board Engine) Error:', error);
-    return res.status(500).send({ 
-      error: 'Failed to compile categorized task matrix metrics.', 
-      details: error.message 
+    return res.status(500).send({
+      error: 'Failed to compile categorized task matrix metrics.',
+      details: error.message
     });
   }
 });
@@ -9941,19 +9941,19 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
 
     // 1. Input Fields Validation
     if (!coachNo || !category || !description) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Coach number, category, and description are required fields." 
+      return res.status(400).json({
+        success: false,
+        error: "Coach number, category, and description are required fields."
       });
     }
 
     // 2. Safely Extract Worker Details from req.user (Middleware context)
     // Agar req.user poora object nahi mil raha toh backup handle karein
-    const workerUser = req.user || req.userData; 
+    const workerUser = req.user || req.userData;
     if (!workerUser || !workerUser.uid) {
-      return res.status(401).json({ 
-        success: false, 
-        error: "Unauthorized. Worker session not found in token context." 
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized. Worker session not found in token context."
       });
     }
 
@@ -9968,7 +9968,7 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
     // toh live database (RunInstance collection) se fetch karo jahan workerId matched ho.
     if (!runInstanceId) {
       console.log(`(Complaint) runInstanceId missing in request & token for worker ${workerId}. Fetching from DB...`);
-      
+
       const runInstanceSnapshot = await db.collection('RunInstance')
         .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
         .get();
@@ -9987,9 +9987,9 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
 
     // Agar fallback check ke baad bhi nahi milta, tabhi bad request throw karein
     if (!runInstanceId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "No active train journey (RunInstance) currently mapped to this worker." 
+      return res.status(400).json({
+        success: false,
+        error: "No active train journey (RunInstance) currently mapped to this worker."
       });
     }
 
@@ -10005,7 +10005,7 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
 
     // 5. Save Complaint Document
     const complaintsRef = db.collection('obhs_complaints').doc();
-    
+
     const complaintData = {
       complaintId: complaintsRef.id,
       runInstanceId: runInstanceId,
@@ -10080,10 +10080,10 @@ app.post('/api/obhs/complaints/raise', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('(Complaint) Error while raising complaint:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to raise complaint', 
-      details: error.message 
+    res.status(500).json({
+      success: false,
+      error: 'Failed to raise complaint',
+      details: error.message
     });
   }
 });
@@ -10170,9 +10170,9 @@ app.patch('/api/obhs/complaints/resolve/:complaintId', verifyToken, async (req, 
     const { adminRemarks, resolutionPhotoUrl } = req.body; // Inputs from admin frontend
 
     if (!complaintId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Complaint ID is required in URL parameters." 
+      return res.status(400).json({
+        success: false,
+        error: "Complaint ID is required in URL parameters."
       });
     }
 
@@ -10185,9 +10185,9 @@ app.patch('/api/obhs/complaints/resolve/:complaintId', verifyToken, async (req, 
     const allowedRoles = ['Admin', 'Supervisor', 'Company Master'];
 
     if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({ 
-        success: false, 
-        error: `Access Denied. Your role is '${userRole}'. Only authorized system masters or admins can resolve complaints.` 
+      return res.status(403).json({
+        success: false,
+        error: `Access Denied. Your role is '${userRole}'. Only authorized system masters or admins can resolve complaints.`
       });
     }
 
@@ -10195,25 +10195,25 @@ app.patch('/api/obhs/complaints/resolve/:complaintId', verifyToken, async (req, 
     const complaintDoc = await complaintRef.get();
 
     if (!complaintDoc.exists) {
-      return res.status(404).json({ 
-        success: false, 
-        error: `No complaint found with ID: ${complaintId}` 
+      return res.status(404).json({
+        success: false,
+        error: `No complaint found with ID: ${complaintId}`
       });
     }
 
     const complaintData = complaintDoc.data();
 
     if (complaintData.status === 'CLOSED') {
-      return res.status(400).json({ 
-        success: false, 
-        error: "This complaint has already been resolved and CLOSED." 
+      return res.status(400).json({
+        success: false,
+        error: "This complaint has already been resolved and CLOSED."
       });
     }
 
     const updateData = {
       status: "CLOSED",
       updatedAt: new Date().toISOString(),
-      
+
       // Resolution Auditing Metadata
       resolutionDetails: {
         resolvedAt: new Date().toISOString(),
@@ -10257,9 +10257,9 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
       passengerName,
       pnrNumber,
       mobileNumber,
-      coachNo,        
-      ratings,       
-      remarks,       
+      coachNo,
+      ratings,
+      remarks,
       photoUrl,
       runInstanceId: bodyRunInstanceId,
       workerId: bodyWorkerId
@@ -10274,10 +10274,10 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
 
     const { cleanliness, toiletHygiene, linenQuality, security, staffBehaviour } = ratings;
     if (
-      cleanliness === undefined || 
-      toiletHygiene === undefined || 
-      linenQuality === undefined || 
-      security === undefined || 
+      cleanliness === undefined ||
+      toiletHygiene === undefined ||
+      linenQuality === undefined ||
+      security === undefined ||
       staffBehaviour === undefined
     ) {
       return res.status(400).json({
@@ -10327,17 +10327,17 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
     const trainNo = runData.trainNo || "UNKNOWN";
     const trainName = runData.trainName || "";
 
-    const totalStars = 
-      Number(cleanliness) + 
-      Number(toiletHygiene) + 
-      Number(linenQuality) + 
-      Number(security) + 
+    const totalStars =
+      Number(cleanliness) +
+      Number(toiletHygiene) +
+      Number(linenQuality) +
+      Number(security) +
       Number(staffBehaviour);
-    
+
     const overallRating = parseFloat((totalStars / 5).toFixed(2)); // e.g., 4.20
 
     const feedbackRef = db.collection('obhs_feedbacks').doc(); // Auto ID
-    
+
     const feedbackData = {
       feedbackId: feedbackRef.id,
       feedbackType: "PASSENGER",
@@ -10345,13 +10345,13 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
       trainNo: trainNo,
       trainName: trainName,
       coachNo: coachNo,
-      
+
       passengerName: passengerName.trim(),
       pnrNumber: pnrNumber.trim(),
       mobileNumber: mobileNumber.trim(),
       remarks: remarks || "",
       photoUrl: photoUrl || null,
-      
+
       ratings: {
         cleanliness: Number(cleanliness),
         toiletHygiene: Number(toiletHygiene),
@@ -10360,7 +10360,7 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
         staffBehaviour: Number(staffBehaviour)
       },
       overallRating: overallRating,
-      
+
       date: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
       collectedBy: {
@@ -10420,10 +10420,10 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
     // 5 Star Rating Parameters Validation
     const { cleanliness, toiletHygiene, linenQuality, security, staffBehaviour } = ratings;
     if (
-      cleanliness === undefined || 
-      toiletHygiene === undefined || 
-      linenQuality === undefined || 
-      security === undefined || 
+      cleanliness === undefined ||
+      toiletHygiene === undefined ||
+      linenQuality === undefined ||
+      security === undefined ||
       staffBehaviour === undefined
     ) {
       return res.status(400).json({
@@ -10490,30 +10490,30 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
     const trainName = runData.trainName || "";
 
     // 6. Calculate Auto Overall Rating
-    const totalStars = 
-      Number(cleanliness) + 
-      Number(toiletHygiene) + 
-      Number(linenQuality) + 
-      Number(security) + 
+    const totalStars =
+      Number(cleanliness) +
+      Number(toiletHygiene) +
+      Number(linenQuality) +
+      Number(security) +
       Number(staffBehaviour);
-    
+
     const overallRating = parseFloat((totalStars / 5).toFixed(2));
 
     // 7. Prepare Official Feedback Document Structure
     const feedbackRef = db.collection('obhs_feedbacks').doc();
-    
+
     const feedbackData = {
       feedbackId: feedbackRef.id,
-      feedbackType: "OFFICIAL", 
+      feedbackType: "OFFICIAL",
       runInstanceId: runInstanceId,
       trainNo: trainNo,
       trainName: trainName,
       coachNo: coachNo,
       raterType: raterType || 'Official',
-      
+
       // Official Specific Fields
       inspectorName: inspectorName.trim(),
-      isRandomInspection: isRandomInspection, 
+      isRandomInspection: isRandomInspection,
       remarks: remarks || "",
       photoUrl: photoUrl || null,
 
@@ -10522,7 +10522,7 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
         uid: workerId.trim(),
         name: workerName.trim()
       },
-      
+
       // Ratings Framework
       ratings: {
         cleanliness: Number(cleanliness),
@@ -10532,7 +10532,7 @@ app.post('/api/obhs/feedback/official', verifyToken, async (req, res) => {
         staffBehaviour: Number(staffBehaviour)
       },
       overallRating: overallRating,
-      
+
       // Metadata Metrics
       date: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
@@ -10583,7 +10583,7 @@ app.get('/api/admin/analytics/workers-performance', verifyToken, async (req, res
     // 2. Fetch only approved Railway Workers from 'users' collection (FIXED: Added role filter)
     const workersSnapshot = await db.collection('users')
       .where('status', '==', 'APPROVED')
-      .where('role', '==', 'Railway Worker') 
+      .where('role', '==', 'Railway Worker')
       .get();
 
     if (workersSnapshot.empty) {
@@ -10592,7 +10592,7 @@ app.get('/api/admin/analytics/workers-performance', verifyToken, async (req, res
 
     // Ek map banate hain fast lookup aur accumulator holding ke liye
     let workerPerformanceMap = {};
-    
+
     workersSnapshot.docs.forEach(doc => {
       const uData = doc.data();
       if (uData.uid) {
@@ -10601,21 +10601,21 @@ app.get('/api/admin/analytics/workers-performance', verifyToken, async (req, res
           workerName: uData.fullName || "Unknown Worker",
           email: uData.email || "",
           designation: uData.designation || "OBHS Staff",
-          
+
           // Passenger Summary Metrics
           passengerFeedbackCount: 0,
           passengerSumRating: 0,
           passengerAvgRating: 0.0,
-          
+
           // Official Summary Metrics
           officialFeedbackCount: 0,
           officialSumRating: 0,
           officialAvgRating: 0.0,
-          
+
           // Combined Ultimate Core Metric
           combinedOverallRating: 0.0,
           totalFeedbackCount: 0,
-          
+
           // Granular Parameters Breakdown (Combined)
           parametersBreakdown: {
             cleanlinessSum: 0,
@@ -10635,12 +10635,12 @@ app.get('/api/admin/analytics/workers-performance', verifyToken, async (req, res
     feedbackSnapshot.docs.forEach(doc => {
       const fData = doc.data();
       if (!fData) return; // Safe check for empty docs
-      
+
       let assignedWorkerId = null;
-      
+
       // LOGIC BASED ON FEEDBACK TYPE
       if (fData.feedbackType === 'OFFICIAL') {
-        assignedWorkerId = fData.targetWorker?.uid; 
+        assignedWorkerId = fData.targetWorker?.uid;
       } else {
         assignedWorkerId = fData.collectedBy?.uid;
       }
@@ -10674,12 +10674,12 @@ app.get('/api/admin/analytics/workers-performance', verifyToken, async (req, res
 
     // 5. Final Mathematical Average Compilation
     let finalPerformanceList = Object.values(workerPerformanceMap).map(worker => {
-      
+
       // Passenger Average
       if (worker.passengerFeedbackCount > 0) {
         worker.passengerAvgRating = parseFloat((worker.passengerSumRating / worker.passengerFeedbackCount).toFixed(2));
       }
-      
+
       // Official Average
       if (worker.officialFeedbackCount > 0) {
         worker.officialAvgRating = parseFloat((worker.officialSumRating / worker.officialFeedbackCount).toFixed(2));
@@ -10689,7 +10689,7 @@ app.get('/api/admin/analytics/workers-performance', verifyToken, async (req, res
       if (worker.totalFeedbackCount > 0) {
         const grandSum = worker.passengerSumRating + worker.officialSumRating;
         worker.combinedOverallRating = parseFloat((grandSum / worker.totalFeedbackCount).toFixed(2));
-        
+
         // Parameter breakdown averages conversion
         worker.parameters = {
           cleanliness: parseFloat((worker.parametersBreakdown.cleanlinessSum / worker.totalFeedbackCount).toFixed(2)),
@@ -10769,7 +10769,7 @@ app.get('/api/obhs/feedback/worker-summary', verifyToken, async (req, res) => {
     // 3. Variables to accumulate ratings for calculating averages
     let totalFeedbacksCount = 0;
     let sumOverallRating = 0;
-    
+
     let sumCleanliness = 0;
     let sumToiletHygiene = 0;
     let sumLinenQuality = 0;
@@ -12778,7 +12778,7 @@ app.get('/api/billing/invoice-pdf/:uid', verifyToken, async (req, res) => {
           res.status(500).json({ error: 'Failed to download invoice' });
         }
         // Cleanup after download
-        fs.unlink(filePath, () => {});
+        fs.unlink(filePath, () => { });
       });
     });
   } catch (error) {
@@ -14713,12 +14713,12 @@ app.get('/api/obhs/reports/comprehensive/:runInstanceId', verifyToken, async (re
 
 // ─── ROLE HIERARCHY ───────────────────────────────────────────────────────
 const ROLE_HIERARCHY = {
-  'CM':  { level: 5, label: 'Contractor Master', manages: ['CA', 'CTS', 'CS', 'janitor', 'attendant'] },
-  'CA':  { level: 4, label: 'Contractor Admin', manages: ['CTS', 'CS', 'janitor', 'attendant'] },
+  'CM': { level: 5, label: 'Contractor Master', manages: ['CA', 'CTS', 'CS', 'janitor', 'attendant'] },
+  'CA': { level: 4, label: 'Contractor Admin', manages: ['CTS', 'CS', 'janitor', 'attendant'] },
   'CTS': { level: 3, label: 'Contractor Train Supervisor', manages: ['CS', 'janitor', 'attendant'] },
-  'CS':  { level: 2, label: 'Contractor Supervisor', manages: ['janitor', 'attendant'] },
-  'janitor':  { level: 1, label: 'Janitor', manages: [] },
-  'attendant':{ level: 1, label: 'Coach Attendant', manages: [] }
+  'CS': { level: 2, label: 'Contractor Supervisor', manages: ['janitor', 'attendant'] },
+  'janitor': { level: 1, label: 'Janitor', manages: [] },
+  'attendant': { level: 1, label: 'Coach Attendant', manages: [] }
 };
 
 function hasRolePermission(actorRole, targetRole) {
@@ -15376,7 +15376,7 @@ async function resolveTaskConflicts(runInstanceId) {
       if (group.length <= 1) continue;
       // Sort by scheduled time
       group.sort((a, b) => (a.scheduledTime || '00:00').localeCompare(b.scheduledTime || '00:00'));
-      
+
       for (let i = 1; i < group.length; i++) {
         const prev = group[i - 1];
         const curr = group[i];
@@ -15434,8 +15434,8 @@ app.post('/api/v2/task-masters', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Only CM/CA can create task masters' });
     }
     const { taskCode, taskName, category, subCategory, assignedRole, applicableCoachTypes,
-            priority, frequencyRules, scheduledTime, checklistTemplate,
-            requiresSupervisorVerification, conflictGroup } = req.body;
+      priority, frequencyRules, scheduledTime, checklistTemplate,
+      requiresSupervisorVerification, conflictGroup } = req.body;
 
     if (!taskCode || !taskName || !assignedRole) {
       return res.status(400).json({ error: 'taskCode, taskName, assignedRole are required' });
@@ -15641,7 +15641,7 @@ app.get('/api/v2/tasks/:runInstanceId', verifyToken, async (req, res) => {
 app.post('/api/v2/tasks/submit', verifyToken, async (req, res) => {
   try {
     const { taskInstanceId, checklistResponses, beforePhoto, afterPhoto,
-            gpsLatitude, gpsLongitude, deviceTimestamp, deviceId, mobileNumber, comment } = req.body;
+      gpsLatitude, gpsLongitude, deviceTimestamp, deviceId, mobileNumber, comment } = req.body;
 
     if (!taskInstanceId || !beforePhoto || !afterPhoto || !gpsLatitude || !gpsLongitude) {
       return res.status(400).json({ error: 'taskInstanceId, beforePhoto, afterPhoto, gpsLatitude, gpsLongitude are mandatory' });
@@ -16305,7 +16305,7 @@ app.get('/api/v2/journey/timeline/:runInstanceId', verifyToken, async (req, res)
         const totalMin = h * 60 + m + delayMinutes;
         const newH = Math.floor(totalMin / 60) % 24;
         const newM = totalMin % 60;
-        return { ...t, originalScheduledTime: t.scheduledTime, adjustedTime: `${String(newH).padStart(2,'0')}:${String(newM).padStart(2,'0')}` };
+        return { ...t, originalScheduledTime: t.scheduledTime, adjustedTime: `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}` };
       }
       return { ...t, adjustedTime: t.scheduledTime };
     });
