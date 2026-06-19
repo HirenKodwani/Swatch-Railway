@@ -701,7 +701,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (userType == 'railway') {
       if (currentUser?.role == 'Railway Admin') {
-        return ['Railway Admin','Railway Supervisor', 'Railway Worker'];
+        return ['Railway Supervisor', 'Railway Worker'];
       }
       else if (currentUser?.role == 'Railway Master') {
         return [
@@ -712,7 +712,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         ];
       }
       else if (currentUser?.role == 'Contractor Admin') {
-        return [ 'Railway Admin','Railway Supervisor', 'Railway Worker'];
+        return ['Railway Supervisor', 'Railway Worker'];
       }
       else {
         return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker'];
@@ -725,7 +725,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         return ['Contractor Admin', 'Contractor Supervisor'];
       }
       else if (currentUser?.role == 'Railway Admin') {
-        return ['Railway Admin','Contractor Supervisor'];
+        return ['Contractor Supervisor'];
       }
       else {
         return ['Contractor Master', 'Contractor Admin', 'Contractor Supervisor'];
