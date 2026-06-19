@@ -3088,7 +3088,8 @@ app.post('/api/trains', verifyToken, async (req, res) => {
       finalCycleTime = calculatedC > 0 ? calculatedC : (Number(cycleLength) || 0);
 
       // Frequency (F) = Interval between departures
-      const F = 7 / days.length;
+      const numDays = (days.includes('All Days') || days.includes('Daily')) ? 7 : days.length;
+      const F = 7 / numDays;
 
       // Required Instances = Ceiling(Cycle / Frequency)
       requiredInstances = Math.ceil(finalCycleTime / F);
@@ -3883,7 +3884,8 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
         return res.status(400).send({ error: 'OBHS requires at least one departure day.' });
       }
 
-      const F = 7 / finalDays.length;
+      const numDays = (finalDays.includes('All Days') || finalDays.includes('Daily')) ? 7 : finalDays.length;
+      const F = 7 / numDays;
       newRequiredInstances = Math.ceil(newFinalCycleTime / F);
       if (newRequiredInstances <= 0) newRequiredInstances = 1;
     }

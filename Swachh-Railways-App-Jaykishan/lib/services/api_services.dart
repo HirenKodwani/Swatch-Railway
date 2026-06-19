@@ -890,6 +890,22 @@ class ApiService {
       if (inboundTrainNo != null && inboundTrainNo.isNotEmpty) {
         body['inboundTrainNo'] = inboundTrainNo;
       }
+      
+      if (outboundTravelTime != null && outboundTravelTime.isNotEmpty) {
+        body['outboundDurationStr'] = outboundTravelTime;
+      }
+      if (inboundTravelTime != null && inboundTravelTime.isNotEmpty) {
+        body['inboundDurationStr'] = inboundTravelTime;
+      }
+      if (layoverDestination != null && layoverDestination.isNotEmpty) {
+        body['layoverDestStr'] = layoverDestination;
+      }
+      if (layoverOrigin != null && layoverOrigin.isNotEmpty) {
+        body['layoverOriginStr'] = layoverOrigin;
+      }
+      if (journeyStartTime != null && journeyStartTime.isNotEmpty) {
+        body['journeyStartTime'] = journeyStartTime;
+      }
 
       int totalHours = 0;
       int outboundAndLayoverHours = 0;
@@ -1081,6 +1097,22 @@ class ApiService {
 
       if (inboundTrainNo != null && inboundTrainNo.isNotEmpty) {
         body['inboundTrainNo'] = inboundTrainNo;
+      }
+      
+      if (outboundTravelTime != null && outboundTravelTime.isNotEmpty) {
+        body['outboundDurationStr'] = outboundTravelTime;
+      }
+      if (inboundTravelTime != null && inboundTravelTime.isNotEmpty) {
+        body['inboundDurationStr'] = inboundTravelTime;
+      }
+      if (layoverDestination != null && layoverDestination.isNotEmpty) {
+        body['layoverDestStr'] = layoverDestination;
+      }
+      if (layoverOrigin != null && layoverOrigin.isNotEmpty) {
+        body['layoverOriginStr'] = layoverOrigin;
+      }
+      if (journeyStartTime != null && journeyStartTime.isNotEmpty) {
+        body['journeyStartTime'] = journeyStartTime;
       }
 
       int totalHours = 0;

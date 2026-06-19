@@ -14,6 +14,23 @@ import '../profile/contractor_master_profile_screen.dart';
 import '../form_screen/forms/new_coach_form.dart';
 import '../form_screen/forms/new_premises_form.dart';
 
+import '../../common_railways/entities/common_entity_managment_screen.dart';
+import '../../common_railways/trains/common_train_screen.dart';
+import '../../common_railways/users/common_user_management_screen.dart';
+import '../../common_railways/contracts/common_contracts_screen.dart';
+import '../../common_railways/divisions/division_management_screen.dart';
+import '../../obhs_screens/obhs_runs_list_screen.dart';
+import '../../obhs_screens/obhs_attendance_list_screen.dart';
+import '../../common_railways/complaints/admin_complaints_screen.dart';
+import '../../common_railways/audit/audit_log_screen.dart';
+import '../../common_railways/billing/billing_dashboard_screen.dart';
+import '../../common_railways/cleaning_forms/cleaning_form_dashboard.dart';
+import '../../station_cleaning_screens/station_cleaning_runs_list_screen.dart';
+import '../../common_railways/station_management/station_dashboard_screen.dart';
+import '../../common_railways/report/common_report_screen.dart';
+import '../../common_railways/attendance/attendance_exception_dashboard.dart';
+import '../../common_railways/ratings/admin_ratings_screen.dart';
+
 class ContractorMasterDashboard extends StatefulWidget {
   const ContractorMasterDashboard({super.key});
 
@@ -261,6 +278,299 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
   ];
 
   @override
+
+  List<Map<String, dynamic>> _getSidebarMenuItems(String? userRole) {
+    return [
+      {
+        "icon": Icons.dashboard_rounded,
+        "title": "Dashboard",
+        "route": null,
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"]
+      },
+      {
+        "icon": Icons.admin_panel_settings,
+        "title": "Masters",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
+        "children": [
+          {"title": "User Management", "route": "users"},
+          {"title": "Entity Management", "route": "entities"},
+          {"title": "Contract Management", "route": "contracts"},
+          {"title": "Station Management", "route": "station_management_master"},
+          {"title": "Train Management", "route": "trains"},
+          {"title": "Division Management", "route": "divisions"},
+          {"title": "Billing Rules", "route": "billing_rules"},
+        ]
+      },
+      {
+        "icon": Icons.cleaning_services,
+        "title": "Operations",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "children": [
+          {"title": "Coach Cleaning", "route": "coach_cleaning"},
+          {"title": "Premise Cleaning", "route": "premise_cleaning"},
+          {"title": "Station Cleaning Forms", "route": "station_cleaning"},
+          {"title": "Station Cleaning Runs", "route": "station_cleaning_runs"},
+        ]
+      },
+      {
+        "icon": Icons.directions_run,
+        "title": "OBHS",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "children": [
+          {"title": "Attendance", "route": "obhs_attendance"},
+          {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
+          {"title": "Tasks", "route": "obhs_tasks"},
+          {"title": "Complaints", "route": "complaints"},
+        ]
+      },
+      {
+        "icon": Icons.analytics,
+        "title": "Reports",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "children": [
+          {"title": "Coach Reports", "route": "coach_reports"},
+          {"title": "Premise Reports", "route": "premise_reports"},
+          {"title": "Station Reports", "route": "station_reports"},
+          {"title": "OBHS Reports", "route": "obhs_reports"},
+        ]
+      },
+      {
+        "icon": Icons.receipt_long,
+        "title": "Billing",
+        "route": "billing",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
+      },
+      {
+        "icon": Icons.star_outline,
+        "title": "Ratings",
+        "route": "ratings",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
+      },
+      {
+        "icon": Icons.security,
+        "title": "Audit & Compliance",
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
+        "children": [
+          {"title": "Compliance & Security Tracking", "route": "audit_logs"},
+          {"title": "Business Activities", "route": "activity_logs"},
+        ]
+      },
+    ].where((item) => (item['roles'] as List<String>).contains(userRole)).toList();
+  }
+
+  void _handleSidebarNavigation(String? route, BuildContext context, String? userRole) {
+    if (route == null) {
+      Navigator.pop(context); // Close drawer
+      return;
+    }
+
+    Navigator.pop(context); // Always close drawer on selection
+
+    switch (route) {
+      case "users":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CommonUserManagementScreen()));
+        break;
+      case "entities":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CommonEntityManagmentScreen()));
+        break;
+      case "contracts":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CommonContractsScreen(userRole: userRole ?? '')));
+        break;
+      case "station_management_master":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "trains":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonTrainScreen()));
+        break;
+      case "coach_cleaning":
+      case "premise_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()));
+        break;
+      case "station_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "station_cleaning_runs":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationCleaningRunsListScreen()));
+        break;
+      case "obhs_attendance":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSAttendanceListScreen()));
+        break;
+      case "attendance_exceptions":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceExceptionDashboard()));
+        break;
+      case "obhs_tasks":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSRunsListScreen()));
+        break;
+      case "coach_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 1)));
+        break;
+      case "premise_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 0)));
+        break;
+      case "station_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 2)));
+        break;
+      case "obhs_reports":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonReportScreen(initialIndex: 3)));
+        break;
+      case "divisions":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const DivisionManagementScreen()));
+        break;
+      case "billing_rules":
+      case "billing":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const BillingDashboardScreen()));
+        break;
+      case "ratings":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRatingsScreen()));
+        break;
+      case "audit_logs":
+      case "activity_logs":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AuditLogScreen()));
+        break;
+      case "complaints":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
+        break;
+      default:
+        break;
+    }
+  }
+
+  Widget _buildDrawer(var user, List<Map<String, dynamic>> sidebarMenuItems) {
+    return Drawer(
+      child: Column(
+        children: [
+          // Drawer Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [kRailwayBlue, Colors.lightBlue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  radius: 35,
+                  child: Icon(Icons.person, size: 40, color: kRailwayBlue),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  user?.fullName ?? 'User',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  user?.role ?? '',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Menu Items
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: sidebarMenuItems.length,
+              itemBuilder: (context, index) {
+                final item = sidebarMenuItems[index];
+                final isCurrentScreen = item['route'] == null && !item.containsKey('children');
+
+                if (item.containsKey('children')) {
+                  final children = item['children'] as List<Map<String, dynamic>>;
+                  return ExpansionTile(
+                    leading: Icon(
+                      item['icon'] as IconData,
+                      color: Colors.grey[700],
+                    ),
+                    title: Text(
+                      item['title'] as String,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    children: children.map((child) {
+                      return ListTile(
+                        contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                        title: Text(
+                          child['title'] as String,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        onTap: () => _handleSidebarNavigation(
+                          child['route'] as String?,
+                          context,
+                          user?.role,
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }
+
+                return ListTile(
+                  leading: Icon(
+                    item['icon'] as IconData,
+                    color: isCurrentScreen ? kRailwayBlue : Colors.grey[700],
+                  ),
+                  title: Text(
+                    item['title'] as String,
+                    style: TextStyle(
+                      fontWeight: isCurrentScreen ? FontWeight.bold : FontWeight.w500,
+                      color: isCurrentScreen ? kRailwayBlue : Colors.grey[800],
+                    ),
+                  ),
+                  selected: isCurrentScreen,
+                  selectedTileColor: kRailwayBlue.withOpacity(0.1),
+                  onTap: () => _handleSidebarNavigation(
+                    item['route'] as String?,
+                    context,
+                    user?.role,
+                  ),
+                );
+              },
+            ),
+          ),
+          // Logout Button
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text(
+                'Logout',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.red,
+                ),
+              ),
+              onTap: () async {
+                final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                await authProvider.logout();
+                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUser;
@@ -269,6 +579,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     const accentGreen = Color(0xFF12C27D);
     const softBorder = Color(0xFFE8E8F0);
 
+    final sidebarMenuItems = _getSidebarMenuItems(user?.role);
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -278,7 +589,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         ),
         backgroundColor: kRailwayBlue,
         elevation: 0.5,
-
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(onPressed: (){
 
@@ -304,6 +615,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         ],
 
       ),
+      drawer: _buildDrawer(user, sidebarMenuItems),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadAllData,

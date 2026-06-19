@@ -213,6 +213,15 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
     activeCount = filteredActiveTrains.length;
     inactiveCount = filteredInactiveTrains.length;
 
+
+    final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    final bool canAddTrains = currentUser != null &&
+        (currentUser.role == 'Company Master' ||
+         currentUser.role == 'Railway Master' ||
+         currentUser.role == 'Railway Admin' ||
+         currentUser.role == 'Contractor Master' ||
+         currentUser.role == 'Contractor Admin');
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
         appBar: AppBar(
@@ -422,7 +431,7 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
           ),
         ],
       ),
-      floatingActionButton:
+      floatingActionButton: canAddTrains ?
       FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.push(
@@ -438,7 +447,7 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
           "Add Train",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
-      )
+      ) : null
     );
   }
 
