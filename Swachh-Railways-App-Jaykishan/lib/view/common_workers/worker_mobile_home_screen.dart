@@ -422,8 +422,9 @@ class WorkerMobileHomeScreen extends StatelessWidget {
   // ── Attendance Item ───────────────────────────────────────────────────────
 
   Widget _buildAttendanceCard(WorkerController controller) {
-    return Container(
-      width: double.infinity,
+    return Obx(() {
+      return Container(
+        width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -958,6 +959,8 @@ class WorkerMobileHomeScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+  
   Widget _buildCategorizedTasksSection(WorkerController controller) {
     return Column(
       children: [

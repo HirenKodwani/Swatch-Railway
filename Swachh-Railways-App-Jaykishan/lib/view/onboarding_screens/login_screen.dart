@@ -7,8 +7,8 @@ import '../../../providers/auth_provider.dart';
 import 'package:crm_train/model/user_model.dart';
 
 import 'forgot_passowrd_screen.dart';
-
-
+import 'package:get/get.dart';
+import '../../../utills/app_colors.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
