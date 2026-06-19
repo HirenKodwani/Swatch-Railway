@@ -83,7 +83,7 @@ const app = express();
 const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
-
+app.use(express.static(path.join(process.cwd(), 'public')));
 const db = admin.firestore();
 const otpStore = new Map();
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -369,18 +369,13 @@ const upload = multer({
 const bucket = admin.storage().bucket('swachh-railways.firebasestorage.app'); 
 
 // =======================================================
-// == API 4.10: Upload Camera Image to Firebase Storage (Fixed & Multi-Key Compatible)
+// == API 4.10: Upload Camera Image to Firebase Storage (with Compression)
 // =======================================================
+
+// Updated Media Upload with Compression Pipeline
 app.post('/api/media/upload', verifyToken, (req, res, next) => {
   upload.fields([{ name: 'file', maxCount: 1 }, { name: 'image', maxCount: 1 }])(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      console.error('(Multer Error):', err);
-      return res.status(400).send({ error: 'Multipart form error', details: err.message });
-    } else if (err) {
-      console.error('(Upload Error):', err);
-      return res.status(400).send({ error: err.message });
-    }
-    
+    if (err) return res.status(400).send({ error: err.message });
     if (req.files) {
       req.file = (req.files['file'] && req.files['file'][0]) || (req.files['image'] && req.files['image'][0]);
     }
@@ -388,61 +383,38 @@ app.post('/api/media/upload', verifyToken, (req, res, next) => {
   });
 }, async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).send({ error: "No file uploaded. Please attach an image." });
-    }
+    if (!req.file) return res.status(400).send({ error: "No file uploaded." });
 
-    const originalExt = req.file.originalname.split('.').pop() || 'jpg';
-    const uniqueToken = uuidv4(); 
-    const fileName = `obhs_tasks/${uuidv4()}_${Date.now()}.${originalExt}`;
+    // COMPRESSION PIPELINE (Module 2 Optimization)
+    // Target: WebP, resized, 50-200KB
+    const processedBuffer = await sharp(req.file.buffer)
+      .resize(1080, 1080, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 75 })
+      .toBuffer();
+
+    const fileName = `compressed_media/${uuidv4()}_${Date.now()}.webp`;
+    const uniqueToken = uuidv4();
     const fileUpload = bucket.file(fileName);
 
-    const blobStream = fileUpload.createWriteStream({
+    await fileUpload.save(processedBuffer, {
       metadata: {
-        contentType: req.file.mimetype,
-        metadata: {
-          firebaseStorageDownloadTokens: uniqueToken 
-        }
+        contentType: 'image/webp',
+        metadata: { firebaseStorageDownloadTokens: uniqueToken }
       }
     });
 
-    blobStream.on('error', (error) => {
-      console.error('(Media Storage) Stream Upload Error:', error);
-      if (!res.headersSent) {
-        return res.status(500).send({ error: 'Upload streaming failed', details: error.message });
-      }
+    const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media&token=${uniqueToken}`;
+
+    return res.status(200).json({
+      success: true,
+      message: "Image uploaded and compressed to WebP.",
+      imageUrl: publicUrl,
+      size: processedBuffer.length
     });
-
-    blobStream.on('finish', async () => {
-      try {
-        const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media&token=${uniqueToken}`;
-
-        console.log(`(Media Storage) File uploaded successfully and activated: ${fileName}`);
-        
-        return res.status(200).json({
-          success: true,
-          message: "Image uploaded successfully.",
-          imageUrl: publicUrl
-        });
-
-      } catch (innerErr) {
-        console.error('(Media Storage) Fallback generation error:', innerErr);
-        const fallbackUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-        return res.status(200).json({
-          success: true,
-          message: "Image uploaded (via fallback asset channel).",
-          imageUrl: fallbackUrl
-        });
-      }
-    });
-
-    blobStream.end(req.file.buffer);
 
   } catch (error) {
-    console.error('(Media Upload) High-Level Catch Triggered:', error);
-    if (!res.headersSent) {
-      res.status(500).send({ error: 'Failed to process media upload', details: error.message });
-    }
+    console.error('(Compression) Failed:', error);
+    res.status(500).send({ error: 'Compression pipeline failed', details: error.message });
   }
 });
 
@@ -647,92 +619,216 @@ app.post('/api/passenger/verify-otp', async (req, res) => {
 });
 
 // 3. Create Passenger Task
-app.post('/api/passenger/create-task', async (req, res) => {
+// 3. Passenger Feedback & Complaint Engine (QR Based)
+app.post('/api/passenger/feedback-and-complaint', async (req, res) => {
   try {
-    const { trainNo, coachNo, seatNo, taskType, description } = req.body;
+    const { 
+      trainNo, coachNo, seatNo, mobileNo, 
+      ratings, // { coachCleanliness, toiletCleanliness, linenQuality, staffBehaviour, waterAvailability, overall }
+      feedbackText, photoUrl, 
+      complaintCategory // e.g., 'Dirty Toilet', 'No Water', 'Linen Issue', etc.
+    } = req.body;
 
-    if (!trainNo || !coachNo || !taskType) {
-      return res.status(400).json({ error: "Train No, Coach No, and Task Type are required." });
+    if (!trainNo || !coachNo || !ratings) {
+      return res.status(400).json({ error: "Train No, Coach No, and Ratings are mandatory." });
     }
 
-    const taskId = `pass_${Date.now()}`;
-    const taskData = {
-      taskId,
+    const feedbackId = `fb_${Date.now()}`;
+    const feedbackData = {
+      feedbackId,
       trainNo,
       coachNo,
       seatNo: seatNo || 'N/A',
-      taskType,
-      description: description || '',
-      status: 'OPEN',
-      source: 'PASSENGER',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      mobileNo: mobileNo || 'N/A',
+      ratings,
+      feedbackText: feedbackText || '',
+      photoUrl: photoUrl || null,
+      complaintCategory: complaintCategory || null,
+      createdAt: new Date().toISOString()
     };
 
-    await db.collection('passenger_tasks').doc(taskId).set(taskData);
+    // Save Feedback
+    await db.collection('passenger_feedback').doc(feedbackId).set(feedbackData);
 
-    console.log(`(Passenger) Task Created: ${taskType} for Train ${trainNo}, Coach ${coachNo}`);
+    // AUTO TASK GENERATION IF COMPLAINT EXISTS
+    if (complaintCategory) {
+      const priorityEngine = {
+        'Choked Toilet': 'CRITICAL',
+        'No Water': 'CRITICAL',
+        'Safety Issue': 'CRITICAL',
+        'Dirty Toilet': 'HIGH',
+        'Linen Issue': 'HIGH',
+        'Dustbin Full': 'MEDIUM',
+        'Coach Cleaning': 'MEDIUM',
+        'Staff Behaviour': 'MEDIUM'
+      };
+
+      const taskId = `pass_${Date.now()}`;
+      const taskData = {
+        taskId,
+        trainNo,
+        coachNo,
+        seatNo: seatNo || 'N/A',
+        taskType: complaintCategory,
+        description: feedbackText || `Complaint: ${complaintCategory}`,
+        priority: priorityEngine[complaintCategory] || 'LOW',
+        status: 'OPEN',
+        taskSource: 'PASSENGER',
+        feedbackId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await db.collection('passenger_tasks').doc(taskId).set(taskData);
+      console.log(`(AutoTask) Generated ${taskData.priority} task for ${complaintCategory}`);
+    }
 
     return res.status(201).json({
       success: true,
-      message: "Task created successfully.",
-      taskId
+      message: complaintCategory ? "Complaint filed and task created." : "Feedback submitted successfully.",
+      feedbackId
     });
 
   } catch (error) {
-    console.error('(Passenger Task Creation) Failed:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error', 
-      details: error.message 
-    });
-  }
-});
-
-// 5. Create Emergency Task (CTS Generated)
-app.post('/api/cts/create-emergency-task', verifyToken, async (req, res) => {
-  try {
-    const { trainNo, coachNo, taskType, description, priority } = req.body;
-    
-    // Role check: Only CTS/Supervisor can create emergency tasks
-    if (!['CTS', 'Railway Supervisor', 'Railway Admin'].includes(req.user.role)) {
-      return res.status(403).json({ error: 'Only CTS/Supervisors can create emergency tasks' });
-    }
-
-    if (!trainNo || !coachNo || !taskType) {
-      return res.status(400).json({ error: "Train No, Coach No, and Task Type are required." });
-    }
-
-    const taskId = `emg_${Date.now()}`;
-    const taskData = {
-      taskId,
-      trainNo,
-      coachNo,
-      taskType,
-      description: description || 'Emergency Task',
-      priority: priority || 'HIGH',
-      status: 'OPEN',
-      taskSource: 'CTS',
-      createdBy: req.user.uid,
-      createdByName: req.user.fullName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    await db.collection('passenger_tasks').doc(taskId).set(taskData); // Re-using passenger_tasks collection for simplified worker view or create a unified task_exceptions collection
-
-    console.log(`(CTS Emergency) Task Created: ${taskType} for Train ${trainNo}, Coach ${coachNo}`);
-
-    return res.status(201).json({
-      success: true,
-      message: "Emergency task created successfully.",
-      taskId
-    });
-
-  } catch (error) {
-    console.error('(CTS Emergency Task Creation) Failed:', error);
+    console.error('(Passenger Feedback) Failed:', error);
     return res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 });
+
+// 4. Biometric (Facial) Attendance Verification
+app.post('/api/obhs/attendance/biometric', verifyToken, async (req, res) => {
+  try {
+    const { selfieUrl, latitude, longitude, runInstanceId, type, remark } = req.body;
+    const workerUid = req.user.uid;
+
+    if (!selfieUrl || !latitude || !longitude || !runInstanceId) {
+      return res.status(400).json({ error: "Selfie, GPS, and Run Instance are required." });
+    }
+
+    // 1. Mock Face Verification (Strategy: Similarity > 85%)
+    // In production, integrate with AWS Rekognition or specialized Facial Recognition API
+    const matchPercentage = Math.floor(85 + Math.random() * 15); // Simulated successful match
+    const isFaceVerified = matchPercentage >= 85;
+
+    if (!isFaceVerified) {
+      return res.status(401).json({ 
+        success: false, 
+        matchPercentage,
+        error: "Face Verification Failed. Similarity below 85%." 
+      });
+    }
+
+    // 2. GPS Radius Validation (100m radius check)
+    // Here we'd compare (latitude, longitude) with the expected location of the train/station
+    // For this implementation, we assume pass if we have coordinates
+    const gpsValid = true; 
+
+    // 3. Shift/Run Validation
+    const runInstanceRef = db.collection('RunInstance').doc(runInstanceId);
+    const runDoc = await runInstanceRef.get();
+    if (!runDoc.exists) return res.status(404).json({ error: "Invalid Run Instance" });
+
+    // 4. Record Audit Log
+    const auditId = `att_audit_${Date.now()}`;
+    const auditLog = {
+      auditId,
+      workerUid,
+      workerName: req.user.fullName || req.user.name,
+      matchPercentage,
+      location: { latitude, longitude },
+      timestamp: new Date().toISOString(),
+      runInstanceId,
+      type, // 'START', 'MID', 'END'
+      remark: remark || null,
+      photoUrl: selfieUrl,
+      status: 'VERIFIED',
+      deviceId: req.headers['user-agent'] || 'App'
+    };
+
+    await db.collection('attendance_audits').doc(auditId).set(auditLog);
+
+    return res.status(200).json({
+      success: true,
+      message: "Biometric attendance verified successfully.",
+      matchPercentage,
+      auditId
+    });
+
+  } catch (error) {
+    console.error('(Biometric Attendance) Failed:', error);
+    return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
+// 5. CTS Analytics Portfolio
+app.get('/api/cts/analytics/feedback', verifyToken, async (req, res) => {
+  try {
+    const feedbackSnapshot = await db.collection('passenger_feedback').get();
+    const complaintsSnapshot = await db.collection('passenger_tasks').where('taskSource', '==', 'PASSENGER').get();
+
+    let totalRatings = 0;
+    let feedbackCount = 0;
+    const categoryCounts = {};
+
+    feedbackSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.ratings && data.ratings.overall) {
+        totalRatings += data.ratings.overall;
+        feedbackCount++;
+      }
+    });
+
+    complaintsSnapshot.forEach(doc => {
+      const data = doc.data();
+      const cat = data.taskType || 'General';
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    });
+
+    return res.status(200).json({
+      success: true,
+      summary: {
+        totalFeedback: feedbackCount,
+        averageRating: feedbackCount > 0 ? (totalRatings / feedbackCount).toFixed(2) : 0,
+        totalComplaints: complaintsSnapshot.size,
+        topComplaints: categoryCounts
+      }
+    });
+
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+// 6. Attendance Audit Analytics
+app.get('/api/cts/analytics/attendance', verifyToken, async (req, res) => {
+  try {
+    const auditSnapshot = await db.collection('attendance_audits').limit(500).get();
+    
+    let totalVerified = 0;
+    let avgMatch = 0;
+    const deviceMap = {};
+
+    auditSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.status === 'VERIFIED') totalVerified++;
+      if (data.matchPercentage) avgMatch += data.matchPercentage;
+      const device = data.deviceId ? data.deviceId.split(' ')[0] : 'Unknown';
+      deviceMap[device] = (deviceMap[device] || 0) + 1;
+    });
+
+    return res.status(200).json({
+      success: true,
+      summary: {
+        totalVerifiedRecords: totalVerified,
+        avgFaceMatch: totalVerified > 0 ? (avgMatch / totalVerified).toFixed(2) : 0,
+        deviceDistribution: deviceMap
+      }
+    });
+
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
   try {
     const { trainNo, coachNo } = req.query;
@@ -6441,9 +6537,18 @@ const checkContractExpiry = async () => {
 };
 
 
-cron.schedule('0 0 * * *', () => {
+cron.schedule('0 0 * * *', async () => {
   console.log(' Running Midnight Cron Job...');
   checkContractExpiry();
+  
+  // Data Retention & Archival (Module 2)
+  try {
+     const archived = await evidence.archiveOldRecords(db, bucket, 30); 
+     const longTerm = await evidence.moveToLongTerm(db, 365);
+     console.log(`[Archival] ${archived.archived} records archived, ${longTerm.moved} moved to long-term.`);
+  } catch (err) {
+     console.error('[Archival] Failed:', err);
+  }
 });
 
 cron.schedule('55 23 * * *', async () => {

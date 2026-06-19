@@ -65,6 +65,42 @@ class WorkerRepository {
     }
   }
 
+  static Future<Map<String, dynamic>> verifyBiometricAttendance({
+    required String selfieUrl,
+    required double latitude,
+    required double longitude,
+    required String runInstanceId,
+    required String type,
+    String? remark,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/api/obhs/attendance/biometric'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'selfieUrl': selfieUrl,
+            'latitude': latitude,
+            'longitude': longitude,
+            'runInstanceId': runInstanceId,
+            'type': type,
+            'remark': remark,
+          }),
+        ),
+      );
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      throw Exception(ApiErrorHandler.getErrorMessage(e, null));
+    }
+  }
+
   static Future<Map<String, dynamic>> getWorkerStatistics() async {
     try {
       final token = await _getToken();
