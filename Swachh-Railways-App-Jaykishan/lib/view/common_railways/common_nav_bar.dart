@@ -30,7 +30,7 @@ class CommonNavBar extends StatelessWidget {
     ContractorMasterFormsScreen(),
     ContractorMasterMyContractsScreen(),
     ContractorReportScreen(),
-    ContractorMasterAlertScreen(),
+    CommonUserManagementScreen(),
   ];
 
   List<PersistentBottomNavBarItem> _contractorNavItems() => [
@@ -59,8 +59,8 @@ class CommonNavBar extends StatelessWidget {
       inactiveColorPrimary: Colors.grey,
     ),
     PersistentBottomNavBarItem(
-      icon: const Icon(Icons.notifications),
-      title: "Alerts",
+      icon: const Icon(Icons.people),
+      title: "Users",
       activeColorPrimary: Colors.blue,
       inactiveColorPrimary: Colors.grey,
     ),

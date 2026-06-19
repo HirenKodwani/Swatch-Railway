@@ -16384,6 +16384,94 @@ app.get('/api/obhs/worker/active-run', verifyToken, async (req, res) => {
 // ─── SEED ON STARTUP ──────────────────────────────────────────────────────
 seedTaskMasters();
 
+// ====== CTS Forms API ======
+app.get('/api/cts-forms', verifyToken, async (req, res) => {
+  try {
+    const formsSnapshot = await db.collection('cts-forms').get();
+    const forms = formsSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+    res.json({ forms });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch CTS forms' });
+  }
+});
+
+app.post('/api/cts-forms', verifyToken, async (req, res) => {
+  try {
+    const data = req.body;
+    data.createdAt = new Date().toISOString();
+    data.status = 'SUBMITTED';
+    const docRef = await db.collection('cts-forms').add(data);
+    res.status(201).json({ success: true, uid: docRef.id, message: 'CTS form created' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create CTS form' });
+  }
+});
+
+app.post('/api/cts-forms/:id/approve-manpower', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('cts-forms').doc(id).update({ status: 'APPROVED_BY_RAILWAY' });
+    res.json({ success: true, message: 'CTS form manpower approved' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to approve manpower' });
+  }
+});
+
+app.post('/api/cts-forms/:id/reject', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejectionComments } = req.body;
+    await db.collection('cts-forms').doc(id).update({ status: 'REJECTED_BY_RAILWAY', rejectionComments });
+    res.json({ success: true, message: 'CTS form rejected' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reject form' });
+  }
+});
+
+// ====== Station Cleaning Runs API ======
+app.get('/api/station-runs', verifyToken, async (req, res) => {
+  try {
+    const runsSnapshot = await db.collection('station-runs').get();
+    const data = runsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch station runs' });
+  }
+});
+
+app.post('/api/station-runs', verifyToken, async (req, res) => {
+  try {
+    const data = req.body;
+    data.createdAt = new Date().toISOString();
+    const docRef = await db.collection('station-runs').add(data);
+    res.status(201).json({ success: true, data: { id: docRef.id, ...data } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to create station run' });
+  }
+});
+
+app.put('/api/station-runs/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = req.body;
+    data.updatedAt = new Date().toISOString();
+    await db.collection('station-runs').doc(id).update(data);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to update station run' });
+  }
+});
+
+app.delete('/api/station-runs/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('station-runs').doc(id).delete();
+    res.json({ success: true, message: 'Deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to delete station run' });
+  }
+});
+
 // --- Server Start ---
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
