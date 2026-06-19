@@ -22,7 +22,7 @@ class _AdminRatingsScreenState extends State<AdminRatingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadRatings();
   }
 
@@ -63,6 +63,15 @@ class _AdminRatingsScreenState extends State<AdminRatingsScreen>
   List<RatingModel> get _officialRatings =>
       _ratings.where((r) => r.raterType == 'Official').toList();
 
+  List<RatingModel> get _tteRatings =>
+      _ratings.where((r) => r.raterType == 'TTE').toList();
+
+  List<RatingModel> get _psmeRatings =>
+      _ratings.where((r) => r.raterType == 'PSME').toList();
+
+  List<RatingModel> get _supervisorRatings =>
+      _ratings.where((r) => r.raterType == 'Supervisor/Admin').toList();
+
   double get _avgOverall {
     if (_ratings.isEmpty) return 0;
     return _ratings.map((r) => r.overallRating).reduce((a, b) => a + b) /
@@ -93,6 +102,7 @@ class _AdminRatingsScreenState extends State<AdminRatingsScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
@@ -100,6 +110,9 @@ class _AdminRatingsScreenState extends State<AdminRatingsScreen>
             const Tab(text: 'Summary'),
             Tab(text: 'Passenger (${_passengerRatings.length})'),
             Tab(text: 'Official (${_officialRatings.length})'),
+            Tab(text: 'Supervisor/Admin (${_supervisorRatings.length})'),
+            Tab(text: 'TTE (${_tteRatings.length})'),
+            Tab(text: 'PSME (${_psmeRatings.length})'),
           ],
         ),
       ),
@@ -111,6 +124,9 @@ class _AdminRatingsScreenState extends State<AdminRatingsScreen>
             _buildSummaryTab(),
             _buildRatingList(_passengerRatings, 'Passenger'),
             _buildRatingList(_officialRatings, 'Official'),
+            _buildRatingList(_supervisorRatings, 'Supervisor/Admin'),
+            _buildRatingList(_tteRatings, 'TTE'),
+            _buildRatingList(_psmeRatings, 'PSME'),
           ],
         ),
       floatingActionButton: FloatingActionButton.extended(
@@ -175,42 +191,6 @@ class _AdminRatingsScreenState extends State<AdminRatingsScreen>
                     ),
                     const SizedBox(height: 4),
                     _buildStarRow(_avgOverall, size: 16),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${_ratings.length} total reviews',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${_passengerRatings.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Text(
-                      'Passenger',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '${_officialRatings.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Text(
-                      'Official',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
-                    ),
                   ],
                 ),
               ],
