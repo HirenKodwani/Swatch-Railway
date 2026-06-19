@@ -33,6 +33,7 @@ import '../widgets/QuickActionCard.dart';
 import '../widgets/filter_section.dart';
 import '../widgets/indicator_color.dart';
 import '../widgets/status_tile.dart';
+import '../attendance/attendance_exception_dashboard.dart';
 
 
 class CommonDashboard extends StatefulWidget {
@@ -456,6 +457,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
           {"title": "Attendance", "route": "obhs_attendance"},
+          {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
           {"title": "Tasks", "route": "obhs_tasks"},
           {"title": "Complaints", "route": "complaints"},
         ]
@@ -528,6 +530,9 @@ class _CommonDashboardState extends State<CommonDashboard> {
         break;
       case "obhs_attendance":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSAttendanceListScreen()));
+        break;
+      case "attendance_exceptions":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceExceptionDashboard()));
         break;
       case "obhs_tasks":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSRunsListScreen()));

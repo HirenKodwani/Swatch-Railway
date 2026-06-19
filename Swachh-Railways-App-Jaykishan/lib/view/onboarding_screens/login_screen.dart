@@ -2,6 +2,7 @@ import 'package:crm_train/helper/helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../passenger/passenger_task_screen.dart';
 import '../../../providers/auth_provider.dart';
 import 'package:crm_train/model/user_model.dart';
 
@@ -478,6 +479,24 @@ class _LoginScreenState extends State<LoginScreen>
           textAlign: TextAlign.center,
           'Not registered? Contact your admin to create an account.',
           style: TextStyle(color: Colors.grey),
+        ),
+      ),
+      const SizedBox(height: 15),
+      const Divider(),
+      const SizedBox(height: 15),
+      OutlinedButton.icon(
+        onPressed: () {
+           Get.to(() => const PassengerTaskScreen());
+        },
+        icon: const Icon(Icons.person_pin_outlined, color: kRailwayBlue),
+        label: const Text(
+          'Passenger Service Portal',
+          style: TextStyle(color: kRailwayBlue, fontWeight: FontWeight.bold),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: kRailwayBlue),
+          minimumSize: const Size(double.infinity, 45),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
     ],

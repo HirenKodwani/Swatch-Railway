@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import '../../controllers/worker_controller.dart';
+import 'attendance_issue_screen.dart';
 
 class WorkerMobileHomeScreen extends StatelessWidget {
   const WorkerMobileHomeScreen({super.key});
@@ -130,6 +131,19 @@ class WorkerMobileHomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     _buildGrid(controller),
+
+                    const SizedBox(height: 20),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Task Board',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildCategorizedTasksSection(controller),
 
                     const SizedBox(height: 20),
 
@@ -436,16 +450,43 @@ class WorkerMobileHomeScreen extends StatelessWidget {
             type: 'mid',
           ),
           const SizedBox(height: 12),
-          _buildAttendanceItem(
-            controller: controller,
-            title: 'End Attendance',
-            subtitle: 'Mark completion time',
-            icon: Icons.logout,
-            type: 'end',
-          ),
-        ],
-      ),
-    );
+            _buildAttendanceItem(
+              controller: controller,
+              title: 'End Attendance',
+              subtitle: 'Mark completion time',
+              icon: Icons.logout,
+              type: 'end',
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                Get.to(() => AttendanceIssueScreen(
+                  attendanceType: controller.endAttendance.value 
+                    ? 'end' 
+                    : controller.midCheckin.value ? 'mid' : 'start'
+                ));
+              },
+              icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+              label: const Text(
+                'Reporting Attendance Issue?',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                backgroundColor: Colors.orange.withOpacity(0.05),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildStartRequiredCard() {
@@ -916,6 +957,148 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           }).toList(),
         ),
       ],
+    );
+  Widget _buildCategorizedTasksSection(WorkerController controller) {
+    return Column(
+      children: [
+        _buildTaskCategoryCard(
+          title: '1. Scheduled Tasks',
+          subtitle: 'System Generated Routine Work',
+          icon: Icons.calendar_today,
+          color: kRailwayBlue,
+          onTap: () => Get.to(() => const WorkerTaskScreen()), // Existing task screen
+          count: controller.dueTasks.value + controller.upcomingTasks.value,
+        ),
+        const SizedBox(height: 12),
+        _buildTaskCategoryCard(
+          title: '2. Complaint Tasks',
+          subtitle: 'Passenger Generated Requests',
+          icon: Icons.person_pin_circle,
+          color: Colors.orange,
+          onTap: () => _showTaskCategoryDialog('Complaint Tasks', controller.complaintTasks),
+          count: controller.complaintTasks.length,
+          isLoading: controller.isTasksLoading.value,
+        ),
+        const SizedBox(height: 12),
+        _buildTaskCategoryCard(
+          title: '3. Emergency Tasks',
+          subtitle: 'CTS Generated Immediate Action',
+          icon: Icons.report_gmailerrorred_outlined,
+          color: Colors.red,
+          onTap: () => _showTaskCategoryDialog('Emergency Tasks', controller.emergencyTasks),
+          count: controller.emergencyTasks.length,
+          isLoading: controller.isTasksLoading.value,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTaskCategoryCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    required int count,
+    bool isLoading = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (isLoading)
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTaskCategoryDialog(String title, List<Map<String, dynamic>> tasks) {
+    Get.bottomSheet(
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        ),
+        child: Column(
+          children: [
+            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Divider(),
+            Expanded(
+              child: tasks.isEmpty
+                  ? const Center(child: Text('No pending tasks in this category.'))
+                  : ListView.builder(
+                      itemCount: tasks.length,
+                      itemBuilder: (context, index) {
+                        final t = tasks[index];
+                        return ListTile(
+                          title: Text(t['taskType'] ?? 'Unknown Task'),
+                          subtitle: Text('Coach: ${t['coachNo']} | ${t['description'] ?? ""}'),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                          onTap: () {
+                            Get.back();
+                            // Logic to start task
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

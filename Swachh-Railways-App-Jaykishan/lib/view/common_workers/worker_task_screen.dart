@@ -1,10 +1,9 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-
+import 'package:geolocator/geolocator.dart';
 import '../../controllers/worker_controller.dart';
 import '../../repositories/worker_repo.dart';
 import '../../utills/app_colors.dart';
@@ -35,23 +34,13 @@ class WorkerTaskModel {
   });
 
   factory WorkerTaskModel.fromJson(Map<String, dynamic> json) {
-    final taskType =
-        (json['taskType'] ?? json['taskName'] ?? json['name'] ?? 'Task')
-            .toString();
-    final coachNo =
-        (json['coachNo'] ?? json['coachId'] ?? json['coachType'] ?? '')
-            .toString();
-    final frequency =
-        (json['frequencyIndex'] ??
-                json['frequency'] ??
-                json['slot'] ??
-                'Hour 1')
-            .toString();
+    final taskType = (json['taskType'] ?? json['taskName'] ?? json['name'] ?? 'Task').toString();
+    final coachNo = (json['coachNo'] ?? json['coachId'] ?? json['coachType'] ?? '').toString();
+    final frequency = (json['frequencyIndex'] ?? json['frequency'] ?? json['slot'] ?? 'Hour 1').toString();
 
     return WorkerTaskModel(
-      taskId: (json['taskId'] ?? json['id'] ?? '$coachNo-$taskType-$frequency')
-          .toString(),
-      taskName: coachNo.isEmpty ? taskType : '$taskType - Coach $coachNo',
+      taskId: (json['uid'] ?? json['taskId'] ?? json['id'] ?? "$coachNo-$taskType-$frequency").toString(),
+      taskName: coachNo.isEmpty ? taskType : "$taskType - Coach $coachNo",
       category: _categoryFromTaskType(taskType),
       coachId: coachNo,
       frequencyIndex: frequency,
@@ -80,38 +69,20 @@ class WorkerTaskModel {
       return DateTime.tryParse(value)?.toLocal();
     }
     if (value is int) {
-      // Handle both seconds and milliseconds
-      if (value < 10000000000) {
-        return DateTime.fromMillisecondsSinceEpoch(value * 1000).toLocal();
-      }
+      if (value < 10000000000) return DateTime.fromMillisecondsSinceEpoch(value * 1000).toLocal();
       return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
     }
     return null;
   }
 
   static String _normalizeStatus(Map<String, dynamic> json) {
-    final raw = (json['status'] ?? json['state'] ?? '')
-        .toString()
-        .toLowerCase();
-    final completed =
-        json['completed'] == true ||
-        json['isCompleted'] == true ||
-        json['submitted'] == true ||
-        json['isSubmitted'] == true ||
-        json['taskStatus']?.toString().toLowerCase() == 'completed';
-    if (completed || raw.contains('complete') || raw.contains('done')) {
-      return 'Completed';
-    }
-    if (raw.contains('overdue') || json['isOverdue'] == true) {
-      return 'Overdue';
-    }
+    final raw = (json['status'] ?? json['state'] ?? '').toString().toLowerCase();
+    final completed = json['completed'] == true || json['isCompleted'] == true || json['submitted'] == true || json['isSubmitted'] == true || json['taskStatus']?.toString().toLowerCase() == 'completed';
+    if (completed || raw.contains('complete') || raw.contains('done')) return 'Completed';
+    if (raw.contains('overdue') || json['isOverdue'] == true) return 'Overdue';
     if (raw.contains('upcoming')) return 'Upcoming';
-    
     final dueAt = _parseDueTime(json['dueTime'] ?? json['dueAt']);
-    
-    if (dueAt != null && dueAt.isBefore(DateTime.now())) {
-      return 'Overdue';
-    }
+    if (dueAt != null && dueAt.isBefore(DateTime.now())) return 'Overdue';
     return 'Due';
   }
 }
@@ -131,7 +102,6 @@ class _WorkerTaskScreenState extends State<WorkerTaskScreen>
   bool isLoadingTasks = false;
   bool hasLoadedTasks = false;
   String? tasksError;
-
   @override
   void initState() {
     super.initState();
@@ -1203,9 +1173,21 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
       if (runInstanceId == null || runInstanceId.trim().isEmpty) {
         throw Exception('No run instance assigned for task submit.');
       }
-
       final beforeUrl = await WorkerRepository.uploadMedia(beforePhoto!.path);
       final afterUrl = await WorkerRepository.uploadMedia(afterPhoto!.path);
+
+      // Fetch GPS for evidence
+      double? lat;
+      double? lng;
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        );
+        lat = pos.latitude;
+        lng = pos.longitude;
+      } catch (gpsErr) {
+        debugPrint('GPS Fetch ignored for task: $gpsErr');
+      }
 
       final response = await WorkerRepository.submitObhsTask(
         runInstanceId: runInstanceId,
@@ -1216,6 +1198,8 @@ class _TaskExecutionBottomSheetState extends State<TaskExecutionBottomSheet> {
         beforePhoto: beforeUrl,
         afterPhoto: afterUrl,
         comment: commentController.text.trim(),
+        gpsLatitude: lat,
+        gpsLongitude: lng,
       );
 
       if (response['success'] == true) {
