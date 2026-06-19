@@ -909,5 +909,86 @@ class WorkerRepository {
       throw Exception(ApiErrorHandler.getErrorMessage(e, null));
     }
   }
+
+  /// GET /api/passenger/tasks?trainNo=...&coachNo=...
+  /// Fetches tasks raised by passengers.
+  static Future<Map<String, dynamic>> getPassengerTasks({
+    String? trainNo,
+    String? coachNo,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final queryParams = <String, String>{};
+      if (trainNo != null) queryParams['trainNo'] = trainNo;
+      if (coachNo != null) queryParams['coachNo'] = coachNo;
+
+      final uri = Uri.parse('$baseUrl/api/passenger/tasks').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+
+      final response = await _handleRequest(
+        () => http.get(uri, headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(
+          ApiErrorHandler.getErrorMessage(response.body, response.statusCode),
+        );
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> reportAttendanceIssue({
+    required String runInstanceId,
+    required String issueType,
+    required String remark,
+    String? photoUrl,
+    required String attendanceType,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/api/obhs/attendance/report-issue'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'runInstanceId': runInstanceId,
+            'issueType': issueType,
+            'remark': remark,
+            'photoUrl': photoUrl,
+            'attendanceType': attendanceType,
+            'latitude': latitude,
+            'longitude': longitude,
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
 }
 

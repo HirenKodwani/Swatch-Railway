@@ -88,6 +88,9 @@ class WorkerController extends GetxController {
   final completedTasks = 0.obs;
   final upcomingTasks = 0.obs;
 
+  final passengerTasks = <Map<String, dynamic>>[].obs;
+  final isPassengerTasksLoading = false.obs;
+
   final startAttendance = false.obs;
   final midCheckin = false.obs;
   final endAttendance = false.obs;
@@ -97,6 +100,45 @@ class WorkerController extends GetxController {
       overdueTasks.value +
       completedTasks.value +
       upcomingTasks.value;
+
+  final scheduledTasks = <Map<String, dynamic>>[].obs;
+  final complaintTasks = <Map<String, dynamic>>[].obs;
+  final emergencyTasks = <Map<String, dynamic>>[].obs;
+  final isTasksLoading = false.obs;
+
+  Future<void> fetchTasksByCategories() async {
+    try {
+      isTasksLoading.value = true;
+      final tNo = trainNo;
+      final cNo = assignedCoaches.isNotEmpty ? assignedCoaches.first : null;
+      
+      // Fetch Routine/Scheduled Tasks (Existing repository call for obhs_tasks)
+      // fetchScheduledTasks(); 
+
+      // Fetch Exceptions (Complaint + Emergency)
+      final response = await WorkerRepository.getPassengerTasks(
+        trainNo: tNo,
+        coachNo: cNo,
+      );
+
+      if (response['success'] == true) {
+        final List<Map<String, dynamic>> allExceptionTasks = 
+            List<Map<String, dynamic>>.from(response['tasks']);
+        
+        complaintTasks.value = allExceptionTasks
+            .where((t) => t['taskSource'] == 'PASSENGER' || t['source'] == 'PASSENGER')
+            .toList();
+            
+        emergencyTasks.value = allExceptionTasks
+            .where((t) => t['taskSource'] == 'CTS')
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching categorized tasks: $e');
+    } finally {
+      isTasksLoading.value = false;
+    }
+  }
 
   bool get hasCompletedMinimumForMid => completedTasks.value >= 3;
 
@@ -824,8 +866,50 @@ class WorkerController extends GetxController {
     }
   }
 
+  Future<void> reportAttendanceIssue({
+    required String issueType,
+    required String remark,
+    String? photoUrl,
+    required String attendanceType,
+  }) async {
+    try {
+      isLoading.value = true;
+      final runId = await _resolveAttendanceRunInstanceId();
+      if (runId == null) throw Exception('No active run found.');
+
+      final position = await _getAttendanceLocation();
+
+      final response = await WorkerRepository.reportAttendanceIssue(
+        runInstanceId: runId,
+        issueType: issueType,
+        remark: remark,
+        photoUrl: photoUrl,
+        attendanceType: attendanceType,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+
+      if (response['success'] == true) {
+        Get.snackbar(
+          'Issue Reported',
+          'Your attendance issue has been sent to CTS for approval.',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      Get.snackbar('Error', e.toString());
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   Future<void> refreshData() async {
-    await Future.wait([_fetchProfileFromApi(), loadWorkerStatistics()]);
+    await Future.wait([
+      _fetchProfileFromApi(),
+      loadWorkerStatistics(),
+      fetchTasksByCategories()
+    ]);
   }
 
   Future<void> clearCache() async {

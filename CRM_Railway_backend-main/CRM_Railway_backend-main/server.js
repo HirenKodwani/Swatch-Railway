@@ -646,6 +646,129 @@ app.post('/api/passenger/verify-otp', async (req, res) => {
   }
 });
 
+// 3. Create Passenger Task
+app.post('/api/passenger/create-task', async (req, res) => {
+  try {
+    const { trainNo, coachNo, seatNo, taskType, description } = req.body;
+
+    if (!trainNo || !coachNo || !taskType) {
+      return res.status(400).json({ error: "Train No, Coach No, and Task Type are required." });
+    }
+
+    const taskId = `pass_${Date.now()}`;
+    const taskData = {
+      taskId,
+      trainNo,
+      coachNo,
+      seatNo: seatNo || 'N/A',
+      taskType,
+      description: description || '',
+      status: 'OPEN',
+      source: 'PASSENGER',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await db.collection('passenger_tasks').doc(taskId).set(taskData);
+
+    console.log(`(Passenger) Task Created: ${taskType} for Train ${trainNo}, Coach ${coachNo}`);
+
+    return res.status(201).json({
+      success: true,
+      message: "Task created successfully.",
+      taskId
+    });
+
+  } catch (error) {
+    console.error('(Passenger Task Creation) Failed:', error);
+    return res.status(500).json({ 
+      error: 'Internal Server Error', 
+      details: error.message 
+    });
+  }
+});
+
+// 5. Create Emergency Task (CTS Generated)
+app.post('/api/cts/create-emergency-task', verifyToken, async (req, res) => {
+  try {
+    const { trainNo, coachNo, taskType, description, priority } = req.body;
+    
+    // Role check: Only CTS/Supervisor can create emergency tasks
+    if (!['CTS', 'Railway Supervisor', 'Railway Admin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only CTS/Supervisors can create emergency tasks' });
+    }
+
+    if (!trainNo || !coachNo || !taskType) {
+      return res.status(400).json({ error: "Train No, Coach No, and Task Type are required." });
+    }
+
+    const taskId = `emg_${Date.now()}`;
+    const taskData = {
+      taskId,
+      trainNo,
+      coachNo,
+      taskType,
+      description: description || 'Emergency Task',
+      priority: priority || 'HIGH',
+      status: 'OPEN',
+      taskSource: 'CTS',
+      createdBy: req.user.uid,
+      createdByName: req.user.fullName,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await db.collection('passenger_tasks').doc(taskId).set(taskData); // Re-using passenger_tasks collection for simplified worker view or create a unified task_exceptions collection
+
+    console.log(`(CTS Emergency) Task Created: ${taskType} for Train ${trainNo}, Coach ${coachNo}`);
+
+    return res.status(201).json({
+      success: true,
+      message: "Emergency task created successfully.",
+      taskId
+    });
+
+  } catch (error) {
+    console.error('(CTS Emergency Task Creation) Failed:', error);
+    return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
+  try {
+    const { trainNo, coachNo } = req.query;
+    
+    let query = db.collection('passenger_tasks');
+    
+    if (trainNo) {
+      query = query.where('trainNo', '==', trainNo);
+    }
+    
+    if (coachNo) {
+      query = query.where('coachNo', '==', coachNo);
+    }
+
+    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    
+    const tasks = [];
+    snapshot.forEach(doc => {
+      tasks.push({ uid: doc.id, ...doc.data() });
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: tasks.length,
+      tasks
+    });
+
+  } catch (error) {
+    console.error('(Get Passenger Tasks) Failed:', error);
+    return res.status(500).json({ 
+      error: 'Internal Server Error', 
+      details: error.message 
+    });
+  }
+});
+
 // 1. Send Email OTP
 app.post('/api/auth/send-email-otp', async (req, res) => {
   try {
@@ -3020,11 +3143,16 @@ async function generateTaskInstancesForRun(runData) {
   const departureDate = runData.departureDate || new Date().toISOString().split('T')[0];
   
   // Cleaning frequency schedule (24h format)
-  const cleaningTimes = ['06:00', '07:00', '08:00', '09:00', '11:00', '13:00', '15:00', '17:00', '19:00', '20:00', '21:00'];
-  const garbageTimes = ['07:00', '13:00', '19:00'];
-  const waterCheckTimes = ['08:00', '16:00'];
-  const safetyInspectionTimes = ['10:00', '18:00'];
-  const pettyRepairTimes = ['10:00', '18:00'];
+  // Cleaning frequency schedule (24h format) - Updated to 1-hour intervals
+  const cleaningTimes = [
+    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', 
+    '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', 
+    '20:00', '21:00'
+  ];
+  const garbageTimes = ['07:00', '10:00', '13:00', '16:00', '19:00'];
+  const waterCheckTimes = ['08:00', '12:00', '16:00', '20:00'];
+  const safetyInspectionTimes = ['10:00', '14:00', '18:00'];
+  const pettyRepairTimes = ['10:00', '14:00', '18:00'];
 
   for (const coach of runData.coaches) {
     if (!coach.workerId) continue;
@@ -3053,6 +3181,7 @@ async function generateTaskInstancesForRun(runData) {
         scheduledTime: timeSlot,
         scheduledDate: departureDate,
         status: 'PLANNED',
+        taskSource: 'SYSTEM', // Categorization
         workerId,
         workerName,
         coachNo,
@@ -8295,8 +8424,129 @@ async function compareFaces(image1Url, image2Url) {
 }
 
 // =======================================================
-// == API 4.7: Worker Attendance (Optimized, Secure & AWS Face Verified)
+// == API 4.7.1: Worker Attendance Issue Reporting
 // =======================================================
+app.post('/api/obhs/attendance/report-issue', verifyToken, async (req, res) => {
+  try {
+    const { 
+      runInstanceId, 
+      issueType, 
+      remark, 
+      photoUrl, 
+      latitude, 
+      longitude, 
+      attendanceType 
+    } = req.body;
+
+    if (!runInstanceId || !issueType) {
+      return res.status(400).send({ error: "runInstanceId and issueType are required." });
+    }
+
+    const { uid: userId, fullName: userName, role } = req.user;
+
+    const exceptionId = `EXC-${Date.now()}`;
+    const exceptionData = {
+      uid: exceptionId,
+      workerId: userId,
+      workerName: userName,
+      workerRole: role,
+      runInstanceId,
+      issueType,
+      remark: remark || '',
+      photoUrl: photoUrl || null,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      attendanceType: attendanceType || 'start',
+      status: 'PENDING', // PENDING, APPROVED, REJECTED, EXCUSED
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await db.collection('attendance_exceptions').doc(exceptionId).set(exceptionData);
+
+    // Also mirror to Firestore collection 'attendance_issues' for real-time tracking if needed
+    console.log(`(Attendance) Exception Reported: ${issueType} by ${userName}`);
+
+    res.status(201).send({
+      success: true,
+      message: "Attendance issue reported successfully. CTS will review it.",
+      exceptionId
+    });
+
+  } catch (error) {
+    console.error('(Attendance Issue) Error:', error);
+    res.status(500).send({ error: 'Failed to report issue', details: error.message });
+  }
+});
+
+// =======================================================
+// == API 4.7.2: Get Attendance Exceptions (CTS/Admin View)
+// =======================================================
+app.get('/api/obhs/attendance/exceptions', verifyToken, async (req, res) => {
+  try {
+    const { status, runInstanceId } = req.query;
+    let query = db.collection('attendance_exceptions');
+
+    if (status) query = query.where('status', '==', status);
+    if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
+
+    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const exceptions = [];
+    snapshot.forEach(doc => exceptions.push(doc.data()));
+
+    res.status(200).json({ count: exceptions.length, exceptions });
+  } catch (error) {
+    console.error('(Attendance Exceptions) Error:', error);
+    res.status(500).json({ error: 'Failed to fetch exceptions', details: error.message });
+  }
+});
+
+// =======================================================
+// == API 4.7.3: Resolve Attendance Exception (CTS Action)
+// =======================================================
+app.post('/api/obhs/attendance/exceptions/action', verifyToken, async (req, res) => {
+  try {
+    const { exceptionId, action, adminRemark } = req.body; // action: 'APPROVED', 'REJECTED', 'EXCUSED'
+
+    if (!exceptionId || !action) {
+      return res.status(400).send({ error: "exceptionId and action are required." });
+    }
+
+    const { uid: adminId, fullName: adminName } = req.user;
+
+    const excRef = db.collection('attendance_exceptions').doc(exceptionId);
+    const doc = await excRef.get();
+
+    if (!doc.exists) return res.status(404).send({ error: "Exception record not found." });
+
+    const updateData = {
+      status: action,
+      adminRemark: adminRemark || '',
+      resolvedBy: adminId,
+      resolvedByName: adminName,
+      resolvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await excRef.update(updateData);
+
+    // If APPROVED or EXCUSED, we might want to automatically mark the worker as PRESENT in the main attendance table
+    if (action === 'APPROVED' || action === 'EXCUSED' || action === 'MARK_PRESENT') {
+        const exception = doc.data();
+        // Logic to update/create attendance record could go here
+    }
+
+    res.status(200).send({
+      success: true,
+      message: `Exception ${action} successfully.`
+    });
+
+  } catch (error) {
+    console.error('(Resolve Exception) Error:', error);
+    res.status(500).send({ error: 'Failed to resolve exception', details: error.message });
+  }
+});
+
 app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
   try {
     const allowedFields = [
@@ -8341,38 +8591,57 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
     const finalWorkerName = workerName || 'Unknown Worker';
 
     // ─── ATTENDANCE WINDOW VALIDATION (Railway Board Policy) ──────────
-    // Window opens: Scheduled Departure - 60 min
-    // Deadline: Actual Departure - 45 min
-    // Late/Non-Compliant if attendance time > Actual Departure - 45 min
+    // Window opens: (Min(Scheduled/Actual) Departure) - 60 min
+    // Deadline: (Actual Departure IF AVAILABLE ELSE Scheduled) - 45 min
+    // If train is delayed, Actual Departure shifts the deadline automatically.
     let attendanceWindowError = null;
     let isLateAttendance = false;
+    let timingDetails = {};
+    
     try {
       if (runInstanceId) {
         const runSnap = await db.collection('RunInstance').doc(runInstanceId).get();
         if (runSnap.exists) {
           const runData = runSnap.data();
-          if (runData.scheduledDeparture) {
-            const schedDeparture = new Date(runData.scheduledDeparture);
-            const windowOpen = new Date(schedDeparture.getTime() - 60 * 60 * 1000); // -60min
+          
+          const schedArrival = runData.scheduledArrival ? new Date(runData.scheduledArrival) : null;
+          const actualArrival = runData.actualArrival ? new Date(runData.actualArrival) : null;
+          const schedDeparture = runData.scheduledDeparture ? new Date(runData.scheduledDeparture) : null;
+          const actualDeparture = runData.actualDeparture ? new Date(runData.actualDeparture) : null;
+          
+          const effectiveArrival = actualArrival || schedArrival;
+          const effectiveDeparture = actualDeparture || schedDeparture;
+          
+          timingDetails = {
+            scheduledArrival: runData.scheduledArrival,
+            actualArrival: runData.actualArrival,
+            scheduledDeparture: runData.scheduledDeparture,
+            actualDeparture: runData.actualDeparture,
+            delayMinutes: runData.delayMinutes || 0,
+            platform: runData.platform || 'N/A'
+          };
+
+          if (effectiveDeparture) {
             const now = new Date();
             
-            if (now < windowOpen) {
-              attendanceWindowError = `Attendance window opens at ${windowOpen.toISOString()}. Current time is before the window.`;
+            // Window open logic: 60 mins before departure
+            const windowOpen = new Date(effectiveDeparture.getTime() - 60 * 60 * 1000); 
+            
+            // If it's a 'start' attendance, we check if it's too early
+            if (attendanceType === 'start' && now < windowOpen) {
+              attendanceWindowError = `Attendance window opens at ${windowOpen.toLocaleTimeString()}. Train is scheduled for ${effectiveDeparture.toLocaleTimeString()}.`;
             }
             
-            // Late check based on actual departure
-            if (runData.actualDeparture && attendanceType === 'start') {
-              const actualDeparture = new Date(runData.actualDeparture);
-              const deadline = new Date(actualDeparture.getTime() - 45 * 60 * 1000); // -45min
-              if (now > deadline) {
-                isLateAttendance = true;
-              }
+            // Late check: Deadline is 45 mins before effective departure
+            const deadline = new Date(effectiveDeparture.getTime() - 45 * 60 * 1000);
+            if (now > deadline) {
+              isLateAttendance = true;
             }
           }
         }
       }
     } catch (winErr) {
-      console.error('(Attendance Window) Error:', winErr);
+      console.error('(Attendance Timing Engine) Error:', winErr);
     }
 
     if (attendanceWindowError) {
@@ -8479,7 +8748,10 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       serverTimestamp: new Date().toISOString(),
       location: (latitude && longitude) ? { latitude, longitude } : null,
       mobileNumber: mobileNumber || null,
-      deviceId: deviceId || null
+      deviceId: deviceId || null,
+      isLate: isLateAttendance,
+      timingSnapshot: timingDetails,
+      status: isLateAttendance ? 'LATE' : 'PRESENT'
     };
 
     // --- CASE 1: INITIAL SUBSCRIPTION LOOP ('start' execution) ---
@@ -8501,7 +8773,9 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         isStartMarked: true,       
         isMidMarked: false,
         isEndMarked: false,
-        identityAuditStatus: "PENDING_VERIFICATION", // Initial status code
+        attendanceStatus: isLateAttendance ? 'LATE' : 'PRESENT',
+        timingSnapshot: timingDetails,
+        identityAuditStatus: "PENDING_VERIFICATION", 
         startAttendance: attendanceEntry,
         midAttendance: null,
         endAttendance: null,
@@ -8589,6 +8863,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         updateData.identityAuditStatus = "VERIFIED_SUCCESS";
       }
 
+      updateData.attendanceStatus = isLateAttendance ? 'LATE' : 'PRESENT';
+      updateData.timingSnapshot = timingDetails;
       await attendanceRef.update(updateData);
     }
 
