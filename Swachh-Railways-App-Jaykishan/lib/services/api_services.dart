@@ -3558,7 +3558,8 @@ class ApiService {
         body: jsonEncode(data),
       );
       if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
-      throw Exception('Failed to create station');
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create station');
     } catch (e) {
       throw Exception('Error creating station: $e');
     }

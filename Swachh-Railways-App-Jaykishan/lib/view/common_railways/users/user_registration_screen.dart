@@ -701,21 +701,19 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (userType == 'railway') {
       if (currentUser?.role == 'Railway Admin') {
-        return ['Railway Supervisor', 'Railway Worker'];
+        return ['Railway Supervisor']; // Removed Railway Worker
       }
       else if (currentUser?.role == 'Railway Master') {
         return [
-          'Railway Master',
           'Railway Admin',
           'Railway Supervisor',
-          'Railway Worker',
-        ];
+        ]; // Removed Railway Master and Railway Worker
       }
       else if (currentUser?.role == 'Contractor Admin') {
-        return ['Railway Supervisor', 'Railway Worker'];
+        return ['Railway Supervisor'];
       }
       else {
-        return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker'];
+        return ['Railway Admin', 'Railway Supervisor'];
       }
     } else {
       if (currentUser?.role == 'Contractor Admin') {
@@ -728,7 +726,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         return ['Contractor Supervisor'];
       }
       else {
-        return ['Contractor Master', 'Contractor Admin', 'Contractor Supervisor'];
+        return ['Contractor Admin', 'Contractor Supervisor'];
       }
     }
   }

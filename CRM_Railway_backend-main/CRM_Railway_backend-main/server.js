@@ -1246,6 +1246,12 @@ app.put('/api/admin/updateUser/:uid', verifyToken, async (req, res) => {
     if (trainId !== undefined) updateData.trainId = trainId;
     if (trainIds !== undefined) updateData.trainIds = trainIds;
     if (worker_type !== undefined) updateData.worker_type = worker_type;
+    
+    // RE-APPROVAL LOGIC: Reset to PENDING on edit
+    updateData.status = 'PENDING';
+    updateData.updatedAt = new Date().toISOString();
+    updateData.updatedBy = editorId;
+    updateData.updatedByName = editorName;
 
     if (password) {
       try {
@@ -2298,6 +2304,11 @@ app.put('/api/contractors/:uid', verifyToken, async (req, res) => {
     updates.updatedByName = editorName;
     updates.updatedAt = new Date().toISOString();
 
+    // RE-APPROVAL LOGIC: Reset to PENDING on edit
+    if (!updates.status || (updates.status !== 'APPROVED' && updates.status !== 'REJECTED')) {
+      updates.status = 'PENDING';
+    }
+
     if (updates.status) {
 
       if (updates.status === 'APPROVED' && currentData.status !== 'APPROVED') {
@@ -2827,6 +2838,11 @@ app.put('/api/contracts/:uid', verifyToken, async (req, res) => {
     updates.updatedBy = userId;
     updates.updatedByName = editorName;
     updates.updatedAt = new Date().toISOString();
+
+    // RE-APPROVAL LOGIC: Reset to PENDING on edit
+    if (!updates.status || (updates.status !== 'APPROVED' && updates.status !== 'REJECTED')) {
+      updates.status = 'PENDING';
+    }
 
     await docRef.update(updates);
 
@@ -3829,6 +3845,8 @@ app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, 
 app.put('/api/trains/:uid', verifyToken, async (req, res) => {
   try {
     const { uid } = req.params;
+    const { uid: editorId, name, fullName: editorAuthName, role: editorRole } = req.user;
+    const editorName = editorAuthName || name || editorRole || 'Admin';
     
     const allowedFields = [
       'trainNo', 'trainName', 'origin', 'destination', 'days', 
@@ -3918,6 +3936,7 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
     updateData.updatedBy = editorId;
     updateData.updatedByName = editorName;
     updateData.updatedAt = new Date().toISOString();
+    updateData.status = 'PENDING';
 
     await docRef.update(updateData);
 
@@ -11704,17 +11723,26 @@ app.get('/api/station-cleaning-form/list', verifyToken, async (req, res) => {
   try {
     const { status, stationId, areaId, zoneId, division } = req.query;
     const { role, division: userDiv, entityId, userType } = req.user;
-    let query = db.collection('stationCleaningForms').orderBy('createdAt', 'desc');
-    if (userType === 'contractor') query = query.where('entityId', '==', entityId);
-    else if (!(role || '').toLowerCase().includes('master')) query = query.where('division', '==', userDiv);
-    if (status) query = query.where('status', '==', status);
-    if (stationId) query = query.where('stationId', '==', stationId);
-    if (areaId) query = query.where('areaId', '==', areaId);
-    if (zoneId) query = query.where('zoneId', '==', zoneId);
-    if (division) query = query.where('division', '==', division);
-    const snapshot = await query.get();
-    const forms = [];
+    const snapshot = await db.collection('stationCleaningForms').get();
+    let forms = [];
     snapshot.forEach(doc => forms.push(doc.data()));
+
+    // Filter
+    if (userType === 'contractor') {
+      forms = forms.filter(f => f.entityId === entityId);
+    } else if (!(role || '').toLowerCase().includes('master')) {
+      forms = forms.filter(f => f.division === userDiv);
+    }
+
+    if (status) forms = forms.filter(f => f.status === status);
+    if (stationId) forms = forms.filter(f => f.stationId === stationId);
+    if (areaId) forms = forms.filter(f => f.areaId === areaId);
+    if (zoneId) forms = forms.filter(f => f.zoneId === zoneId);
+    if (division) forms = forms.filter(f => f.division === division);
+
+    // Sort by createdAt desc
+    forms.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
     res.status(200).json({ count: forms.length, forms });
   } catch (error) {
     res.status(500).send({ error: 'Failed to fetch forms', details: error.message });

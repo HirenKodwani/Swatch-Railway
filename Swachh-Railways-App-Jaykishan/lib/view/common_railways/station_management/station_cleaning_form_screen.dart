@@ -120,7 +120,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
       final result = await ApiService.getStations();
       if (mounted) {
         setState(() {
-          stations = (result as List).map((s) => Station.fromJson(s as Map<String, dynamic>)).toList();
+          stations = result;
           isLoadingStations = false;
         });
       }
@@ -141,7 +141,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
       final result = await ApiService.getStationAreas(selectedStation!.uid ?? '');
       if (mounted) {
         setState(() {
-          areas = (result as List).map((a) => StationArea.fromJson(a as Map<String, dynamic>)).toList();
+          areas = result;
           selectedArea = null;
           selectedZone = null;
           zones = [];
@@ -165,7 +165,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
       final result = await ApiService.getStationZones(selectedStation!.uid ?? '', areaId: selectedArea!.uid ?? '');
       if (mounted) {
         setState(() {
-          zones = (result as List).map((z) => StationZone.fromJson(z as Map<String, dynamic>)).toList();
+          zones = result;
           selectedZone = null;
           isLoadingZones = false;
         });
