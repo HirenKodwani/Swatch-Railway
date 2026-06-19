@@ -41,6 +41,10 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   List<String> divisions = [];
   List<String> depots = [];
   List<dynamic> contractorCompanies = [];
+  List<TrainModel> allTrains = [];
+  String? _workerType;
+  String? _trainId;
+  List<String> _selectedTrainIds = [];
 
   Map<String, String> pickedDocs = {};
 
@@ -54,6 +58,16 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (widget.draftData != null) {
       _loadDraftData(widget.draftData!);
+    }
+    _loadAllTrains();
+  }
+
+  Future<void> _loadAllTrains() async {
+    try {
+      final trains = await ApiService.getActiveTrains();
+      setState(() => allTrains = trains);
+    } catch (e) {
+      print('Error loading trains: $e');
     }
   }
 
@@ -70,6 +84,9 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
       _zone = draft['zone'];
       _division = draft['division'];
       _depot = draft['depot'];
+      _workerType = draft['worker_type'];
+      _trainId = draft['trainId'];
+      _selectedTrainIds = List<String>.from(draft['trainIds'] ?? []);
 
       if (_zone != null) {
         divisions = DepotDatabase.zoneData[_zone]?.keys.toList() ?? [];
@@ -128,6 +145,22 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   bool _shouldShowDepot() {
     if (_selectedRole == null || _division == null) return false;
     return _selectedRole!.contains('Supervisor') || _selectedRole!.contains('Worker');
+  }
+
+  bool _shouldShowWorkerType() {
+    if (_selectedRole == null) return false;
+    return _selectedRole!.toLowerCase().contains('worker');
+  }
+
+  bool _shouldShowTrainSelection() {
+    if (_selectedRole == null) return false;
+    final r = _selectedRole!.toUpperCase();
+    return r.contains('SUPERVISOR') || r.contains('CTS');
+  }
+
+  bool _isMultiTrainExport() {
+    if (_selectedRole == null) return false;
+    return _selectedRole!.toUpperCase() == 'RAILWAY SUPERVISOR';
   }
 
   bool _isZoneReadOnly() {
@@ -512,6 +545,98 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                   ],
                 ),
 
+              if (_shouldShowWorkerType())
+                Column(
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: _workerType,
+                      decoration: const InputDecoration(
+                        labelText: 'Worker Type *',
+                        border: OutlineInputBorder(),
+                        helperText: 'Janitor (OBHS) or Attendant (Linen)',
+                      ),
+                      items: ['Janitor', 'Attendant']
+                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                          .toList(),
+                      validator: (v) => v == null ? 'Required' : null,
+                      onChanged: (v) => setState(() => _workerType = v),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+
+              if (_shouldShowTrainSelection())
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!_isMultiTrainExport())
+                      DropdownButtonFormField<String>(
+                        value: _trainId,
+                        decoration: const InputDecoration(
+                          labelText: 'Assigned Train *',
+                          border: OutlineInputBorder(),
+                          helperText: 'Contractor Supervisor mapped to one train',
+                        ),
+                        items: allTrains
+                            .map((t) => DropdownMenuItem(
+                                  value: t.uid,
+                                  child: Text('${t.trainNo} - ${t.trainName}'),
+                                ))
+                            .toList(),
+                        validator: (v) => v == null ? 'Required' : null,
+                        onChanged: (v) => setState(() {
+                          _trainId = v;
+                          _selectedTrainIds = v != null ? [v] : [];
+                        }),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Assigned Trains (Multiple allowed) *',
+                              style: TextStyle(fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Column(
+                              children: allTrains.map((t) {
+                                final isSelected =
+                                    _selectedTrainIds.contains(t.uid);
+                                return CheckboxListTile(
+                                  title: Text('${t.trainNo} - ${t.trainName}'),
+                                  value: isSelected,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedTrainIds.add(t.uid!);
+                                      } else {
+                                        _selectedTrainIds.remove(t.uid);
+                                      }
+                                      _trainId = _selectedTrainIds.isNotEmpty
+                                          ? _selectedTrainIds[0]
+                                          : null;
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                          if (_selectedTrainIds.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8.0, left: 12),
+                              child: Text('At least one train required',
+                                  style: TextStyle(
+                                      color: Colors.red, fontSize: 12)),
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+
               const SizedBox(height: 24),
 
               const Text(
@@ -701,32 +826,30 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (userType == 'railway') {
       if (currentUser?.role == 'Railway Admin') {
-        return ['Railway Supervisor']; // Removed Railway Worker
+        return ['Railway Supervisor', 'Railway Worker'];
       }
       else if (currentUser?.role == 'Railway Master') {
         return [
           'Railway Admin',
           'Railway Supervisor',
-        ]; // Removed Railway Master and Railway Worker
-      }
-      else if (currentUser?.role == 'Contractor Admin') {
-        return ['Railway Supervisor'];
+          'Railway Worker',
+        ];
       }
       else {
-        return ['Railway Admin', 'Railway Supervisor'];
+        return ['Railway Admin', 'Railway Supervisor', 'Railway Worker'];
       }
     } else {
       if (currentUser?.role == 'Contractor Admin') {
-        return ['Contractor Supervisor'];
+        return ['Contractor Supervisor', 'Contractor Worker'];
       }
       else if (currentUser?.role == 'Contractor Master') {
-        return ['Contractor Admin', 'Contractor Supervisor'];
+        return ['Contractor Admin', 'Contractor Supervisor', 'Contractor Worker'];
       }
       else if (currentUser?.role == 'Railway Admin') {
-        return ['Contractor Supervisor'];
+        return ['Contractor Supervisor', 'Contractor Worker'];
       }
       else {
-        return ['Contractor Admin', 'Contractor Supervisor'];
+        return ['Contractor Admin', 'Contractor Supervisor', 'Contractor Worker'];
       }
     }
   }
@@ -796,6 +919,9 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         depot: _depot?.trim().isEmpty ?? true ? null : _depot?.trim(),
         entityId: _selectedCompany?.trim().isEmpty ?? true ? null : _selectedCompany?.trim(),
         createdById: currentUser?.uid,
+        worker_type: _workerType,
+        trainId: _trainId,
+        trainIds: _selectedTrainIds,
       );
 
       setState(() => _isLoading = false);

@@ -1088,7 +1088,8 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
       if (!division || !trainId) {
         return res.status(400).send({ error: "Division and Train ID are mandatory for Contractor Supervisor." });
       }
-      if (Array.isArray(trainId) || (trainIds && trainIds.length > 1)) {
+      // Strictly one train for Contractor Supervisor
+      if (trainIds && trainIds.length > 1) {
         return res.status(400).send({ error: "Contractor Supervisor can only be mapped to ONE train." });
       }
     }
@@ -1096,6 +1097,14 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
     if (roleUpper === 'RAILWAY SUPERVISOR') {
       if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
         return res.status(400).send({ error: "Division and at least one Train ID are mandatory for Railway Supervisor." });
+      }
+    }
+
+    // Worker Bifurcation Check (Janitor vs Attendant)
+    const normalizedUserType = userType.toLowerCase();
+    if (roleUpper.includes('WORKER')) {
+      if (!worker_type || !['Janitor', 'Attendant'].includes(worker_type)) {
+        return res.status(400).send({ error: "worker_type (Janitor or Attendant) is mandatory for workers." });
       }
     }
 
@@ -4230,12 +4239,13 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
 
     let query = db.collection('RunInstance');
 
-    // Agar status (Active/Inactive) filter bheja gaya ho
     if (status) {
       query = query.where('status', '==', status);
     }
 
-    // Latest instances sabse upar dikhane ke liye
+    const { role, division: userDiv, trainId: userTrainId, trainIds: userTrainIds } = req.user;
+    const roleUpper = (role || '').toUpperCase();
+
     const snapshot = await query.orderBy('createdAt', 'desc').get();
 
     if (snapshot.empty) {
@@ -4248,12 +4258,45 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
 
     const allInstances = [];
     snapshot.forEach(doc => {
-      allInstances.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      let isVisible = false;
+
+      // ─── ADMIN RBAC ───
+      if (roleUpper === 'SUPER ADMIN' || roleUpper === 'COMPANY MASTER' || roleUpper === 'RAILWAY MASTER') {
+        isVisible = true; // Global views
+      }
+      // ─── DIVISIONAL ADMIN / RAILWAY ADMIN ───
+      else if (roleUpper.includes('ADMIN')) {
+        if (data.division === userDiv) {
+          isVisible = true;
+        }
+      }
+      // ─── SUPERVISOR RBAC ───
+      else if (roleUpper === 'RAILWAY SUPERVISOR') {
+        const assignedTrains = userTrainIds || (userTrainId ? [userTrainId] : []);
+        if (assignedTrains.includes(data.parentTrainId) || assignedTrains.includes(data.trainId)) {
+          isVisible = true;
+        }
+      }
+      else if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
+        if (data.parentTrainId === userTrainId || data.trainId === userTrainId) {
+          isVisible = true;
+        }
+      }
+      // Workers generally don't use this list, but if they do, they see their own runs
+      else if (roleUpper.includes('WORKER')) {
+        const carriesWorker = (data.coaches || []).some(c => c.workerId === req.user.uid);
+        if (carriesWorker) isVisible = true;
+      }
+
+      if (isVisible) {
+        allInstances.push({ id: doc.id, ...data });
+      }
     });
 
     res.status(200).json({
       success: true,
-      message: "All Run Instances fetched successfully",
+      message: "Run Instances fetched with RBAC filters",
       count: allInstances.length,
       data: allInstances
     });

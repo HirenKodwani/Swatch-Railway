@@ -61,6 +61,9 @@ class ApiService {
     String? depot,
     String? entityId,
     String? createdById,
+    String? trainId,
+    List<String>? trainIds,
+    String? worker_type,
   }) async {
     try {
       final token = await getToken();
@@ -83,6 +86,9 @@ class ApiService {
           'depot': depot,
           'entityId': entityId,
           'createdById': createdById,
+          'trainId': trainId,
+          'trainIds': trainIds,
+          'worker_type': worker_type,
         }),
       );
 
@@ -110,6 +116,9 @@ class ApiService {
     String? depot,
     String? entityId,
     required String editedById,
+    String? trainId,
+    List<String>? trainIds,
+    String? worker_type,
   }) async {
     try {
       final token = await getToken();
@@ -131,6 +140,9 @@ class ApiService {
           'depot': depot,
           'entityId': entityId,
           'editedById': editedById,
+          'trainId': trainId,
+          'trainIds': trainIds,
+          'worker_type': worker_type,
         }),
       );
 
