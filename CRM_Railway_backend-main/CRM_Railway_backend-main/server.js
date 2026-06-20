@@ -4029,15 +4029,24 @@ app.get('/api/train-pairs/train/:parentTrainId', verifyToken, async (req, res) =
       });
     }
 
-    const pairs = [];
+    const rawPairs = [];
     snapshot.forEach(doc => {
-      pairs.push({ id: doc.id, ...doc.data() });
+      rawPairs.push({ id: doc.id, ...doc.data() });
+    });
+
+    // Deduplicate by instanceId (safety net — each Inst-A / Inst-B should only appear once)
+    const seen = new Set();
+    const pairs = rawPairs.filter(p => {
+      const key = p.instanceId || p.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
     pairs.sort((a, b) => {
-      const dayA = a.cycleDay || "";
-      const dayB = b.cycleDay || "";
-      return dayA.localeCompare(dayB, undefined, { numeric: true });
+      const idA = a.instanceId || a.id || '';
+      const idB = b.instanceId || b.id || '';
+      return idA.localeCompare(idB, undefined, { numeric: true });
     });
 
     res.status(200).send({
@@ -16519,49 +16528,6 @@ app.post('/api/cts-forms/:id/reject', verifyToken, async (req, res) => {
   }
 });
 
-// ====== Station Cleaning Runs API ======
-app.get('/api/station-runs', verifyToken, async (req, res) => {
-  try {
-    const runsSnapshot = await db.collection('station-runs').get();
-    const data = runsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.json({ success: true, data });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to fetch station runs' });
-  }
-});
-
-app.post('/api/station-runs', verifyToken, async (req, res) => {
-  try {
-    const data = req.body;
-    data.createdAt = new Date().toISOString();
-    const docRef = await db.collection('station-runs').add(data);
-    res.status(201).json({ success: true, data: { id: docRef.id, ...data } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to create station run' });
-  }
-});
-
-app.put('/api/station-runs/:id', verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = req.body;
-    data.updatedAt = new Date().toISOString();
-    await db.collection('station-runs').doc(id).update(data);
-    res.json({ success: true, data });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to update station run' });
-  }
-});
-
-app.delete('/api/station-runs/:id', verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await db.collection('station-runs').doc(id).delete();
-    res.json({ success: true, message: 'Deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to delete station run' });
-  }
-});
 
 // --- Server Start ---
 app.listen(port, () => {
