@@ -415,11 +415,19 @@ class OBHSRepository {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final instances = (data['data'] as List<dynamic>?)
-                ?.map((instance) =>
+        
+        // Try multiple keys commonly used in the backend
+        final list = (data['data'] ?? data['runInstances'] ?? data['records']) as List<dynamic>?;
+        
+        if (list == null) {
+          // If no known key is found, and data itself isn't a list, return empty
+          return [];
+        }
+
+        final instances = list
+                .map((instance) =>
                     RunInstanceModel.fromJson(instance as Map<String, dynamic>))
-                .toList() ??
-            [];
+                .toList();
         return instances;
       } else if (response.statusCode == 401 || response.statusCode == 403) {
         throw Exception('AUTH_ERROR');
