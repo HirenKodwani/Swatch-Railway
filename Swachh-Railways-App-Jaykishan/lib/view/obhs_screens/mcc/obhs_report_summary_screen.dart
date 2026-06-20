@@ -18,7 +18,7 @@ class _ObhsReportSummaryScreenState extends State<ObhsReportSummaryScreen> {
     });
     try {
       // Hardcoded for testing; ideally passed via widget props
-      final response = await ApiServices.sendAuditReportEmail(
+      final response = await ApiService.sendAuditReportEmail(
           'OPERATIONAL_AUDIT', 'dummy_run_id', 'hirenkodwani@gmail.com');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

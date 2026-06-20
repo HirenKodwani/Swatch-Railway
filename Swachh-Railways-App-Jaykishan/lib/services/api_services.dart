@@ -4108,7 +4108,7 @@ class ApiService {
   static Future<Map<String, dynamic>> sendAuditReportEmail(
       String reportType, String runInstanceId, String emailTo) async {
     try {
-      final token = await _getToken();
+      final token = await getToken();
       final url = Uri.parse('$baseUrl/api/reports/send-email');
       
       final response = await http.post(
