@@ -45,7 +45,9 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
   bool _isLoadingCTS = false;
   bool _isLoadingCTSPending = false;
 
-  String? _errorMessage;
+  String? _coachErrorMessage;
+  String? _premisesErrorMessage;
+  String? _ctsErrorMessage;
   String _selectedDateRange = 'All Time';
   String? _selectedFilterDivision;
   String? _selectedFilterDepot;
@@ -61,7 +63,7 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
   Future<void> _fetchCoachForms() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _coachErrorMessage = null;
     });
 
     try {
@@ -75,13 +77,13 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
         });
       } else {
         setState(() {
-          _errorMessage = 'Failed to fetch forms';
+          _coachErrorMessage = 'Failed to fetch forms';
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error: $e';
+        _coachErrorMessage = 'Error: $e';
         _isLoading = false;
       });
     }
@@ -105,7 +107,7 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
   Future<void> _fetchPremisesForms() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _premisesErrorMessage = null;
     });
 
     try {
@@ -119,13 +121,13 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
         });
       } else {
         setState(() {
-          _errorMessage = 'Failed to fetch forms';
+          _premisesErrorMessage = 'Failed to fetch forms';
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error: $e';
+        _premisesErrorMessage = 'Error: $e';
         _isLoading = false;
       });
     }
@@ -134,7 +136,7 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
   Future<void> _fetchCTSForms() async {
     setState(() {
       _isLoadingCTS = true;
-      _errorMessage = null;
+      _ctsErrorMessage = null;
     });
 
     try {
@@ -148,13 +150,13 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
         });
       } else {
         setState(() {
-          _errorMessage = 'Failed to fetch CTS forms';
+          _ctsErrorMessage = 'Failed to fetch CTS forms';
           _isLoadingCTS = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error: $e';
+        _ctsErrorMessage = 'Error: $e';
         _isLoadingCTS = false;
       });
     }
@@ -448,12 +450,12 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
       );
     }
 
-    if (_errorMessage != null) {
+    if (_ctsErrorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Text(
-            _errorMessage!,
+            _ctsErrorMessage!,
             style: const TextStyle(color: Colors.redAccent, fontSize: 15),
           ),
         ),
@@ -870,12 +872,12 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
       );
     }
 
-    if (_errorMessage != null) {
+    if (_coachErrorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Text(
-            _errorMessage!,
+            _coachErrorMessage!,
             style: const TextStyle(color: Colors.redAccent, fontSize: 15),
           ),
         ),
@@ -1082,12 +1084,12 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
       );
     }
 
-    if (_errorMessage != null) {
+    if (_premisesErrorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Text(
-            _errorMessage!,
+            _premisesErrorMessage!,
             style: const TextStyle(color: Colors.redAccent, fontSize: 15),
           ),
         ),
