@@ -199,6 +199,9 @@ class CoachAssignment {
   }
 
   Map<String, dynamic> toJson() {
+    final effectiveWorkerId = janitorId;
+    final effectiveWorkerName = janitorName;
+    final effectiveWorkerRole = (attendantId != null && attendantId!.isNotEmpty) ? 'attendant' : 'janitor';
     return {
       'coachPosition': coachPosition,
       'coachType': coachType,
@@ -208,6 +211,10 @@ class CoachAssignment {
       if (attendantName != null && attendantName!.isNotEmpty) 'attendantName': attendantName,
       if (janitorTasks != null) 'janitorTasks': janitorTasks,
       if (attendantTasks != null) 'attendantTasks': attendantTasks,
+      // Also send workerId/workerName/workerRole for backend compatibility
+      if (effectiveWorkerId != null && effectiveWorkerId.isNotEmpty) 'workerId': effectiveWorkerId,
+      if (effectiveWorkerName != null && effectiveWorkerName.isNotEmpty) 'workerName': effectiveWorkerName,
+      'workerRole': effectiveWorkerRole,
     };
   }
 
