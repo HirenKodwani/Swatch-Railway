@@ -4106,7 +4106,7 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     details: error.message
   });
 }
-});
+);
 
 
 // =======================================================
