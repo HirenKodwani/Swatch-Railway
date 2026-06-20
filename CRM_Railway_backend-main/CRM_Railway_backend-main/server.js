@@ -2078,7 +2078,7 @@ app.post('/api/auth/forgot-password/email/verify-otp', async (req, res) => {
 app.get('/api/users/workers', verifyToken, async (req, res) => {
   try {
     const snapshot = await db.collection('users')
-      .where('role', '==', 'Worker')
+      .where('role', 'in', ['Worker', 'Railway Worker', 'janitor', 'Janitor'])
       // .where('status', '==', 'APPROVED') // We might want only approved
       .get();
 
@@ -4439,6 +4439,25 @@ app.put('/api/station-runs/:runId', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('(StationRun) Error updating:', error);
     res.status(500).json({ error: 'Failed to update Station Run', details: error.message });
+  }
+});
+
+// GET /api/station-runs/my-runs — Worker sees only their assigned runs
+app.get('/api/station-runs/my-runs', verifyToken, async (req, res) => {
+  try {
+    const { uid } = req.user;
+    const snapshot = await db.collection('StationCleaningRuns').orderBy('createdAt', 'desc').get();
+    const myRuns = [];
+    snapshot.forEach(doc => {
+      const data = { id: doc.id, ...doc.data() };
+      const platforms = data.platforms || [];
+      const isAssigned = platforms.some(p => p.janitorId === uid);
+      if (isAssigned) myRuns.push(data);
+    });
+    res.status(200).json({ success: true, data: myRuns });
+  } catch (error) {
+    console.error('(StationRun) Error fetching worker runs:', error);
+    res.status(500).json({ error: 'Failed to fetch worker station runs', details: error.message });
   }
 });
 

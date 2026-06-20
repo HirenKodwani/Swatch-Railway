@@ -44,7 +44,7 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
       if (mounted) {
         setState(() {
           _stations = stData;
-          _workers = wkData.where((w) => w.role == 'Janitor' || w.role == 'Worker').toList();
+          _workers = wkData; // API already returns Railway Worker, janitor roles
         });
 
         if (isEdit) {

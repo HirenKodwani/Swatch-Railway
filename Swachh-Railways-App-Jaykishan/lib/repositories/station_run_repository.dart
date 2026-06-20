@@ -136,4 +136,35 @@ class StationRunRepository {
       throw Exception('Error: $e');
     }
   }
+
+  /// Fetches only runs where the logged-in worker is assigned as a janitor
+  static Future<List<StationCleaningRunModel>> getMyStationRuns() async {
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/api/station-runs/my-runs'),
+          headers: {'Authorization': 'Bearer $token'},
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true) {
+          return (decoded['data'] as List)
+              .map((item) => StationCleaningRunModel.fromJson(item))
+              .toList();
+        } else {
+          throw Exception(decoded['error'] ?? 'Failed to load station runs');
+        }
+      } else {
+        throw Exception('API Error: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      if (e.toString().contains('AUTH_ERROR')) rethrow;
+      throw Exception('Error: $e');
+    }
+  }
 }

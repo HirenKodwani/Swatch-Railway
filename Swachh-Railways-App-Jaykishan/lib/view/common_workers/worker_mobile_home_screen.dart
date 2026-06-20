@@ -2,6 +2,7 @@ import 'package:crm_train/view/common_railways/alert/common_alert_screen.dart';
 import 'package:crm_train/view/common_workers/worker_complaints_screen.dart';
 import 'package:crm_train/view/common_workers/worker_profile_screen.dart';
 import 'package:crm_train/view/common_workers/worker_rating_screen.dart';
+import 'package:crm_train/view/common_workers/worker_station_cleaning_screen.dart';
 import 'package:crm_train/view/common_workers/worker_task_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -765,6 +766,12 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           'subtitle': 'View & raise',
           'color': Colors.red,
         },
+        {
+          'icon': Icons.cleaning_services,
+          'title': 'Station Cleaning',
+          'subtitle': 'My platform tasks',
+          'color': Colors.teal,
+        },
       ];
 
       return Column(
@@ -800,6 +807,8 @@ class WorkerMobileHomeScreen extends StatelessWidget {
                       Widget page;
                       if (title == 'Complaints') {
                         page = const WorkerComplaintsScreen();
+                      } else if (title == 'Station Cleaning') {
+                        page = const WorkerStationCleaningScreen();
                       } else {
                         page = const WorkerTaskScreen();
                       }
