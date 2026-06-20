@@ -8053,11 +8053,18 @@ app.get('/api/cts-forms', verifyToken, async (req, res) => {
       console.log(`(CTS-Form) Active View for ${role}`);
     }
 
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await query.get();
 
     const list = [];
     snapshot.forEach(doc => {
       list.push({ id: doc.id, ...doc.data() });
+    });
+
+    // Sort in memory by createdAt descending to avoid requiring composite indexes
+    list.sort((a, b) => {
+      const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+      const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+      return dateB - dateA;
     });
 
     console.log(`(CTS-Form) Total Found: ${list.length}`);
