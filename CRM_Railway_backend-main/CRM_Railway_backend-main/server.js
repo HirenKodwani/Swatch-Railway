@@ -1088,7 +1088,8 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
       if (!division || !trainId) {
         return res.status(400).send({ error: "Division and Train ID are mandatory for Contractor Supervisor." });
       }
-      if (Array.isArray(trainId) || (trainIds && trainIds.length > 1)) {
+      // Strictly one train for Contractor Supervisor
+      if (trainIds && trainIds.length > 1) {
         return res.status(400).send({ error: "Contractor Supervisor can only be mapped to ONE train." });
       }
     }
@@ -1096,6 +1097,14 @@ app.post('/api/admin/createUser', verifyToken, async (req, res) => {
     if (roleUpper === 'RAILWAY SUPERVISOR') {
       if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
         return res.status(400).send({ error: "Division and at least one Train ID are mandatory for Railway Supervisor." });
+      }
+    }
+
+    // Worker Bifurcation Check (Janitor vs Attendant)
+    const normalizedUserType = userType.toLowerCase();
+    if (roleUpper.includes('WORKER')) {
+      if (!worker_type || !['Janitor', 'Attendant'].includes(worker_type)) {
+        return res.status(400).send({ error: "worker_type (Janitor or Attendant) is mandatory for workers." });
       }
     }
 
@@ -1246,6 +1255,12 @@ app.put('/api/admin/updateUser/:uid', verifyToken, async (req, res) => {
     if (trainId !== undefined) updateData.trainId = trainId;
     if (trainIds !== undefined) updateData.trainIds = trainIds;
     if (worker_type !== undefined) updateData.worker_type = worker_type;
+
+    // RE-APPROVAL LOGIC: Reset to PENDING on edit
+    updateData.status = 'PENDING';
+    updateData.updatedAt = new Date().toISOString();
+    updateData.updatedBy = editorId;
+    updateData.updatedByName = editorName;
 
     if (password) {
       try {
@@ -2298,6 +2313,11 @@ app.put('/api/contractors/:uid', verifyToken, async (req, res) => {
     updates.updatedByName = editorName;
     updates.updatedAt = new Date().toISOString();
 
+    // RE-APPROVAL LOGIC: Reset to PENDING on edit
+    if (!updates.status || (updates.status !== 'APPROVED' && updates.status !== 'REJECTED')) {
+      updates.status = 'PENDING';
+    }
+
     if (updates.status) {
 
       if (updates.status === 'APPROVED' && currentData.status !== 'APPROVED') {
@@ -2827,6 +2847,11 @@ app.put('/api/contracts/:uid', verifyToken, async (req, res) => {
     updates.updatedBy = userId;
     updates.updatedByName = editorName;
     updates.updatedAt = new Date().toISOString();
+
+    // RE-APPROVAL LOGIC: Reset to PENDING on edit
+    if (!updates.status || (updates.status !== 'APPROVED' && updates.status !== 'REJECTED')) {
+      updates.status = 'PENDING';
+    }
 
     await docRef.update(updates);
 
@@ -3400,7 +3425,8 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
     let count = 0;
 
     for (const coach of (runData.coaches || [])) {
-      if (!coach.workerId) continue;
+      const effectiveWorkerId = coach.workerId || coach.janitorId || null;
+      if (!effectiveWorkerId) continue;
       const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
       const timeSlot = 'terminal';
       const garbageId = `${runInstanceId}_garbage_${timeSlot}_${coachNo}`;
@@ -3410,8 +3436,8 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
         runInstanceId,
         trainNo: runData.trainNo,
         coachNo,
-        workerId: coach.workerId,
-        workerName: coach.workerName || 'Unknown',
+        workerId: effectiveWorkerId,
+        workerName: coach.workerName || coach.janitorName || 'Unknown',
         scheduledTime: timeSlot,
         scheduledDate: new Date().toISOString().split('T')[0],
         isPreTerminal: true,
@@ -3890,9 +3916,9 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
       if (newRequiredInstances <= 0) newRequiredInstances = 1;
     }
 
-    const { uid: editorId, name, email, role } = req.user;
-    const editorName = name || email || role || 'Unknown';
-
+    // Use editorId/editorName already defined at line 3857
+    // const { uid: editorId, name, email, role } = req.user;
+    // const editorName = name || email || role || 'Unknown';
     const updateData = {};
     if (trainNo !== undefined) updateData.trainNo = trainNo;
     if (trainName !== undefined) updateData.trainName = trainName;
@@ -3920,6 +3946,7 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
     updateData.updatedBy = editorId;
     updateData.updatedByName = editorName;
     updateData.updatedAt = new Date().toISOString();
+    updateData.status = 'PENDING';
 
     await docRef.update(updateData);
 
@@ -4079,7 +4106,7 @@ app.get('/api/run-instances/train/:parentTrainId', verifyToken, async (req, res)
     details: error.message
   });
 }
-);
+});
 
 
 // =======================================================
@@ -4213,12 +4240,13 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
 
     let query = db.collection('RunInstance');
 
-    // Agar status (Active/Inactive) filter bheja gaya ho
     if (status) {
       query = query.where('status', '==', status);
     }
 
-    // Latest instances sabse upar dikhane ke liye
+    const { role, division: userDiv, trainId: userTrainId, trainIds: userTrainIds } = req.user;
+    const roleUpper = (role || '').toUpperCase();
+
     const snapshot = await query.orderBy('createdAt', 'desc').get();
 
     if (snapshot.empty) {
@@ -4231,12 +4259,45 @@ app.get('/api/run-instances', verifyToken, async (req, res) => {
 
     const allInstances = [];
     snapshot.forEach(doc => {
-      allInstances.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      let isVisible = false;
+
+      // ─── ADMIN RBAC ───
+      if (roleUpper === 'SUPER ADMIN' || roleUpper === 'COMPANY MASTER' || roleUpper === 'RAILWAY MASTER') {
+        isVisible = true; // Global views
+      }
+      // ─── DIVISIONAL ADMIN / RAILWAY ADMIN ───
+      else if (roleUpper.includes('ADMIN')) {
+        if (data.division === userDiv) {
+          isVisible = true;
+        }
+      }
+      // ─── SUPERVISOR RBAC ───
+      else if (roleUpper === 'RAILWAY SUPERVISOR') {
+        const assignedTrains = userTrainIds || (userTrainId ? [userTrainId] : []);
+        if (assignedTrains.includes(data.parentTrainId) || assignedTrains.includes(data.trainId)) {
+          isVisible = true;
+        }
+      }
+      else if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
+        if (data.parentTrainId === userTrainId || data.trainId === userTrainId) {
+          isVisible = true;
+        }
+      }
+      // Workers generally don't use this list, but if they do, they see their own runs
+      else if (roleUpper.includes('WORKER')) {
+        const carriesWorker = (data.coaches || []).some(c => c.workerId === req.user.uid);
+        if (carriesWorker) isVisible = true;
+      }
+
+      if (isVisible) {
+        allInstances.push({ id: doc.id, ...data });
+      }
     });
 
     res.status(200).json({
       success: true,
-      message: "All Run Instances fetched successfully",
+      message: "Run Instances fetched with RBAC filters",
       count: allInstances.length,
       data: allInstances
     });
@@ -11706,17 +11767,26 @@ app.get('/api/station-cleaning-form/list', verifyToken, async (req, res) => {
   try {
     const { status, stationId, areaId, zoneId, division } = req.query;
     const { role, division: userDiv, entityId, userType } = req.user;
-    let query = db.collection('stationCleaningForms').orderBy('createdAt', 'desc');
-    if (userType === 'contractor') query = query.where('entityId', '==', entityId);
-    else if (!(role || '').toLowerCase().includes('master')) query = query.where('division', '==', userDiv);
-    if (status) query = query.where('status', '==', status);
-    if (stationId) query = query.where('stationId', '==', stationId);
-    if (areaId) query = query.where('areaId', '==', areaId);
-    if (zoneId) query = query.where('zoneId', '==', zoneId);
-    if (division) query = query.where('division', '==', division);
-    const snapshot = await query.get();
-    const forms = [];
+    const snapshot = await db.collection('stationCleaningForms').get();
+    let forms = [];
     snapshot.forEach(doc => forms.push(doc.data()));
+
+    // Filter
+    if (userType === 'contractor') {
+      forms = forms.filter(f => f.entityId === entityId);
+    } else if (!(role || '').toLowerCase().includes('master')) {
+      forms = forms.filter(f => f.division === userDiv);
+    }
+
+    if (status) forms = forms.filter(f => f.status === status);
+    if (stationId) forms = forms.filter(f => f.stationId === stationId);
+    if (areaId) forms = forms.filter(f => f.areaId === areaId);
+    if (zoneId) forms = forms.filter(f => f.zoneId === zoneId);
+    if (division) forms = forms.filter(f => f.division === division);
+
+    // Sort by createdAt desc
+    forms.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
     res.status(200).json({ count: forms.length, forms });
   } catch (error) {
     res.status(500).send({ error: 'Failed to fetch forms', details: error.message });

@@ -62,6 +62,9 @@ class ApiService {
     String? depot,
     String? entityId,
     String? createdById,
+    String? trainId,
+    List<String>? trainIds,
+    String? worker_type,
   }) async {
     try {
       final token = await getToken();
@@ -84,6 +87,9 @@ class ApiService {
           'depot': depot,
           'entityId': entityId,
           'createdById': createdById,
+          'trainId': trainId,
+          'trainIds': trainIds,
+          'worker_type': worker_type,
         }),
       );
 
@@ -111,6 +117,9 @@ class ApiService {
     String? depot,
     String? entityId,
     required String editedById,
+    String? trainId,
+    List<String>? trainIds,
+    String? worker_type,
   }) async {
     try {
       final token = await getToken();
@@ -132,6 +141,9 @@ class ApiService {
           'depot': depot,
           'entityId': entityId,
           'editedById': editedById,
+          'trainId': trainId,
+          'trainIds': trainIds,
+          'worker_type': worker_type,
         }),
       );
 
@@ -3591,7 +3603,8 @@ class ApiService {
         body: jsonEncode(data),
       );
       if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
-      throw Exception('Failed to create station');
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create station');
     } catch (e) {
       throw Exception('Error creating station: $e');
     }

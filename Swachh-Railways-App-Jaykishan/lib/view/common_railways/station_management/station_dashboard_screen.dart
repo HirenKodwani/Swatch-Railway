@@ -64,8 +64,6 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
         List<Station> all = data;
         if (role == 'Railway Supervisor') {
           all = all.where((s) => s.division == user?.division).toList();
-        } else if (role == 'Contractor' || role == 'Contractor Master') {
-          all = all.where((s) => s.uid == user?.entityId).toList();
         }
         setState(() { stations = all; isStationsLoading = false; });
       }
