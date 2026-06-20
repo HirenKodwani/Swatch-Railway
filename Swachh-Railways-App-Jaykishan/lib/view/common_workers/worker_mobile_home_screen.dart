@@ -422,9 +422,8 @@ class WorkerMobileHomeScreen extends StatelessWidget {
   // ── Attendance Item ───────────────────────────────────────────────────────
 
   Widget _buildAttendanceCard(WorkerController controller) {
-    return Obx(() {
-      return Container(
-        width: double.infinity,
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -451,43 +450,42 @@ class WorkerMobileHomeScreen extends StatelessWidget {
             type: 'mid',
           ),
           const SizedBox(height: 12),
-            _buildAttendanceItem(
-              controller: controller,
-              title: 'End Attendance',
-              subtitle: 'Mark completion time',
-              icon: Icons.logout,
-              type: 'end',
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () {
-                Get.to(() => AttendanceIssueScreen(
-                  attendanceType: controller.endAttendance.value 
-                    ? 'end' 
-                    : controller.midCheckin.value ? 'mid' : 'start'
-                ));
-              },
-              icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
-              label: const Text(
-                'Reporting Attendance Issue?',
-                style: TextStyle(
-                  color: Colors.orange,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                backgroundColor: Colors.orange.withOpacity(0.05),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          _buildAttendanceItem(
+            controller: controller,
+            title: 'End Attendance',
+            subtitle: 'Mark completion time',
+            icon: Icons.logout,
+            type: 'end',
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () {
+              Get.to(() => AttendanceIssueScreen(
+                attendanceType: controller.endAttendance.value 
+                  ? 'end' 
+                  : controller.midCheckin.value ? 'mid' : 'start'
+              ));
+            },
+            icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+            label: const Text(
+              'Reporting Attendance Issue?',
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
               ),
             ),
-          ],
-        ),
-      );
-    });
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              backgroundColor: Colors.orange.withOpacity(0.05),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildStartRequiredCard() {
