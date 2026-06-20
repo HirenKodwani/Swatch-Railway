@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
 import '../../../utills/app_colors.dart';
+import '../../../model/train_model.dart';
 import '../widgets/approve_entity_dropdown.dart';
 import 'package:file_picker/file_picker.dart';
 

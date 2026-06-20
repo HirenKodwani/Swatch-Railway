@@ -119,6 +119,7 @@ class ApiService {
     String? trainId,
     List<String>? trainIds,
     String? worker_type,
+    String? status,
   }) async {
     try {
       final token = await getToken();
@@ -143,6 +144,7 @@ class ApiService {
           'trainId': trainId,
           'trainIds': trainIds,
           'worker_type': worker_type,
+          'status': status,
         }),
       );
 

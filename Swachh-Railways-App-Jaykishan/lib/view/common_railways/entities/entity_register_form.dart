@@ -273,7 +273,7 @@ class _EntityRegisterFormState extends State<EntityRegisterForm> {
           'website': website,
           'yearOfEstablishment': yearOfEstablishment,
           'gemId': gemId,
-          'status': _isActive ? 'APPROVED' : 'SUSPENDED',
+          'status': 'PENDING',
         };
 
         result = await ApiService.updateEntity(

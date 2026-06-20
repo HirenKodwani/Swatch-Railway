@@ -365,7 +365,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
     if (userType == 'railway') {
       return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker'];
     } else {
-      return ['Contractor Master', 'Contractor Admin', 'Contractor Supervisor'];
+      return ['Contractor Master', 'Contractor Admin', 'Contractor Supervisor', 'Contractor Worker'];
     }
   }
 
@@ -396,6 +396,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
         depot: _depot?.trim().isEmpty ?? true ? null : _depot?.trim(),
         entityId: _selectedCompany?.trim().isEmpty ?? true ? null : _selectedCompany?.trim(),
         editedById: currentUser?.uid ?? '',
+        status: 'PENDING',
       );
 
       setState(() => _isLoading = false);
