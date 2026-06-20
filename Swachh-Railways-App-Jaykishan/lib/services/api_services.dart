@@ -354,6 +354,7 @@ class ApiService {
           'website': website,
           'yearOfEstablishment': yearOfEstablishment,
           'gemId': gemId,
+          'status': 'PENDING',
         }),
       );
 
