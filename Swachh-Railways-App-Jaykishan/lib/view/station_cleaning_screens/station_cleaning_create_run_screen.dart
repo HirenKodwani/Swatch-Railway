@@ -43,7 +43,7 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
       final wkData = await OBHSRepository.getWorkers();
       if (mounted) {
         setState(() {
-          _stations = (stData as List).map((s) => Station.fromJson(s)).toList();
+          _stations = stData;
           _workers = wkData.where((w) => w.role == 'Janitor' || w.role == 'Worker').toList();
         });
 
@@ -68,12 +68,19 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
       final areas = await ApiService.getStationAreas(stationId);
       if (mounted) {
         setState(() {
-          _platforms = (areas as List).map((a) => StationArea.fromJson(a)).where((a) => a.name.toLowerCase().contains('platform')).toList();
+          final Set<String> seen = {};
+          _platforms = areas.where((a) => a.name.toLowerCase().contains('platform')).where((a) {
+             final id = a.uid ?? a.name;
+             if (seen.contains(id)) return false;
+             seen.add(id);
+             return true;
+          }).toList();
+          
           if (_platforms.isEmpty) {
             // fallback generic platforms if none exist
             _platforms = [
-              StationArea(stationId: stationId, name: 'Platform 1'),
-              StationArea(stationId: stationId, name: 'Platform 2'),
+              StationArea(uid: 'fallback_p1_${stationId}', stationId: stationId, name: 'Platform 1'),
+              StationArea(uid: 'fallback_p2_${stationId}', stationId: stationId, name: 'Platform 2'),
             ];
           }
         });
@@ -82,8 +89,8 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
       // fallback
       setState(() {
         _platforms = [
-          StationArea(stationId: stationId, name: 'Platform 1'),
-          StationArea(stationId: stationId, name: 'Platform 2'),
+          StationArea(uid: 'fallback_p1_${stationId}', stationId: stationId, name: 'Platform 1'),
+          StationArea(uid: 'fallback_p2_${stationId}', stationId: stationId, name: 'Platform 2'),
         ];
       });
     }
@@ -207,6 +214,7 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
                   const SizedBox(height: 16),
                   if (_selectedStation != null)
                     DropdownButtonFormField<StationArea>(
+                      key: ValueKey('platform_dropdown_${_selectedStation!.uid}'),
                       decoration: const InputDecoration(labelText: 'Add Platform', border: OutlineInputBorder()),
                       items: _platforms.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
                       onChanged: (v) { if (v != null) _addPlatformAssignment(v); },
