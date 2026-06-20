@@ -4104,4 +4104,34 @@ class ApiService {
   static Future<String> getInvoicePdfUrl(String uid) async {
     return '$baseUrl/api/billing/invoice-pdf/$uid';
   }
+
+  static Future<Map<String, dynamic>> sendAuditReportEmail(
+      String reportType, String runInstanceId, String emailTo) async {
+    try {
+      final token = await _getToken();
+      final url = Uri.parse('$baseUrl/api/reports/send-email');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: json.encode({
+          "reportType": reportType,
+          "runInstanceId": runInstanceId,
+          "emailTo": emailTo
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to send email: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Error sending email: $e');
+    }
+  }
 }
+

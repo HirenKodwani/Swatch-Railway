@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:crm_train/utills/app_colors.dart';
+import 'package:crm_train/services/api_services.dart';
 
 class ObhsReportSummaryScreen extends StatefulWidget {
   const ObhsReportSummaryScreen({super.key});
@@ -9,6 +10,34 @@ class ObhsReportSummaryScreen extends StatefulWidget {
 }
 
 class _ObhsReportSummaryScreenState extends State<ObhsReportSummaryScreen> {
+  bool _isSendingEmail = false;
+
+  void _sendEmail() async {
+    setState(() {
+      _isSendingEmail = true;
+    });
+    try {
+      // Hardcoded for testing; ideally passed via widget props
+      final response = await ApiServices.sendAuditReportEmail(
+          'OPERATIONAL_AUDIT', 'dummy_run_id', 'hirenkodwani@gmail.com');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Email Sent!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to send email: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingEmail = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -85,30 +114,50 @@ class _ObhsReportSummaryScreenState extends State<ObhsReportSummaryScreen> {
   Widget _buildExportSection() {
     return Padding(
       padding: const EdgeInsets.all(20),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('Download PDF'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[600],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('Download PDF'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.table_chart),
+                  label: const Text('Download Excel'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.table_chart),
-              label: const Text('Download Excel'),
+              onPressed: _isSendingEmail ? null : _sendEmail,
+              icon: _isSendingEmail 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.send),
+              label: Text(_isSendingEmail ? 'Sending...' : 'Send to Higher Authority'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green[700],
+                backgroundColor: kRailwayBlue,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
