@@ -37,7 +37,7 @@ class OBHSCreateInstanceScreen extends StatefulWidget {
 class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
   List<TrainModel> allTrains = [];
   List<RunInstanceModel> trainInstances = [];
-  List<RailwayWorkerModel> workers = [];
+  List<RailwayWorkerModel> allWorkers = []; // Store all approved workers
 
   bool _isLoadingTrains = false;
   bool _isLoadingInstances = false;
@@ -54,6 +54,20 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
   RunInstanceModel? selectedInstance;
   int selectedCoachCount = 1;
   List<CoachData> coaches = [];
+
+  // Dynamic getter for filtered workers
+  List<RailwayWorkerModel> get filteredWorkers {
+    return allWorkers.where((w) {
+      // Filter by selected train mapping if train is selected
+      // Workers with NO train mapping are visible for all trains
+      bool matchesTrain = selectedTrainId == null || 
+                         (w.trainIds == null || 
+                          w.trainIds!.isEmpty || 
+                          w.trainIds!.contains(selectedTrainId));
+      
+      return matchesTrain;
+    }).toList();
+  }
 
   final List<String> coachTypes = [
     'AC',
@@ -110,10 +124,15 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           position: coach.coachPosition,
           type: coach.coachType,
           assignedJanitorId: coach.janitorId,
-          assignedWorkerName: null,
+          assignedWorkerName: coach.janitorName ?? coach.attendantName,
         );
       }).toList();
     });
+    
+    // Ensure we load workers after pre-filling train ID
+    if (selectedTrainId != null) {
+      _loadInstancesForTrain(selectedTrainId!);
+    }
   }
 
   Future<void> _loadTrains() async {
@@ -186,9 +205,18 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
       final workersList = await OBHSRepository.getRailwayWorkers();
       if (mounted) {
         setState(() {
-          workers = workersList
-              .where((w) => w.status.toUpperCase() == 'APPROVED')
-              .toList();
+          allWorkers = workersList.where((w) {
+            final isApproved = w.status.toUpperCase() == 'APPROVED';
+            
+            // For OBHS, we need Janitors or Attendants
+            final isFieldWorker = w.role.toLowerCase().contains('janitor') || 
+                                 w.role.toLowerCase().contains('attendant') ||
+                                 (w.workerType != null && 
+                                  (w.workerType!.toLowerCase() == 'janitor' || 
+                                   w.workerType!.toLowerCase() == 'attendant'));
+
+            return isApproved && isFieldWorker;
+          }).toList();
           _isLoadingWorkers = false;
         });
       }
@@ -261,7 +289,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
     }
   }
 
-  Future<void> submitForm() async {
+  Future<void> submitForm({bool stayOnScreen = false}) async {
     if (!allCoachesComplete()) return;
 
     setState(() => _isSubmitting = true);
@@ -272,6 +300,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           coachPosition: coach.position!,
           coachType: coach.type!,
           janitorId: coach.assignedJanitorId,
+          janitorName: coach.assignedWorkerName,
         );
       }).toList();
 
@@ -306,11 +335,20 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'Instance created successfully with ${coaches.length} coaches!'),
+                  'Instance created successfully for ${DateFormat('yyyy-MM-dd').format(selectedDepartureDate!)}!'),
               backgroundColor: kSuccessGreen,
             ),
           );
-          Navigator.pop(context, true);
+          
+          if (stayOnScreen) {
+             // Reset for next one but keep train and coaches
+             setState(() {
+               selectedDepartureDate = null;
+               currentStep = 0; // Go back to step 1 to pick next date/instance
+             });
+          } else {
+             Navigator.pop(context, true);
+          }
         }
       }
     } catch (e) {
@@ -681,7 +719,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
       child: Column(
         children: List.generate(instances.length, (index) {
           final inst = instances[index];
-          final isSelected = selectedInstance?.id == inst.id;
+          final isSelected = selectedInstance?.instanceId == inst.instanceId;
 
           return Column(
             children: [
@@ -1253,11 +1291,11 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
         child: DropdownButton<String>(
           value: coach.assignedJanitorId,
           hint: Text('Worker', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-          items: workers
+          items: filteredWorkers
               .map((w) => DropdownMenuItem(
             value: w.uid,
             child: Text(
-              w.fullName.split(' ')[0],
+              '${w.fullName.split(' ')[0]} ${w.trainIds != null && w.trainIds!.isNotEmpty ? '🔗' : ''}',
               style: const TextStyle(fontSize: 11),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1267,7 +1305,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
             setState(() {
               coach.assignedJanitorId = v;
               coach.assignedWorkerName =
-                  workers.firstWhere((w) => w.uid == v).fullName;
+                  allWorkers.firstWhere((w) => w.uid == v).fullName;
             });
           },
           isExpanded: true,
@@ -1461,11 +1499,38 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            if (!isEditMode) ...[
+              Expanded(
+                flex: 1,
+                child: ElevatedButton(
+                  onPressed: canSubmit ? () => submitForm(stayOnScreen: true) : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: kRailwayBlue),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox.shrink()
+                      : const Text(
+                          'Save & Add another',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: kRailwayBlue,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               flex: 2,
               child: ElevatedButton(
-                onPressed: canSubmit ? submitForm : null,
+                onPressed: canSubmit ? () => submitForm(stayOnScreen: false) : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kRailwayBlue,
                   disabledBackgroundColor: Colors.grey[300],

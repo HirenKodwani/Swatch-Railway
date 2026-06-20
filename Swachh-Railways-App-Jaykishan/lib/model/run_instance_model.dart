@@ -189,8 +189,8 @@ class CoachAssignment {
     return CoachAssignment(
       coachPosition: json['coachPosition'] as int? ?? 0,
       coachType: json['coachType'] as String? ?? '',
-      janitorId: json['janitorId'] as String?,
-      janitorName: json['janitorName'] as String?,
+      janitorId: (json['janitorId'] ?? json['workerId']) as String?,
+      janitorName: (json['janitorName'] ?? json['workerName']) as String?,
       attendantId: json['attendantId'] as String?,
       attendantName: json['attendantName'] as String?,
       janitorTasks: (json['janitorTasks'] as List<dynamic>?)?.map((e) => e as String).toList(),

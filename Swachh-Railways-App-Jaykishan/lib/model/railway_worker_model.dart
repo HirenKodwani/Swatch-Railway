@@ -23,6 +23,8 @@ class RailwayWorkerModel {
   final String? rejectedByName;
   final DateTime? rejectedAt;
   final String status;
+  final String? workerType; // 'Janitor' or 'Attendant'
+  final List<String>? trainIds;
 
   RailwayWorkerModel({
     required this.uid,
@@ -49,6 +51,8 @@ class RailwayWorkerModel {
     this.rejectedByName,
     this.rejectedAt,
     this.status = 'PENDING',
+    this.workerType,
+    this.trainIds,
   });
 
   factory RailwayWorkerModel.fromJson(Map<String, dynamic> json) {
@@ -85,6 +89,10 @@ class RailwayWorkerModel {
           ? DateTime.parse(json['rejectedAt'] as String)
           : null,
       status: json['status'] as String? ?? 'PENDING',
+      workerType: (json['workerType'] ?? json['worker_type']) as String?,
+      trainIds: (json['trainIds'] ?? json['train_ids']) != null
+          ? List<String>.from((json['trainIds'] ?? json['train_ids']) as List)
+          : null,
     );
   }
 
@@ -114,6 +122,8 @@ class RailwayWorkerModel {
       if (rejectedByName != null) 'rejectedByName': rejectedByName,
       if (rejectedAt != null) 'rejectedAt': rejectedAt!.toIso8601String(),
       'status': status,
+      if (workerType != null) 'workerType': workerType,
+      if (trainIds != null) 'trainIds': trainIds,
     };
   }
 
@@ -142,6 +152,8 @@ class RailwayWorkerModel {
     String? rejectedByName,
     DateTime? rejectedAt,
     String? status,
+    String? workerType,
+    List<String>? trainIds,
   }) {
     return RailwayWorkerModel(
       uid: uid ?? this.uid,
@@ -168,6 +180,8 @@ class RailwayWorkerModel {
       rejectedByName: rejectedByName ?? this.rejectedByName,
       rejectedAt: rejectedAt ?? this.rejectedAt,
       status: status ?? this.status,
+      workerType: workerType ?? this.workerType,
+      trainIds: trainIds ?? this.trainIds,
     );
   }
 

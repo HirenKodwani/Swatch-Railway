@@ -177,6 +177,7 @@ class OBHSRepository {
         'departureDate': '${departureDate.year}-'
             '${departureDate.month.toString().padLeft(2, '0')}-'
             '${departureDate.day.toString().padLeft(2, '0')}',
+        'status': 'Active',
       };
 
       final response = await _handleRequest(
