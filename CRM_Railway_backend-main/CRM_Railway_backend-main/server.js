@@ -3424,7 +3424,8 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
     let count = 0;
 
     for (const coach of (runData.coaches || [])) {
-      if (!coach.workerId) continue;
+      const effectiveWorkerId = coach.workerId || coach.janitorId || null;
+      if (!effectiveWorkerId) continue;
       const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
       const timeSlot = 'terminal';
       const garbageId = `${runInstanceId}_garbage_${timeSlot}_${coachNo}`;
@@ -3434,8 +3435,8 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
         runInstanceId,
         trainNo: runData.trainNo,
         coachNo,
-        workerId: coach.workerId,
-        workerName: coach.workerName || 'Unknown',
+        workerId: effectiveWorkerId,
+        workerName: coach.workerName || coach.janitorName || 'Unknown',
         scheduledTime: timeSlot,
         scheduledDate: new Date().toISOString().split('T')[0],
         isPreTerminal: true,
@@ -3915,9 +3916,9 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
       if (newRequiredInstances <= 0) newRequiredInstances = 1;
     }
 
-    const { uid: editorId, name, email, role } = req.user;
-    const editorName = name || email || role || 'Unknown';
-
+    // Use editorId/editorName already defined at line 3857
+    // const { uid: editorId, name, email, role } = req.user;
+    // const editorName = name || email || role || 'Unknown';
     const updateData = {};
     if (trainNo !== undefined) updateData.trainNo = trainNo;
     if (trainName !== undefined) updateData.trainName = trainName;
