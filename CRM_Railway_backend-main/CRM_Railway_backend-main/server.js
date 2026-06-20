@@ -3150,6 +3150,10 @@ app.post('/api/trains', verifyToken, async (req, res) => {
       cycleLength: isOBHSEnabled ? Number(finalCycleTime.toFixed(4)) : (cycleLength || null),
       requiredInstances: isOBHSEnabled ? requiredInstances : null,
       journeyStartTime: isOBHSEnabled ? (journeyStartTime || null) : null,
+      outboundDurationStr: isOBHSEnabled ? (outboundDurationStr || null) : null,
+      inboundDurationStr: isOBHSEnabled ? (inboundDurationStr || null) : null,
+      layoverDestStr: isOBHSEnabled ? (layoverDestStr || null) : null,
+      layoverOriginStr: isOBHSEnabled ? (layoverOriginStr || null) : null,
       createdBy: uid,
       createdByName: userName,
       createdAt: new Date().toISOString(),
@@ -3861,7 +3865,8 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
       'trainNo', 'trainName', 'origin', 'destination', 'days',
       'zone', 'division', 'depot', 'status', 'TrainApplicableFor',
       'outboundTrainNo', 'inboundTrainNo', 'returnOffset', 'cycleLength',
-      'outboundDurationStr', 'inboundDurationStr', 'layoverDestStr', 'layoverOriginStr'
+      'outboundDurationStr', 'inboundDurationStr', 'layoverDestStr', 'layoverOriginStr',
+      'journeyStartTime'
     ];
 
     const bodyKeys = Object.keys(req.body);
@@ -3941,6 +3946,7 @@ app.put('/api/trains/:uid', verifyToken, async (req, res) => {
       if (inboundDurationStr) updateData.inboundDurationStr = inboundDurationStr;
       if (layoverDestStr) updateData.layoverDestStr = layoverDestStr;
       if (layoverOriginStr) updateData.layoverOriginStr = layoverOriginStr;
+      if (journeyStartTime) updateData.journeyStartTime = journeyStartTime;
     }
 
     updateData.updatedBy = editorId;
