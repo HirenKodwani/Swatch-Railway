@@ -3445,6 +3445,97 @@ async function generateTaskInstancesForRun(runData) {
     }
   }
 
+  // ─── ATTENDANT LINEN TASKS (AC Coaches Only) ─────────────────────────────
+  // Janitors get cleaning tasks (above). Attendants on AC coaches get linen
+  // and berth-related tasks as per OBHS worker type rules.
+  const linenChangeTimes = ['06:00', '14:00', '22:00'];
+  const berthInspectionTimes = ['08:00', '18:00'];
+
+  for (const coach of runData.coaches) {
+    const isAC = /^[ABHME]/i.test(coach.coachPosition || '') ||
+                 (coach.coachType && coach.coachType.toUpperCase().includes('AC'));
+
+    if (!isAC || !coach.attendantId) continue;
+
+    const coachNo = coach.coachPosition || coach.coachNo || 'N/A';
+    const attendantId = coach.attendantId;
+    const attendantName = coach.attendantName || 'Unknown Attendant';
+
+    // 1. Linen Change Tasks (3 times a day for AC coaches)
+    for (const timeSlot of linenChangeTimes) {
+      const linenId = `${runData.runInstanceId}_linen_${timeSlot.replace(':', '')}_${coachNo}`;
+      const linenRef = db.collection('linen_tasks').doc(linenId);
+      batch.set(linenRef, {
+        id: linenId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        coachType: coach.coachType || 'AC',
+        assignedTo: attendantId,
+        assignedToName: attendantName,
+        workerType: 'ATTENDANT',
+        taskType: 'LINEN_CHANGE',
+        displayName: 'Linen Change & Berth Setup',
+        scheduledTime: timeSlot,
+        scheduledDate: departureDate,
+        status: 'PENDING',
+        linenItemsChecklist: {
+          bedsheet: false,
+          pillowCover: false,
+          blanket: false,
+          towel: false
+        },
+        beforePhoto: null,
+        afterPhoto: null,
+        remarks: null,
+        completedAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      taskCount++;
+    }
+
+    // 2. Berth Inspection Tasks (2 times a day for AC coaches)
+    for (const timeSlot of berthInspectionTimes) {
+      const berthId = `${runData.runInstanceId}_berth_${timeSlot.replace(':', '')}_${coachNo}`;
+      const berthRef = db.collection('berth_inspections').doc(berthId);
+      batch.set(berthRef, {
+        id: berthId,
+        runInstanceId: runData.runInstanceId,
+        trainNo: runData.trainNo,
+        coachNo,
+        coachType: coach.coachType || 'AC',
+        assignedTo: attendantId,
+        assignedToName: attendantName,
+        workerType: 'ATTENDANT',
+        taskType: 'BERTH_INSPECTION',
+        displayName: 'Berth & Cabin Inspection',
+        scheduledTime: timeSlot,
+        scheduledDate: departureDate,
+        status: 'PENDING',
+        berthChecklist: {
+          cushionCondition: null,
+          berthLatch: null,
+          readingLight: null,
+          acVent: null,
+          windowBlind: null
+        },
+        deficiencies: [],
+        beforePhoto: null,
+        afterPhoto: null,
+        remarks: null,
+        completedAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      taskCount++;
+    }
+
+    console.log(`[New Engine] Generated ${linenChangeTimes.length + berthInspectionTimes.length} attendant tasks for Attendant ${attendantName} on AC Coach ${coachNo}`);
+  }
+  // ─── END ATTENDANT TASKS ──────────────────────────────────────────────────
+
+
   if (taskCount > 0) {
     await batch.commit();
     console.log(`[New Engine] Generated ${taskCount} tasks for Run ${runData.runInstanceId}`);
@@ -9348,7 +9439,12 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       }
 
       updateData.attendanceStatus = isLateAttendance ? 'LATE' : 'PRESENT';
-      updateData.timingSnapshot = timingDetails;
+      updateData.timingSnapshot = {
+        isLate: isLateAttendance,
+        lateByMinutes: lateByMinutes,
+        firstAttendanceReference: firstAttendanceTime,
+        recordedAt: new Date().toISOString()
+      };
       await attendanceRef.update(updateData);
     }
 
@@ -9510,15 +9606,60 @@ app.get('/api/obhs/attendance/status', verifyToken, async (req, res) => {
   }
 });
 
-// GET /api/obhs/attendance/list — List all attendance records (admin view)
+// GET /api/obhs/attendance/list — List all attendance records (RBAC scoped)
 app.get('/api/obhs/attendance/list', verifyToken, async (req, res) => {
   try {
     const { runInstanceId } = req.query;
+    const { uid: callerId, role, trainId: userTrainId, trainIds: userTrainIds, division: userDiv } = req.user;
+    const roleUpper = (role || '').toUpperCase();
+
     let query = db.collection('obhs_attendance');
     if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
+
     const snapshot = await query.get();
-    const records = [];
+    let records = [];
     snapshot.forEach(doc => records.push(doc.data()));
+
+    // ─── RBAC POST-FILTER ───────────────────────────────────────────────
+    // Super-admins / Masters → see all
+    // Railway Supervisor → see their assigned trains only (resolved via runInstanceId cross-reference below)
+    // Contractor Supervisor (CTS) → see only their single assigned train
+    // Worker → see only their own record
+    if (roleUpper === 'WORKER' || roleUpper === 'RAILWAY WORKER') {
+      records = records.filter(r => r.workerId === callerId);
+    } else if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
+      // Scope to their single assigned train by cross-referencing runInstanceIds
+      if (userTrainId) {
+        const runSnaps = await db.collection('RunInstance')
+          .where('parentTrainId', '==', userTrainId)
+          .get();
+        const allowedRunIds = new Set();
+        runSnaps.forEach(d => allowedRunIds.add(d.id));
+        records = records.filter(r => allowedRunIds.has(r.runInstanceId));
+      }
+    } else if (roleUpper === 'RAILWAY SUPERVISOR') {
+      const assignedTrains = userTrainIds || (userTrainId ? [userTrainId] : []);
+      if (assignedTrains.length > 0) {
+        const runSnaps = await db.collection('RunInstance')
+          .where('parentTrainId', 'in', assignedTrains.slice(0, 10)) // Firestore 'in' limit
+          .get();
+        const allowedRunIds = new Set();
+        runSnaps.forEach(d => allowedRunIds.add(d.id));
+        records = records.filter(r => allowedRunIds.has(r.runInstanceId));
+      }
+    } else if (roleUpper.includes('ADMIN') && !roleUpper.includes('SUPER') && !roleUpper.includes('MASTER')) {
+      // Division Admin: scope to their division's runs
+      if (userDiv) {
+        const runSnaps = await db.collection('RunInstance')
+          .where('division', '==', userDiv)
+          .get();
+        const allowedRunIds = new Set();
+        runSnaps.forEach(d => allowedRunIds.add(d.id));
+        records = records.filter(r => allowedRunIds.has(r.runInstanceId));
+      }
+    }
+    // ─── END RBAC ────────────────────────────────────────────────────────
+
     // Sort by updatedAt desc
     records.sort((a, b) => ((b.updatedAt || '') > (a.updatedAt || '') ? 1 : -1));
     res.status(200).json({ count: records.length, records });
@@ -9527,6 +9668,7 @@ app.get('/api/obhs/attendance/list', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch attendance records', details: error.message });
   }
 });
+
 
 // =======================================================
 // == API 4.8: Submit Completed OBHS Task (Single Submission)
