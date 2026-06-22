@@ -985,7 +985,7 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           subtitle: 'Active Passenger Service Requests',
           icon: Icons.person_pin_circle,
           color: Colors.orange,
-          onTap: () => _showTaskCategoryDialog('Passenger Requests', controller.complaintTasks),
+          onTap: () => _showTaskCategoryDialog('Passenger Requests', controller.complaintTasks, controller),
           count: controller.complaintTasks.length,
           isLoading: controller.isTasksLoading.value,
         ),
@@ -995,7 +995,7 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           subtitle: 'CTS Generated Immediate Action',
           icon: Icons.report_gmailerrorred_outlined,
           color: Colors.red,
-          onTap: () => _showTaskCategoryDialog('Emergency Tasks', controller.emergencyTasks),
+          onTap: () => _showTaskCategoryDialog('Emergency Tasks', controller.emergencyTasks, controller),
           count: controller.emergencyTasks.length,
           isLoading: controller.isTasksLoading.value,
         ),
@@ -1075,7 +1075,7 @@ class WorkerMobileHomeScreen extends StatelessWidget {
     );
   }
 
-  void _showTaskCategoryDialog(String title, List<Map<String, dynamic>> tasks) {
+  void _showTaskCategoryDialog(String title, List<Map<String, dynamic>> tasks, WorkerController controller) {
     Get.bottomSheet(
       Container(
         padding: const EdgeInsets.all(20),
