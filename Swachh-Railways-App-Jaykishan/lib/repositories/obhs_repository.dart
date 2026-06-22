@@ -214,6 +214,9 @@ class OBHSRepository {
           'coaches': created.coaches.map((c) => c.toJson()).toList(),
           'createdBy': created.createdBy,
           'createdByName': created.createdByName,
+          'division': created.division,
+          'zone': created.zone,
+          'depot': created.depot,
         });
         return created;
       } else if (response.statusCode == 401 || response.statusCode == 403) {

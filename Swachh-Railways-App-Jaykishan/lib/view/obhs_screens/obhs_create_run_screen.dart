@@ -208,12 +208,17 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           allWorkers = workersList.where((w) {
             final isApproved = w.status.toUpperCase() == 'APPROVED';
             
-            // For OBHS, we need Janitors or Attendants
+            // For OBHS, we need Janitors, Attendants, or general Workers/Railway Workers
             final isFieldWorker = w.role.toLowerCase().contains('janitor') || 
                                  w.role.toLowerCase().contains('attendant') ||
+                                 w.role.toLowerCase().contains('worker') ||
                                  (w.workerType != null && 
                                   (w.workerType!.toLowerCase() == 'janitor' || 
-                                   w.workerType!.toLowerCase() == 'attendant'));
+                                   w.workerType!.toLowerCase() == 'attendant')) ||
+                                 (w.designation != null && 
+                                  (w.designation!.toLowerCase().contains('janitor') || 
+                                   w.designation!.toLowerCase().contains('attendant') || 
+                                   w.designation!.toLowerCase().contains('worker')));
 
             return isApproved && isFieldWorker;
           }).toList();

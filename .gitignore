@@ -5,3 +5,7 @@ build/
 .idea/
 *.iml
 .DS_Store
+
+# 🔴 SECURITY: Firebase service account key - DO NOT commit
+# Use FIREBASE_SERVICE_ACCOUNT env var instead (see server.js:26-28)
+CRM_Railway_backend-main/CRM_Railway_backend-main/serviceAccountKey.json

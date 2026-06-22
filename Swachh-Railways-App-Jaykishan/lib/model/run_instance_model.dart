@@ -21,6 +21,9 @@ class RunInstanceModel {
   final String? actualArrival;
   final String? journeyStartTime;
   final String? journeyEndTime;
+  final String? division;
+  final String? zone;
+  final String? depot;
 
   RunInstanceModel({
     this.id,
@@ -45,6 +48,9 @@ class RunInstanceModel {
     this.actualArrival,
     this.journeyStartTime,
     this.journeyEndTime,
+    this.division,
+    this.zone,
+    this.depot,
   });
 
   factory RunInstanceModel.fromJson(Map<String, dynamic> json) {
@@ -80,6 +86,9 @@ class RunInstanceModel {
       actualArrival: json['actualArrival'] as String?,
       journeyStartTime: json['journeyStartTime'] as String?,
       journeyEndTime: json['journeyEndTime'] as String?,
+      division: json['division'] as String?,
+      zone: json['zone'] as String?,
+      depot: json['depot'] as String?,
     );
   }
 
@@ -110,6 +119,9 @@ class RunInstanceModel {
       if (actualArrival != null) 'actualArrival': actualArrival,
       if (journeyStartTime != null) 'journeyStartTime': journeyStartTime,
       if (journeyEndTime != null) 'journeyEndTime': journeyEndTime,
+      if (division != null) 'division': division,
+      if (zone != null) 'zone': zone,
+      if (depot != null) 'depot': depot,
     };
   }
 
@@ -136,6 +148,9 @@ class RunInstanceModel {
     String? actualArrival,
     String? journeyStartTime,
     String? journeyEndTime,
+    String? division,
+    String? zone,
+    String? depot,
   }) {
     return RunInstanceModel(
       id: id ?? this.id,
@@ -160,6 +175,9 @@ class RunInstanceModel {
       actualArrival: actualArrival ?? this.actualArrival,
       journeyStartTime: journeyStartTime ?? this.journeyStartTime,
       journeyEndTime: journeyEndTime ?? this.journeyEndTime,
+      division: division ?? this.division,
+      zone: zone ?? this.zone,
+      depot: depot ?? this.depot,
     );
   }
 }
