@@ -1267,7 +1267,7 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
       RailwayWorkerModel? selectedJanitor = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.janitorId, orElse: () => null);
       RailwayWorkerModel? selectedAttendant = workers.cast<RailwayWorkerModel?>().firstWhere((w) => w?.uid == coach.attendantId, orElse: () => null);
       List<String> selectedJanitorTasks = List.from(coach.janitorTasks ?? ['Floor Cleaning', 'Toilet Cleaning', 'Dustbin Cleaning']);
-      List<String> selectedAttendantTasks = List.from(coach.attendantTasks ?? ['Passenger Assistance', 'Linen Distribution']);
+      List<String> selectedAttendantTasks = List.from(coach.attendantTasks ?? ['Linen Tasks', 'Security Tasks']);
 
       final List<String> allJanitorTasks = [
         'Floor Cleaning',
@@ -1281,14 +1281,8 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
       ];
 
       final List<String> allAttendantTasks = [
-        'Passenger Assistance',
-        'Linen Distribution',
-        'Linen Collection',
-        'Coach Monitoring',
-        'Water Availability Check',
-        'Toilet Monitoring',
-        'Passenger Complaint Handling',
-        'Minor Cleaning Checks',
+        'Linen Tasks',
+        'Security Tasks',
       ];
       
       bool isJanitorTab = true;

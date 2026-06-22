@@ -305,7 +305,7 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
     String? tempAttendantId = coach.attendantId;
     
     List<String> tempJanitorTasks = List.from(coach.janitorTasks ?? ['Floor Cleaning', 'Toilet Cleaning', 'Dustbin Cleaning']);
-    List<String> tempAttendantTasks = List.from(coach.attendantTasks ?? ['Passenger Assistance', 'Linen Distribution']);
+    List<String> tempAttendantTasks = List.from(coach.attendantTasks ?? ['Linen Tasks', 'Security Tasks']);
 
     final List<String> allJanitorTasks = [
       'Floor Cleaning',
@@ -319,14 +319,8 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
     ];
 
     final List<String> allAttendantTasks = [
-      'Passenger Assistance',
-      'Linen Distribution',
-      'Linen Collection',
-      'Coach Monitoring',
-      'Water Availability Check',
-      'Toilet Monitoring',
-      'Passenger Complaint Handling',
-      'Minor Cleaning Checks',
+      'Linen Tasks',
+      'Security Tasks',
     ];
 
     bool isJanitorTab = true;
