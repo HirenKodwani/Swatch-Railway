@@ -135,23 +135,23 @@ class WorkerMobileHomeScreen extends StatelessWidget {
 
                     const SizedBox(height: 20),
                     const SizedBox(height: 20),
-                    const Text(
-                      'Task Board',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildCategorizedTasksSection(controller),
-
-                    const SizedBox(height: 20),
-
-                    _buildQuickActions(context, controller),
-                    const SizedBox(height: 20),
-                    _buildFeedbackSection(context),
                   ],
+
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Passenger Service Center', // Updated title
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildCategorizedTasksSection(controller),
+                  const SizedBox(height: 20),
+                  _buildQuickActions(context, controller),
+                  const SizedBox(height: 20),
+                  _buildFeedbackSection(context),
 
                   const SizedBox(height: 20),
                 ],
@@ -981,11 +981,11 @@ class WorkerMobileHomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _buildTaskCategoryCard(
-          title: '2. Complaint Tasks',
-          subtitle: 'Passenger Generated Requests',
+          title: '2. Passenger Requests',
+          subtitle: 'Active Passenger Service Requests',
           icon: Icons.person_pin_circle,
           color: Colors.orange,
-          onTap: () => _showTaskCategoryDialog('Complaint Tasks', controller.complaintTasks),
+          onTap: () => _showTaskCategoryDialog('Passenger Requests', controller.complaintTasks),
           count: controller.complaintTasks.length,
           isLoading: controller.isTasksLoading.value,
         ),
@@ -1100,7 +1100,21 @@ class WorkerMobileHomeScreen extends StatelessWidget {
                           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                           onTap: () {
                             Get.back();
-                            // Logic to start task
+                            // Logic to start/execute the selected exception task
+                            final taskModel = WorkerTaskModel.fromJson(t);
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              useSafeArea: true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
+                              builder: (ctx) => TaskExecutionBottomSheet(task: taskModel),
+                            ).then((submitted) {
+                              if (submitted == true) {
+                                controller.fetchTasksByCategories();
+                              }
+                            });
                           },
                         );
                       },

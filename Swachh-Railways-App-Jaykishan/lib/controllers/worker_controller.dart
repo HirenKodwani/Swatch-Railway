@@ -75,7 +75,7 @@ class WorkerController extends GetxController {
   List<String> get assignedCoaches {
     return assignedRuns
         .where((r) => r.myCoach != null)
-        .map((r) => r.myCoach!.coachType)
+        .map((r) => r.myCoach!.coachPosition.toString())
         .toList();
   }
 
@@ -111,29 +111,43 @@ class WorkerController extends GetxController {
     try {
       isTasksLoading.value = true;
       final tNo = trainNo;
-      final cNo = assignedCoaches.isNotEmpty ? assignedCoaches.first : null;
       
-      // Fetch Routine/Scheduled Tasks (Existing repository call for obhs_tasks)
-      // fetchScheduledTasks(); 
-
-      // Fetch Exceptions (Complaint + Emergency)
-      final response = await WorkerRepository.getPassengerTasks(
-        trainNo: tNo,
-        coachNo: cNo,
-      );
-
-      if (response['success'] == true) {
-        final List<Map<String, dynamic>> allExceptionTasks = 
-            List<Map<String, dynamic>>.from(response['tasks']);
-        
-        complaintTasks.value = allExceptionTasks
-            .where((t) => t['taskSource'] == 'PASSENGER' || t['source'] == 'PASSENGER')
-            .toList();
-            
-        emergencyTasks.value = allExceptionTasks
-            .where((t) => t['taskSource'] == 'CTS')
-            .toList();
+      // Get positions/numbers of all assigned coaches (e.g. ['B1', 'B2'])
+      final List<String> currentCoachNos = assignedRuns
+          .where((r) => r.myCoach != null)
+          .map((r) => r.myCoach!.coachPosition.toString())
+          .toList();
+          
+      if (tNo.isEmpty) {
+        debugPrint('No train assigned, skipping task fetch');
+        return;
       }
+
+      // If multiple coaches, we loop or fetch for all. For now, we'll fetch for the first or all if supported by backend.
+      // The current backend supports one coachNo per request.
+      final List<Map<String, dynamic>> collectedComplaints = [];
+      final List<Map<String, dynamic>> collectedEmergency = [];
+
+      for (final cNo in currentCoachNos.isEmpty ? [null] : currentCoachNos) {
+        final response = await WorkerRepository.getPassengerTasks(
+          trainNo: tNo,
+          coachNo: cNo as String?,
+        );
+
+        if (response['success'] == true) {
+          final List<Map<String, dynamic>> tasks = 
+              List<Map<String, dynamic>>.from(response['tasks']);
+          
+          collectedComplaints.addAll(tasks.where(
+              (t) => t['taskSource'] == 'PASSENGER' || t['source'] == 'PASSENGER'));
+          collectedEmergency.addAll(tasks.where(
+              (t) => t['taskSource'] == 'CTS' || t['source'] == 'CTS'));
+        }
+      }
+
+      complaintTasks.value = collectedComplaints;
+      emergencyTasks.value = collectedEmergency;
+
     } catch (e) {
       debugPrint('Error fetching categorized tasks: $e');
     } finally {
@@ -168,7 +182,10 @@ class WorkerController extends GetxController {
 
     _printCurrentAuthToken();
     _restoreAttendanceState();
-    _loadProfileSmartly().then((_) => refreshAttendanceStatus());
+    _loadProfileSmartly().then((_) {
+      refreshAttendanceStatus();
+      fetchTasksByCategories(); // Fetch passenger requests immediately after login/profile load
+    });
     loadWorkerStatistics();
   }
 
