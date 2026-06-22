@@ -10790,6 +10790,92 @@ app.post('/api/obhs/feedback/passenger', verifyToken, async (req, res) => {
   }
 });
 
+// --- Public Route: Submit Passenger Feedback via QR ---
+app.post('/api/public/passenger/submit-feedback', async (req, res) => {
+  try {
+    const {
+      passengerName,
+      mobileNumber,
+      coachNo,
+      ratings,
+      remarks,
+      runInstanceId
+    } = req.body;
+
+    if (!runInstanceId || !coachNo || !ratings) {
+      return res.status(400).json({
+        success: false,
+        error: "Run Instance ID, Coach No, and Ratings are required."
+      });
+    }
+
+    const { cleanliness, toiletHygiene, linenQuality, security, staffBehaviour } = ratings;
+    if (
+      cleanliness === undefined ||
+      toiletHygiene === undefined ||
+      linenQuality === undefined ||
+      security === undefined ||
+      staffBehaviour === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "All 5 rating parameters must be provided."
+      });
+    }
+
+    const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+    if (!runDoc.exists) {
+      return res.status(404).json({ success: false, error: "Journey not found." });
+    }
+    const runData = runDoc.data();
+
+    const totalStars =
+      Number(cleanliness) +
+      Number(toiletHygiene) +
+      Number(linenQuality) +
+      Number(security) +
+      Number(staffBehaviour);
+
+    const overallRating = parseFloat((totalStars / 5).toFixed(2));
+
+    const feedbackRef = db.collection('obhs_feedbacks').doc();
+
+    const feedbackData = {
+      feedbackId: feedbackRef.id,
+      feedbackType: "QR_PASSENGER",
+      runInstanceId: runInstanceId,
+      trainNo: runData.trainNo || "UNKNOWN",
+      trainName: runData.trainName || "",
+      coachNo: coachNo,
+      passengerName: passengerName || "Anonymous",
+      mobileNumber: mobileNumber || "N/A",
+      remarks: remarks || "",
+      ratings: {
+        cleanliness: Number(cleanliness),
+        toiletHygiene: Number(toiletHygiene),
+        linenQuality: Number(linenQuality),
+        security: Number(security),
+        staffBehaviour: Number(staffBehaviour)
+      },
+      overallRating: overallRating,
+      source: "QR_CODE",
+      createdAt: new Date().toISOString(),
+      timestamp: Date.now()
+    };
+
+    await feedbackRef.set(feedbackData);
+
+    res.status(201).json({
+      success: true,
+      message: "Thank you for your valuable feedback!",
+      overallRating: overallRating
+    });
+
+  } catch (error) {
+    console.error('(Public Feedback) Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to record feedback' });
+  }
+});
 
 // --- Route: Submit Official Inspection Feedback ---
 // Shared collection 'obhs_feedbacks' mein official evaluation data save karta hai
