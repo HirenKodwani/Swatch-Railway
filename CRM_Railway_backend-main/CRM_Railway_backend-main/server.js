@@ -88,7 +88,31 @@ app.use(cors());
 app.use(express.json());
 
 const db = admin.firestore();
-const otpStore = new Map();
+
+// Firestore-backed OTP store (survives restarts, auto-expires via TTL)
+const otpStore = {
+  _col: () => db.collection('_otpStore'),
+  async set(key, value) {
+    await this._col().doc(key).set({
+      value,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expireAt: new Date(Date.now() + 300000).toISOString()
+    });
+  },
+  async get(key) {
+    const doc = await this._col().doc(key).get();
+    if (!doc.exists) return undefined;
+    const data = doc.data();
+    if (data.expireAt && new Date(data.expireAt) < new Date()) {
+      await this._col().doc(key).delete();
+      return undefined;
+    }
+    return data.value;
+  },
+  async delete(key) {
+    await this._col().doc(key).delete();
+  }
+};
 const resend = new Resend(process.env.RESEND_API_KEY);
 // =======================================================
 // == MIDDLEWARE: Verify Token & Fetch User Details from DB
@@ -462,7 +486,6 @@ app.post('/api/auth/send-otp', async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     otpStore.set(phone, otp);
-    setTimeout(() => otpStore.delete(phone), 300000);
 
     const url = `https://2factor.in/API/V1/${TWO_FACTOR_API_KEY}/SMS/91${phone}/${otp}`;
 
@@ -493,7 +516,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       return res.status(400).json({ error: "Phone number and OTP are required." });
     }
 
-    const storedOtp = otpStore.get(phone);
+    const storedOtp = await otpStore.get(phone);
     if (!storedOtp) {
       return res.status(400).json({ error: "OTP expired or not requested. Please try again." });
     }
@@ -502,7 +525,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       return res.status(400).json({ error: "Invalid OTP. Please check and try again." });
     }
 
-    otpStore.delete(phone);
+    await otpStore.delete(phone);
 
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('mobile', '==', phone).limit(1).get();
@@ -584,9 +607,7 @@ app.post('/api/passenger/send-otp', async (req, res) => {
     // Generate 6-digit random OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store OTP in your existing memory-cache (otpStore) with 5-minute expiry
     otpStore.set(phone, otp);
-    setTimeout(() => otpStore.delete(phone), 300000);
 
     // Hit 2Factor.in API to deliver SMS
     const url = `https://2factor.in/API/V1/${TWO_FACTOR_API_KEY}/SMS/91${phone}/${otp}`;
@@ -619,18 +640,29 @@ app.post('/api/passenger/verify-otp', async (req, res) => {
     }
 
     // Check if OTP exists in store
-    const storedOtp = otpStore.get(phone);
+    const storedOtp = await otpStore.get(phone);
     if (!storedOtp) {
       return res.status(400).json({ error: "OTP expired or not requested. Please try again." });
     }
 
+    // Brute force protection: track attempts
+    const attemptKey = `ATTEMPT_${phone}`;
+    const attempts = (await otpStore.get(attemptKey)) || 0;
+    if (attempts >= 5) {
+      return res.status(429).json({ error: "Too many attempts. Please request a new OTP." });
+    }
+
     // Validate OTP match
     if (storedOtp !== otp) {
+      await otpStore.set(attemptKey, attempts + 1);
       return res.status(400).json({ error: "Invalid OTP. Please check and try again." });
     }
 
-    // Clear OTP from store after successful verification
-    otpStore.delete(phone);
+    // Clear OTP and attempt tracking after successful verification
+    await Promise.all([
+      otpStore.delete(phone),
+      otpStore.delete(attemptKey)
+    ]);
 
     console.log(`(Passenger Verification) Success for mobile number: ${phone}`);
 
@@ -697,7 +729,9 @@ app.post('/api/cts/create-emergency-task', verifyToken, async (req, res) => {
     const { trainNo, coachNo, taskType, description, priority } = req.body;
 
     // Role check: Only CTS/Supervisor can create emergency tasks
-    if (!['CTS', 'Railway Supervisor', 'Railway Admin'].includes(req.user.role)) {
+    const allowedRoles = ['cts', 'railway supervisor', 'railway admin'];
+    const userRole = (req.user.role || '').toLowerCase();
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({ error: 'Only CTS/Supervisors can create emergency tasks' });
     }
 
@@ -788,8 +822,6 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
     otpStore.set(email, otp);
     console.log(`(Resend) Generated OTP ${otp} for ${email}`);
 
-    setTimeout(() => otpStore.delete(email), 300000);
-
     const { data, error } = await resend.emails.send({
       from: 'Swachh Railways <auth@swachhrailways.com>', // Aapka verified domain
       to: [email],
@@ -824,7 +856,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const storedOtp = otpStore.get(email);
+    const storedOtp = await otpStore.get(email);
     if (!storedOtp) {
       return res.status(400).json({ error: "OTP expired or not requested. Please try again." });
     }
@@ -833,7 +865,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       return res.status(400).json({ error: "Invalid OTP. Please check and try again." });
     }
 
-    otpStore.delete(email);
+    await otpStore.delete(email);
 
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('email', '==', email).limit(1).get();
@@ -1895,7 +1927,6 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     otpStore.set(`RESET_${mobile}`, otp);
-    setTimeout(() => otpStore.delete(`RESET_${mobile}`), 300000);
 
     if (!process.env.TWILIO_PHONE_NUMBER) {
       console.error('❌ TWILIO_PHONE_NUMBER not configured');
@@ -1926,12 +1957,12 @@ app.post('/api/auth/forgot-password/verify-otp', async (req, res) => {
   try {
     const { mobile, otp } = req.body;
 
-    const storedOtp = otpStore.get(`RESET_${mobile}`);
+    const storedOtp = await otpStore.get(`RESET_${mobile}`);
 
     if (!storedOtp) return res.status(400).json({ error: "OTP expired or invalid request." });
     if (storedOtp !== otp) return res.status(400).json({ error: "Invalid OTP." });
 
-    otpStore.delete(`RESET_${mobile}`);
+    await otpStore.delete(`RESET_${mobile}`);
 
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('mobile', '==', mobile).limit(1).get();
@@ -2009,8 +2040,6 @@ app.post('/api/auth/forgot-password/email/send-otp', async (req, res) => {
 
     otpStore.set(`RESET_EMAIL_${email}`, otp);
 
-    setTimeout(() => otpStore.delete(`RESET_EMAIL_${email}`), 300000);
-
     const { data, error } = await resend.emails.send({
       from: 'Swachh Railways <auth@swachhrailways.com>',
       to: [email],
@@ -2045,12 +2074,12 @@ app.post('/api/auth/forgot-password/email/verify-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const storedOtp = otpStore.get(`RESET_EMAIL_${email}`);
+    const storedOtp = await otpStore.get(`RESET_EMAIL_${email}`);
 
     if (!storedOtp) return res.status(400).json({ error: "OTP expired or invalid request." });
     if (storedOtp !== otp) return res.status(400).json({ error: "Invalid OTP." });
 
-    otpStore.delete(`RESET_EMAIL_${email}`);
+    await otpStore.delete(`RESET_EMAIL_${email}`);
 
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('email', '==', email).limit(1).get();
@@ -3501,6 +3530,10 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
     }
     const pairData = trainPairDoc.data();
 
+    // Fetch parent train to get division, zone, and depot
+    const parentTrainDoc = await db.collection('trains').doc(pairData.parentTrainId).get();
+    const trainData = parentTrainDoc.exists ? parentTrainDoc.data() : {};
+
     const coachesWithNames = await Promise.all(coaches.map(async (c) => {
       const actualJanitorId = c.janitorId || c.workerId || null;
       let janitorName = c.janitorName || "Unknown Worker";
@@ -3574,6 +3607,9 @@ app.post('/api/run-instances', verifyToken, async (req, res) => {
       inboundTrainNo: pairData.inboundTrainNo,
       outboundTrainNo: pairData.outboundTrainNo,
       parentTrainId: pairData.parentTrainId,
+      division: trainData.division || null,
+      zone: trainData.zone || null,
+      depot: trainData.depot || null,
       journeyStartTime: pairData.journeyStartTime || null,
       journeyEndTime: pairData.journeyEndTime || null,
       scheduledDeparture: `${departureDate}T${pairData.journeyStartTime || '00:00:00'}.000Z`,
@@ -4217,6 +4253,9 @@ app.post('/api/trains/:trainId/generate-schedule', verifyToken, async (req, res)
           inboundTrainNo: pair.inboundTrainNo || trainData.inboundTrainNo || null,
           outboundTrainNo: pair.outboundTrainNo || trainData.outboundTrainNo || null,
           parentTrainId: trainId,
+          division: trainData.division || null,
+          zone: trainData.zone || null,
+          depot: trainData.depot || null,
           coaches: [], // Empty initially
           numberOfCoaches: 0,
           createdAt: new Date().toISOString(),
@@ -4464,7 +4503,12 @@ app.put('/api/station-runs/:runId', verifyToken, async (req, res) => {
 app.get('/api/station-runs/my-runs', verifyToken, async (req, res) => {
   try {
     const { uid } = req.user;
-    const snapshot = await db.collection('StationCleaningRuns').orderBy('createdAt', 'desc').get();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const snapshot = await db.collection('StationCleaningRuns')
+      .where('createdAt', '>=', thirtyDaysAgo)
+      .orderBy('createdAt', 'desc')
+      .limit(100)
+      .get();
     const myRuns = [];
     snapshot.forEach(doc => {
       const data = { id: doc.id, ...doc.data() };
@@ -4482,6 +4526,11 @@ app.get('/api/station-runs/my-runs', verifyToken, async (req, res) => {
 app.delete('/api/station-runs/:runId', verifyToken, async (req, res) => {
   try {
     const { runId } = req.params;
+    const role = (req.user.role || '').toLowerCase();
+    if (!role.includes('admin') && !role.includes('master') && !role.includes('supervisor')) {
+      return res.status(403).json({ error: 'Only admins, masters, or supervisors can delete station runs' });
+    }
+
     const ref = db.collection('StationCleaningRuns').doc(runId);
     const doc = await ref.get();
     if (!doc.exists) {
@@ -4721,7 +4770,7 @@ app.get('/api/trains', verifyToken, async (req, res) => {
 });
 
 // --- API 4.4: Get details for a SINGLE Train by UID ---
-app.get('/api/trains/:uid', async (req, res) => {
+app.get('/api/trains/:uid', verifyToken, async (req, res) => {
   try {
     const { uid } = req.params;
     if (!uid) return res.status(400).send({ error: "Train ID (UID) is required." });
@@ -4744,7 +4793,7 @@ app.get('/api/trains/:uid', async (req, res) => {
 });
 
 // --- API 4.5: Get details for a SINGLE Train by Train NUMBER ---
-app.get('/api/trains/number/:trainNo', async (req, res) => {
+app.get('/api/trains/number/:trainNo', verifyToken, async (req, res) => {
   try {
     const { trainNo } = req.params;
     if (!trainNo) return res.status(400).send({ error: "Train Number is required." });
@@ -8777,8 +8826,11 @@ try {
 
 async function compareFaces(image1Url, image2Url) {
   try {
+    console.log(`[AWS Debug] Source: [${image1Url}]`);
+    console.log(`[AWS Debug] Target: [${image2Url}]`);
+
     if (!image1Url || !image2Url || image1Url.includes('undefined') || image2Url.includes('undefined')) {
-      console.error(` [AWS Parameter Blocked] Target URLs are invalid or undefined. Source: [${image1Url}], Target: [${image2Url}]`);
+      console.error(`[AWS Parameter Blocked] Target URLs are invalid or undefined. Source: [${image1Url}], Target: [${image2Url}]`);
       return { matched: false, similarity: 0, reason: "One or both image URLs are missing or invalid." };
     }
 
@@ -8791,8 +8843,10 @@ async function compareFaces(image1Url, image2Url) {
         if (parts.length > 1) {
           return parts[1].split('?')[0];
         }
+        console.error(`[AWS Path Block] URL split failed — no '/o/' found after decode: ${decodedUrl.substring(0, 100)}`);
         return null;
       } catch (e) {
+        console.error(`[AWS Path Block] decodeURIComponent threw for: ${url.substring(0, 100)}`, e.message);
         return null;
       }
     };
@@ -8801,7 +8855,7 @@ async function compareFaces(image1Url, image2Url) {
     const path2 = getStoragePath(image2Url);
 
     if (!path1 || !path2) {
-      console.error(` [AWS Path Block] Could not extract valid cloud paths.`);
+      console.error(`[AWS Path Block] Could not extract valid cloud paths.`);
       return { matched: false, similarity: 0, reason: "Failed to process image location parameters." };
     }
 
@@ -8810,9 +8864,13 @@ async function compareFaces(image1Url, image2Url) {
     const [fileBuffer1] = await bucket.file(path1).download();
     const [fileBuffer2] = await bucket.file(path2).download();
 
-    if (!fileBuffer1 || fileBuffer1.length === 0 || !fileBuffer2 || fileBuffer2.length === 0) {
-      console.error(`[AWS Buffer Block] One of the downloaded image buffers is empty or corrupted.`);
-      return { matched: false, similarity: 0, reason: "Downloaded snapshot content is empty or corrupt." };
+    if (!fileBuffer1 || fileBuffer1.length === 0) {
+      console.error(`[AWS Buffer Block] First image buffer empty/corrupt. Path: ${path1}`);
+      return { matched: false, similarity: 0, reason: "Baseline snapshot is empty or corrupt." };
+    }
+    if (!fileBuffer2 || fileBuffer2.length === 0) {
+      console.error(`[AWS Buffer Block] Second image buffer empty/corrupt. Path: ${path2}`);
+      return { matched: false, similarity: 0, reason: "Current snapshot is empty or corrupt." };
     }
 
     console.log(`[AWS Biometric] Both buffers loaded successfully (${fileBuffer1.length} bytes / ${fileBuffer2.length} bytes). Sending to Rekognition...`);
@@ -8821,18 +8879,22 @@ async function compareFaces(image1Url, image2Url) {
       const command = new CompareFacesCommand({
         SourceImage: { Bytes: fileBuffer1 },
         TargetImage: { Bytes: fileBuffer2 },
-        SimilarityThreshold: 85
+        SimilarityThreshold: 75
       });
 
       const data = await rekognition.send(command);
 
       if (data.FaceMatches && data.FaceMatches.length > 0) {
         const matchScore = data.FaceMatches[0].Similarity;
-        console.log(` [AWS Rekognition Success] Face structure verified. Match score: ${matchScore}%`);
+        console.log(`[AWS Rekognition Success] Face structure verified. Match score: ${matchScore}%`);
         return { matched: true, similarity: matchScore, reason: "Face matched successfully." };
       }
 
-      console.warn(` [AWS Rekognition Audit] Bio-metrics did not match the 85% baseline threshold.`);
+      if (data.UnmatchedFaces && data.UnmatchedFaces.length > 0) {
+        console.warn(`[AWS Rekognition Audit] Faces detected but all below 75% threshold. Unmatched: ${data.UnmatchedFaces.length}`);
+      } else {
+        console.warn(`[AWS Rekognition Audit] No faces found in comparison. Possible: bad lighting, angle, or obstruction.`);
+      }
       return { matched: false, similarity: 0, reason: "Face structure does not match the baseline profile selfie." };
 
     } catch (awsException) {
@@ -8844,12 +8906,12 @@ async function compareFaces(image1Url, image2Url) {
         errorAlertMessage = "The uploaded file size exceeds the allowed processing dimensions.";
       }
 
-      console.error(` [AWS Handled Trace]: ${errorAlertMessage} (${awsException.message})`);
+      console.error(`[AWS Handled Trace]: ${errorAlertMessage} (${awsException.message})`);
       return { matched: false, similarity: 0, reason: errorAlertMessage };
     }
 
   } catch (err) {
-    console.error("  AWS Rekognition core wrapper failure:", err.message);
+    console.error("AWS Rekognition core wrapper failure:", err.message);
     return { matched: false, similarity: 0, reason: "Internal system error during face comparison process." };
   }
 }
@@ -9243,16 +9305,25 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       // --- AWS REKOGNITION BIOMETRIC EVALUATION ENGINE ---
       const faceVerification = await compareFaces(baseStartPhoto, imageUrl);
 
+      console.log(`[Attendance FaceCheck] ${attendanceType} for worker ${workerId}: matched=${faceVerification.matched}, similarity=${faceVerification.similarity}%, reason=${faceVerification.reason}`);
+
       if (!faceVerification.matched) {
-        // Soft logging the infraction state directly into document logs before throwing 401
+        // Log exact similarity for debugging
+        const auditNote = `Face mismatch on ${attendanceType} at ${new Date().toISOString()}: similarity=${faceVerification.similarity}%, reason=${faceVerification.reason}. Base: ${baseStartPhoto.substring(0, 80)}... Current: ${imageUrl.substring(0, 80)}...`;
+
         await attendanceRef.update({
           identityAuditStatus: "MISMATCH_ALERT",
+          lastMismatchReason: faceVerification.reason,
+          lastMismatchSimilarity: faceVerification.similarity,
+          lastMismatchAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
 
         return res.status(401).send({
           error: "Identity Verification Failed",
-          details: `The profile biometric scan for ${attendanceType.toUpperCase()} variant does not securely map against the original baseline START snapshot. Proxy identity rejected.`
+          details: `Face match score (${faceVerification.similarity}%) below threshold. ${faceVerification.reason}. Please retry with a clear, well-lit selfie facing the camera.`,
+          mismatchSimilarity: faceVerification.similarity,
+          mismatchReason: faceVerification.reason
         });
       }
 
@@ -12000,7 +12071,7 @@ app.post('/api/notifications/:uid/read', verifyToken, async (req, res) => {
 app.post('/api/notifications/read-all', verifyToken, async (req, res) => {
   try {
     const { uid, entityId } = req.user;
-    let query = db.collection('notifications');
+    let query = db.collection('notifications').where('read', '==', false);
     if (entityId) {
       query = query.where('entityId', '==', entityId);
     } else {
@@ -12008,13 +12079,10 @@ app.post('/api/notifications/read-all', verifyToken, async (req, res) => {
     }
     const snapshot = await query.get();
     const batch = db.batch();
-    let count = 0;
     snapshot.forEach(doc => {
-      if (doc.data().read !== true) {
-        batch.update(doc.ref, { read: true });
-        count++;
-      }
+      batch.update(doc.ref, { read: true });
     });
+    const count = snapshot.size;
     if (count > 0) await batch.commit();
     res.status(200).send({ message: `${count} notifications marked as read` });
   } catch (error) {
@@ -12027,17 +12095,14 @@ app.post('/api/notifications/read-all', verifyToken, async (req, res) => {
 app.get('/api/notifications/unread-count', verifyToken, async (req, res) => {
   try {
     const { uid, entityId } = req.user;
-    let query = db.collection('notifications');
+    let query = db.collection('notifications').where('read', '==', false);
     if (entityId) {
       query = query.where('entityId', '==', entityId);
     } else {
       query = query.where('userId', '==', uid);
     }
     const snapshot = await query.get();
-    let unreadCount = 0;
-    snapshot.forEach(doc => {
-      if (doc.data().read !== true) unreadCount++;
-    });
+    let unreadCount = snapshot.size;
     res.status(200).json({ count: unreadCount });
   } catch (error) {
     console.error('(Notification) Error fetching unread count:', error);
@@ -12067,10 +12132,12 @@ async function generateCleaningFormId(formType, division) {
   const date = new Date();
   const seq = date.getFullYear().toString().slice(-2) + String(date.getMonth() + 1).padStart(2, '0');
   const counterRef = db.collection('counters').doc(`cleaningForm_${prefix}_${seq}`);
-  const counter = await counterRef.get();
-  let nextNum = 1;
-  if (counter.exists) { nextNum = (counter.data().value || 0) + 1; }
-  await counterRef.set({ value: nextNum }, { merge: true });
+  const nextNum = await db.runTransaction(async transaction => {
+    const counter = await transaction.get(counterRef);
+    const nextVal = (counter.data()?.value || 0) + 1;
+    transaction.set(counterRef, { value: nextVal }, { merge: true });
+    return nextVal;
+  });
   return `${prefix}-${div}-${seq}-${String(nextNum).padStart(4, '0')}`;
 }
 
@@ -16613,51 +16680,6 @@ app.get('/api/obhs/worker/active-run', verifyToken, async (req, res) => {
 
 // ─── SEED ON STARTUP ──────────────────────────────────────────────────────
 seedTaskMasters();
-
-// ====== CTS Forms API ======
-app.get('/api/cts-forms', verifyToken, async (req, res) => {
-  try {
-    const formsSnapshot = await db.collection('cts-forms').get();
-    const forms = formsSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-    res.json({ forms });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch CTS forms' });
-  }
-});
-
-app.post('/api/cts-forms', verifyToken, async (req, res) => {
-  try {
-    const data = req.body;
-    data.createdAt = new Date().toISOString();
-    data.status = 'SUBMITTED';
-    const docRef = await db.collection('cts-forms').add(data);
-    res.status(201).json({ success: true, uid: docRef.id, message: 'CTS form created' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create CTS form' });
-  }
-});
-
-app.post('/api/cts-forms/:id/approve-manpower', verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await db.collection('cts-forms').doc(id).update({ status: 'APPROVED_BY_RAILWAY' });
-    res.json({ success: true, message: 'CTS form manpower approved' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to approve manpower' });
-  }
-});
-
-app.post('/api/cts-forms/:id/reject', verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { rejectionComments } = req.body;
-    await db.collection('cts-forms').doc(id).update({ status: 'REJECTED_BY_RAILWAY', rejectionComments });
-    res.json({ success: true, message: 'CTS form rejected' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to reject form' });
-  }
-});
-
 
 // --- Server Start ---
 app.listen(port, () => {
