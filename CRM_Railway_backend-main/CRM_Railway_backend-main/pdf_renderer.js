@@ -46,27 +46,31 @@ export class PDFRenderer {
     if (fs.existsSync(LOGO_IR)) {
       this.doc.image(LOGO_IR, 40, 35, { height: 50 });
     }
+    
+    if (fs.existsSync(LOGO_PARTNER)) {
+      this.doc.image(LOGO_PARTNER, 505, 35, { height: 50, width: 50 });
+    }
 
     // Title text
     this.doc.fillColor(COLORS.white)
       .font('Helvetica-Bold')
       .fontSize(16)
-      .text(title, 110, 45, { width: 320, align: 'center' });
+      .text(title, 95, 45, { width: 285, align: 'center' });
     
     this.doc.fontSize(10)
       .font('Helvetica')
-      .text(subtitle, 110, 70, { width: 320, align: 'center' });
+      .text(subtitle, 95, 70, { width: 285, align: 'center' });
 
     // Status Badge background
-    this.doc.rect(440, 35, 115, 50).fill(COLORS.white);
+    this.doc.rect(390, 35, 105, 50).fill(COLORS.white);
     
     this.doc.fillColor(isApproved ? COLORS.success : COLORS.danger)
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text('FINAL COMPLIANCE STATUS', 445, 45, { width: 105, align: 'center' });
+      .text('FINAL COMPLIANCE STATUS', 395, 45, { width: 95, align: 'center' });
 
     this.doc.fontSize(12)
-      .text(statusText, 445, 60, { width: 105, align: 'center' });
+      .text(statusText, 395, 60, { width: 95, align: 'center' });
       
     this.doc.moveDown(2);
   }

@@ -2963,6 +2963,12 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                   _downloadOBHSPdf(runInstances);
                 },
               ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue),
+                icon: const Icon(Icons.send, color: Colors.white),
+                label: const Text('Email', style: TextStyle(color: Colors.white)),
+                onPressed: () => _sendOBHSEmailToHigherAuthority(runInstances),
+              ),
             ],
           ),
         );
@@ -2972,6 +2978,39 @@ class _CommonReportScreenState extends State<CommonReportScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
+    }
+  }
+
+  Future<void> _sendOBHSEmailToHigherAuthority(List<dynamic> runInstances) async {
+    Navigator.pop(context); // close dialog
+    setState(() => isLoading = true);
+    int successCount = 0;
+    try {
+      for (final run in runInstances) {
+        final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? '';
+        if (runId.isNotEmpty) {
+          String backendReportType = 'OPERATIONAL_AUDIT';
+          if (selectedReportType == 'Attendance Report') backendReportType = 'ATTENDANCE_AUDIT';
+          else if (selectedReportType == 'Worker Activity Report') backendReportType = 'WORKER_ACTIVITY_AUDIT';
+          else if (selectedReportType == 'Complaint Report') backendReportType = 'COMPLAINT_AUDIT';
+          
+          await ApiService.sendAuditReportEmail(backendReportType, runId, 'hirenkodwani@gmail.com');
+          successCount++;
+        }
+      }
+      setState(() => isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Email successfully sent to Higher Authority for $successCount run(s).'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      setState(() => isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send email: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

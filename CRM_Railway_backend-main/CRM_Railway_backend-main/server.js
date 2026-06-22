@@ -3067,6 +3067,17 @@ const convertToDecimalDays = (timeStr) => {
 
 app.post('/api/trains', verifyToken, async (req, res) => {
   try {
+    // ─── ROLE GUARD: Only Admins and Masters can create trains ───────────
+    const callerRole = (req.user.role || '').toUpperCase();
+    const blockedRoles = ['CONTRACTOR SUPERVISOR', 'CTS', 'RAILWAY SUPERVISOR', 'WORKER', 'RAILWAY WORKER'];
+    if (blockedRoles.includes(callerRole)) {
+      return res.status(403).json({
+        error: 'Access Denied',
+        details: `Your role (${req.user.role}) is not authorized to create trains. Only Admin-level users can manage trains.`
+      });
+    }
+    // ─── END ROLE GUARD ──────────────────────────────────────────────────
+
     const allowedFields = [
       'trainNo', 'trainName', 'origin', 'destination', 'days',
       'zone', 'division', 'depot', 'status', 'TrainApplicableFor',
@@ -3953,6 +3964,17 @@ app.post('/api/run-instances/:runInstanceId/complete', verifyToken, async (req, 
 
 app.put('/api/trains/:uid', verifyToken, async (req, res) => {
   try {
+    // ─── ROLE GUARD: Only Admins and Masters can edit trains ─────────────
+    const callerRole = (req.user.role || '').toUpperCase();
+    const blockedFromEditing = ['CONTRACTOR SUPERVISOR', 'CTS', 'RAILWAY SUPERVISOR', 'WORKER', 'RAILWAY WORKER'];
+    if (blockedFromEditing.includes(callerRole)) {
+      return res.status(403).json({
+        error: 'Access Denied',
+        details: `Your role (${req.user.role}) is not authorized to modify trains.`
+      });
+    }
+    // ─── END ROLE GUARD ──────────────────────────────────────────────────
+
     const { uid } = req.params;
 
     const allowedFields = [
@@ -4764,6 +4786,16 @@ app.get('/api/trains', verifyToken, async (req, res) => {
       if (!userZone) return res.status(403).send({ error: "Railway Master profile mein Zone missing hai." });
       query = query.where('zone', '==', userZone);
       if (queryDivision) query = query.where('division', '==', queryDivision);
+    }
+    else if (userRole === 'cts' || userRole === 'contractor supervisor') {
+      // Contractor Supervisors are mapped to exactly ONE train — return only that
+      const { trainId: userTrainId } = req.user;
+      if (!userTrainId) {
+        return res.status(200).json({ count: 0, trains: [], message: 'No train assigned to your profile.' });
+      }
+      const trainDoc = await db.collection('trains').doc(userTrainId).get();
+      if (!trainDoc.exists) return res.status(200).json({ count: 0, trains: [] });
+      return res.status(200).json({ count: 1, trains: [{ uid: trainDoc.id, ...trainDoc.data() }] });
     }
     else if (userRole.includes('admin') || userRole.includes('supervisor')) {
       if (!userDivision) return res.status(403).send({ error: "Supervisor profile mein Division missing hai." });
@@ -13839,10 +13871,16 @@ app.post('/api/reports/send-email', verifyToken, async (req, res) => {
     } else if (reportType === 'OPERATIONAL_AUDIT') {
       data = await reportService.getOperationalAuditData(runInstanceId);
       pdfBuffer = await pdfRenderer.generateEnterpriseOperationalAudit(data);
+    } else if (reportType === 'WORKER_ACTIVITY_AUDIT') {
+      data = await reportService.getWorkerActivityAuditData(runInstanceId, workerId);
+      pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
+    } else if (reportType === 'COMPLAINT_AUDIT') {
+      data = await reportService.getComplaintAuditData(runInstanceId);
+      pdfBuffer = await pdfRenderer.generateComplaintAudit(data);
     } else {
       // Fallback
-      data = await reportService.getAttendanceAuditData(runInstanceId, workerId);
-      pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
+      data = await reportService.getOperationalAuditData(runInstanceId);
+      pdfBuffer = await pdfRenderer.generateEnterpriseOperationalAudit(data);
     }
 
     excelGen.createSummarySheet(data, reportType.replace('_', ' '));

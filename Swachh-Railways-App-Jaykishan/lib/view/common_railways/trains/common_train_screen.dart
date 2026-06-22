@@ -222,6 +222,12 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
          currentUser.role == 'Contractor Master' ||
          currentUser.role == 'Contractor Admin');
 
+    // Contractor Supervisors can only VIEW their assigned train (read-only)
+    final bool canEditTrains = currentUser != null &&
+        currentUser.role != 'Contractor Supervisor' &&
+        currentUser.role != 'CTS' &&
+        currentUser.role != 'Railway Supervisor';
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
         appBar: AppBar(
@@ -495,6 +501,11 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
       itemBuilder: (_, index) {
         TrainModel t = filteredTrains[index];
         bool isActive = t.status.toLowerCase() == 'active';
+        final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+        final bool canEdit = user != null &&
+            user.role != 'Contractor Supervisor' &&
+            user.role != 'CTS' &&
+            user.role != 'Railway Supervisor';
 
         return Container(
           decoration: BoxDecoration(
@@ -556,15 +567,16 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  onPressed: () => _showTrainDetails(t),
-                  icon: Icon(Icons.remove_red_eye),
+                  onPressed: () => _showTrainDetails(t, canEdit: canEdit),
+                  icon: const Icon(Icons.remove_red_eye),
                   tooltip: "View Details",
                 ),
-                IconButton(
-                  onPressed: () => _editTrain(t),
-                  icon: Icon(Icons.edit),
-                  tooltip: "Edit Train",
-                ),
+                if (canEdit)
+                  IconButton(
+                    onPressed: () => _editTrain(t),
+                    icon: const Icon(Icons.edit),
+                    tooltip: "Edit Train",
+                  ),
               ],
             ),
           ),
@@ -605,7 +617,7 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
     );
   }
 
-  void _showTrainDetails(TrainModel t) {
+  void _showTrainDetails(TrainModel t, {bool canEdit = true}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -614,10 +626,11 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
       ),
       builder: (_) => TrainDetailsBottomSheet(
         train: t,
-        onEdit: () {
+        canEdit: canEdit,
+        onEdit: canEdit ? () {
           Navigator.pop(context);
           _editTrain(t);
-        },
+        } : null,
       ),
     );
   }
@@ -789,12 +802,14 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
 
 class TrainDetailsBottomSheet extends StatelessWidget {
   final TrainModel train;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
+  final bool canEdit;
 
   const TrainDetailsBottomSheet({
     super.key,
     required this.train,
-    required this.onEdit,
+    this.onEdit,
+    this.canEdit = true,
   });
 
   @override
@@ -1055,22 +1070,24 @@ class TrainDetailsBottomSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit, color: Colors.white),
-                    label: const Text("Edit"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kRailwayBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                if (canEdit && onEdit != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      label: const Text("Edit"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kRailwayBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ],
