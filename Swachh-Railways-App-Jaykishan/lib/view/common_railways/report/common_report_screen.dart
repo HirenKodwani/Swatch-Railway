@@ -2989,7 +2989,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
     int successCount = 0;
     try {
       for (final run in runInstances) {
-        final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? '';
+        final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
         if (runId.isNotEmpty) {
           String backendReportType = 'OPERATIONAL_AUDIT';
           if (selectedReportType == 'Attendance Report') backendReportType = 'ATTENDANCE_AUDIT';
