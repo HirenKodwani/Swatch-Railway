@@ -1619,6 +1619,7 @@ app.get('/api/admin/railway-workers', verifyToken, async (req, res) => {
     const { role: requesterRole, zone: requesterZone, division: requesterDivision } = req.user;
 
     const userRole = (requesterRole || '').trim().toLowerCase();
+    console.log(`[GET /api/admin/railway-workers] userRole: ${userRole}, requesterDivision: ${requesterDivision}`);
 
     let query = db.collection('users').where('role', '==', 'Railway Worker');
 
@@ -1626,15 +1627,32 @@ app.get('/api/admin/railway-workers', verifyToken, async (req, res) => {
       if (zone) query = query.where('zone', '==', zone);
       if (division) query = query.where('division', '==', division);
     }
-    else if (userRole === 'railway master') {
-      query = query.where('zone', '==', requesterZone);
+    else if (userRole === 'railway master' || userRole === 'contractor master') {
+      if (requesterZone) query = query.where('zone', '==', requesterZone);
       if (division) query = query.where('division', '==', division);
     }
     else {
-      query = query.where('division', '==', requesterDivision);
+      if (requesterDivision) {
+        query = query.where('division', '==', requesterDivision);
+      } else if (requesterZone) {
+        query = query.where('zone', '==', requesterZone);
+      }
     }
 
-    const snapshot = await query.get();
+    let snapshot = await query.get();
+    console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
+
+    // Fallback: If division/local query returned 0 results, fall back to checking the entire zone
+    if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
+      if (requesterZone) {
+        console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
+        const fallbackQuery = db.collection('users')
+          .where('role', '==', 'Railway Worker')
+          .where('zone', '==', requesterZone);
+        snapshot = await fallbackQuery.get();
+        console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
+      }
+    }
 
     let workerList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };

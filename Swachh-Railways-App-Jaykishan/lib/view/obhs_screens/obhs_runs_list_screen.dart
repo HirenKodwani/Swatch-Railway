@@ -1242,6 +1242,16 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
     final coach = instance.coaches[coachIndex];
     final bool isAc = _isAcCoach(coach.coachType);
 
+    final instanceId = instance.runInstanceId ?? instance.id;
+    if (instanceId == null || instanceId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: Run instance ID is missing'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1459,19 +1469,30 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                         attendantTasks: selectedAttendantTasks,
                       );
 
-                      await OBHSRepository.updateRunInstance(
-                        runInstanceId: instance.runInstanceId ?? instance.id ?? '',
-                        coaches: updatedCoaches,
-                      );
+                      try {
+                        await OBHSRepository.updateRunInstance(
+                          runInstanceId: instanceId,
+                          coaches: updatedCoaches,
+                        );
 
-                      if (!mounted) return;
-                      Navigator.pop(context); // close saving dialog
-                      Navigator.pop(context); // close bottom sheet
-                      _loadRunInstances(); // reload list
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Coach assignments updated successfully!'), backgroundColor: Colors.green),
-                      );
+                        if (!mounted) return;
+                        Navigator.pop(context); // close saving dialog
+                        Navigator.pop(context); // close bottom sheet
+                        _loadRunInstances(); // reload list
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Coach assignments updated successfully!'), backgroundColor: Colors.green),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        // Close saving dialog if still open
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context);
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to assign worker: $e'), backgroundColor: Colors.red),
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue),
                     child: const Text('Save Changes', style: TextStyle(color: Colors.white)),

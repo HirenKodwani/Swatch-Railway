@@ -55,18 +55,19 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
   int selectedCoachCount = 1;
   List<CoachData> coaches = [];
 
-  // Dynamic getter for filtered workers
+  // All approved workers, sorted with train-matched ones first
   List<RailwayWorkerModel> get filteredWorkers {
-    return allWorkers.where((w) {
-      // Filter by selected train mapping if train is selected
-      // Workers with NO train mapping are visible for all trains
-      bool matchesTrain = selectedTrainId == null || 
-                         (w.trainIds == null || 
-                          w.trainIds!.isEmpty || 
-                          w.trainIds!.contains(selectedTrainId));
-      
-      return matchesTrain;
-    }).toList();
+    final sorted = List<RailwayWorkerModel>.from(allWorkers);
+    if (selectedTrainId != null) {
+      sorted.sort((a, b) {
+        final aMatch = a.trainIds?.contains(selectedTrainId) ?? false;
+        final bMatch = b.trainIds?.contains(selectedTrainId) ?? false;
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    }
+    return sorted;
   }
 
   final List<String> coachTypes = [
@@ -202,30 +203,47 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
     });
 
     try {
+      print('DEBUG: Calling OBHSRepository.getRailwayWorkers()');
       final workersList = await OBHSRepository.getRailwayWorkers();
+      print('DEBUG: OBHSRepository.getRailwayWorkers() returned ${workersList.length} workers');
+      for (var w in workersList) {
+        print('DEBUG: Worker from API: ${w.fullName}, role: ${w.role}, status: ${w.status}, workerType: ${w.workerType}, designation: ${w.designation}, trainIds: ${w.trainIds}');
+      }
       if (mounted) {
         setState(() {
           allWorkers = workersList.where((w) {
-            final isApproved = w.status.toUpperCase() == 'APPROVED';
+            final statusUpper = w.status.toUpperCase();
+            final isApproved = statusUpper == 'APPROVED' || statusUpper == 'ACTIVE' || statusUpper == 'VERIFIED';
             
-            // For OBHS, we need Janitors, Attendants, or general Workers/Railway Workers
-            final isFieldWorker = w.role.toLowerCase().contains('janitor') || 
-                                 w.role.toLowerCase().contains('attendant') ||
-                                 w.role.toLowerCase().contains('worker') ||
-                                 (w.workerType != null && 
-                                  (w.workerType!.toLowerCase() == 'janitor' || 
-                                   w.workerType!.toLowerCase() == 'attendant')) ||
-                                 (w.designation != null && 
-                                  (w.designation!.toLowerCase().contains('janitor') || 
-                                   w.designation!.toLowerCase().contains('attendant') || 
-                                   w.designation!.toLowerCase().contains('worker')));
+            final roleLower = w.role.toLowerCase();
+            final wtLower = w.workerType?.toLowerCase() ?? '';
+            final desigLower = w.designation?.toLowerCase() ?? '';
+            final isFieldWorker = roleLower.contains('janitor') || 
+                                 roleLower.contains('attendant') ||
+                                 roleLower.contains('worker') ||
+                                 roleLower.contains('cleaner') ||
+                                 roleLower.contains('safai') ||
+                                 roleLower.contains('field') ||
+                                 wtLower.contains('janitor') || 
+                                 wtLower.contains('attendant') ||
+                                 wtLower.contains('cleaner') ||
+                                 desigLower.contains('janitor') || 
+                                 desigLower.contains('attendant') || 
+                                 desigLower.contains('worker') ||
+                                 desigLower.contains('cleaner') ||
+                                 desigLower.contains('safai');
 
+            if (!isApproved || !isFieldWorker) {
+              print('DEBUG: Filtered OUT ${w.fullName}: status=${w.status}, role=${w.role}, workerType=${w.workerType}, designation=${w.designation}');
+            }
             return isApproved && isFieldWorker;
           }).toList();
+          print('DEBUG: After filtering, allWorkers count: ${allWorkers.length}');
           _isLoadingWorkers = false;
         });
       }
     } catch (e) {
+      print('DEBUG: Error in _loadWorkers: $e');
       if (mounted) {
         setState(() {
           _workersError = e.toString().replaceAll('Exception: ', '');
