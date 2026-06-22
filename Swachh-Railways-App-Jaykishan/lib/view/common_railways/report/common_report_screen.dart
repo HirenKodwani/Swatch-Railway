@@ -2967,7 +2967,10 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                 style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue),
                 icon: const Icon(Icons.send, color: Colors.white),
                 label: const Text('Email', style: TextStyle(color: Colors.white)),
-                onPressed: () => _sendOBHSEmailToHigherAuthority(runInstances),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _sendOBHSEmailToHigherAuthority(runInstances);
+                },
               ),
             ],
           ),
@@ -2982,8 +2985,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   }
 
   Future<void> _sendOBHSEmailToHigherAuthority(List<dynamic> runInstances) async {
-    Navigator.pop(context); // close dialog
-    setState(() => isLoading = true);
+    setState(() => isDownloading = true);
     int successCount = 0;
     try {
       for (final run in runInstances) {
@@ -2998,14 +3000,14 @@ class _CommonReportScreenState extends State<CommonReportScreen>
           successCount++;
         }
       }
-      setState(() => isLoading = false);
+      setState(() => isDownloading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Email successfully sent to Higher Authority for $successCount run(s).'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
-      setState(() => isLoading = false);
+      setState(() => isDownloading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send email: $e'), backgroundColor: Colors.red),
