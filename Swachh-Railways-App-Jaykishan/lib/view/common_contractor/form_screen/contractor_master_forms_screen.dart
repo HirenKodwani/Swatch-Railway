@@ -304,7 +304,7 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final bool canCreateForm = user?.role != 'Contractor Master' && user?.role != 'Contractor Admin';
+    final bool canCreateForm = user?.role != 'Contractor Supervisor';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
@@ -1484,7 +1484,7 @@ class _FormStatusCardState extends State<FormStatusCard> {
   Widget build(BuildContext context) {
     final statusInfo = widget.form.getStatusInfo();
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final bool canPerformActions = user?.role != 'Contractor Master' && user?.role != 'Contractor Admin';
+    final bool canPerformActions = user?.role != 'Contractor Supervisor';
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -1825,7 +1825,7 @@ class DraftFormCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final bool canPerformActions = user?.role != 'Contractor Master' && user?.role != 'Contractor Admin';
+    final bool canPerformActions = user?.role != 'Contractor Supervisor';
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -2069,7 +2069,7 @@ class PremisesDraftFormCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final bool canPerformActions = user?.role != 'Contractor Master' && user?.role != 'Contractor Admin';
+    final bool canPerformActions = user?.role != 'Contractor Supervisor';
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),

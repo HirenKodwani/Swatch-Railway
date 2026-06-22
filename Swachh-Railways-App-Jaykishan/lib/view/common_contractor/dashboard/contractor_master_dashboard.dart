@@ -285,12 +285,12 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "icon": Icons.dashboard_rounded,
         "title": "Dashboard",
         "route": null,
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"]
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"]
       },
       {
         "icon": Icons.admin_panel_settings,
         "title": "Masters",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
         "children": [
           {"title": "User Management", "route": "users"},
           {"title": "Entity Management", "route": "entities"},
@@ -304,7 +304,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
       {
         "icon": Icons.cleaning_services,
         "title": "Operations",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
           {"title": "Coach Cleaning", "route": "coach_cleaning"},
           {"title": "Premise Cleaning", "route": "premise_cleaning"},
@@ -315,7 +315,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
       {
         "icon": Icons.directions_run,
         "title": "OBHS",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
           {"title": "Attendance", "route": "obhs_attendance"},
           {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
@@ -326,7 +326,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
       {
         "icon": Icons.analytics,
         "title": "Reports",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
           {"title": "Coach Reports", "route": "coach_reports"},
           {"title": "Premise Reports", "route": "premise_reports"},
@@ -338,18 +338,18 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "icon": Icons.receipt_long,
         "title": "Billing",
         "route": "billing",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.star_outline,
         "title": "Ratings",
         "route": "ratings",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.security,
         "title": "Audit & Compliance",
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
         "children": [
           {"title": "Compliance & Security Tracking", "route": "audit_logs"},
           {"title": "Business Activities", "route": "activity_logs"},

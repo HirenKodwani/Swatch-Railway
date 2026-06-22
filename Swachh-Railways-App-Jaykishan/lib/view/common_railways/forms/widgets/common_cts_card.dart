@@ -31,7 +31,7 @@ class _CTSFormStatusCardState extends State<CTSFormStatusCard> {
   Widget build(BuildContext context) {
     final statusInfo = widget.form.getStatusInfo();
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final bool canPerformActions = user?.role != 'Contractor Master' && user?.role != 'Contractor Admin';
+    final bool canPerformActions = user?.role != 'Contractor Supervisor';
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),

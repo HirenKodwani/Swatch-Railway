@@ -209,7 +209,7 @@ class _PremisesStatusCardState extends State<PremisesStatusCard> {
 
   Widget _buildContractorButtons(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final bool canPerformActions = user?.role != 'Contractor Master' && user?.role != 'Contractor Admin';
+    final bool canPerformActions = user?.role != 'Contractor Supervisor';
 
     return Expanded(
       child: Row(
