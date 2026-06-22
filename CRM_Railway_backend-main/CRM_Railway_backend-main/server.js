@@ -3806,39 +3806,64 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
           .includes(upper) || /^[ABHMC]\d*$/.test(upper);
       };
 
+      // Cache for worker names to avoid redundant DB calls
+      const workerNamesCache = new Map();
+
       const coachesWithNames = await Promise.all(coaches.map(async (c) => {
         const actualJanitorId = c.janitorId || c.workerId || null;
         let janitorName = c.janitorName || "Unknown Worker";
 
-        if (actualJanitorId && (!c.janitorName || c.janitorName === "Unknown Worker")) {
-          const workerDoc = await db.collection('users').doc(actualJanitorId).get();
-          if (workerDoc.exists) {
-            janitorName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker";
+        if (actualJanitorId) {
+          if (workerNamesCache.has(actualJanitorId)) {
+            janitorName = workerNamesCache.get(actualJanitorId);
+          } else if (!c.janitorName || c.janitorName === "Unknown Worker") {
+            try {
+              const workerDoc = await db.collection('users').doc(actualJanitorId).get();
+              if (workerDoc.exists) {
+                janitorName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker";
+                workerNamesCache.set(actualJanitorId, janitorName);
+              }
+            } catch (err) {
+              console.error(`Error fetching janitor ${actualJanitorId}:`, err.message);
+            }
           }
         }
 
         // Resolve attendant name if attendantId provided
         let actualAttendantName = c.attendantName || null;
-        if (c.attendantId && !actualAttendantName) {
-          const attDoc = await db.collection('users').doc(c.attendantId).get();
-          if (attDoc.exists) {
-            actualAttendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
+        if (c.attendantId) {
+          if (workerNamesCache.has(c.attendantId)) {
+            actualAttendantName = workerNamesCache.get(c.attendantId);
+          } else if (!actualAttendantName || actualAttendantName === 'Unknown') {
+            try {
+              const attDoc = await db.collection('users').doc(c.attendantId).get();
+              if (attDoc.exists) {
+                actualAttendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown';
+                workerNamesCache.set(c.attendantId, actualAttendantName);
+              }
+            } catch (err) {
+              console.error(`Error fetching attendant ${c.attendantId}:`, err.message);
+            }
           }
         }
 
-        // Validate: AC coaches MUST have an attendant
-        const isAC = isACCoach(c.coachType) || (c.coachPosition && /^[ABHMC]/i.test(c.coachPosition));
+        // Relaxed Validation: Only log warnings for inconsistencies instead of throwing errors 
+        // to prevent UI "loading issues" or save failures during incremental assignments.
+        const cType = c.coachType || '';
+        const cPos = c.coachPosition || '';
+        const isAC = isACCoach(cType) || /^[ABHMC]/i.test(cPos);
+
         if (c.attendantId && !isAC) {
-          throw new Error(`Attendant cannot be assigned to Non-AC coach ${c.coachPosition || c.coachNo}. Attendants only allowed on AC coaches.`);
+          console.warn(`[Assignment Warning] Attendant ${c.attendantId} assigned to non-AC coach ${cPos}`);
         }
-        if (isAC && !c.attendantId) {
-          throw new Error(`AC Coach ${c.coachPosition || c.coachNo} must have an Attendant assigned.`);
+        if (isAC && !c.attendantId && (status === 'Active' || status === 'Ready')) {
+          console.warn(`[Assignment Warning] AC Coach ${cPos} has no attendant in ${status} journey`);
         }
 
         return {
-          coachPosition: c.coachPosition || null,
-          coachNo: c.coachNo || null,
-          coachType: c.coachType || null,
+          coachPosition: cPos || null,
+          coachNo: c.coachNo || cPos || null,
+          coachType: cType || null,
           janitorId: actualJanitorId,
           janitorName: janitorName,
           workerId: actualJanitorId,
@@ -3847,7 +3872,8 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
           attendantName: actualAttendantName,
           janitorTasks: c.janitorTasks || [],
           attendantTasks: c.attendantTasks || [],
-          tasks: c.tasks || c.janitorTasks || []
+          tasks: c.tasks || c.janitorTasks || [],
+          attendanceStatus: c.attendanceStatus || 'Pending'
         };
       }));
 
@@ -3873,10 +3899,12 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
 
     await runInstanceRef.update(updateData);
 
+    const updatedDoc = await runInstanceRef.get();
+    
     res.status(200).send({
-      message: 'Run Instance updated successfully with worker names',
+      message: 'Run Instance updated successfully',
       runInstanceId: runInstanceId,
-      updatedData: updateData
+      data: { id: updatedDoc.id, ...updatedDoc.data() }
     });
 
   } catch (error) {
