@@ -143,9 +143,8 @@ export class ReportService {
   }
 
   async getWorkerActivityAuditData(runInstanceId, workerId) {
-    console.log("getWorkerActivityAuditData called with runInstanceId:", runInstanceId);
     const runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
-    if (!runDoc.exists) throw new Error(`Run instance not found for ID: ${runInstanceId}`);
+    if (!runDoc.exists) throw new Error('Run instance not found');
     const run = runDoc.data();
 
     let workerName = 'Unknown';
