@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../utills/app_colors.dart';
 import '../../services/passenger_service.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class PassengerTaskScreen extends StatefulWidget {
   const PassengerTaskScreen({super.key});
@@ -13,9 +14,13 @@ class PassengerTaskScreen extends StatefulWidget {
 class _PassengerTaskScreenState extends State<PassengerTaskScreen> {
   final _formKey = GlobalKey<FormState>();
   final _trainNoController = TextEditingController();
-  final _coachNoController = TextEditingController();
   final _seatNoController = TextEditingController();
   final _descriptionController = TextEditingController();
+  
+  final FocusNode _trainFocusNode = FocusNode();
+  List<String> _availableCoaches = [];
+  String? _selectedCoach;
+  bool _isFetchingCoaches = false;
   
   String? _selectedTaskType;
   final List<String> _taskTypes = [
@@ -29,6 +34,45 @@ class _PassengerTaskScreenState extends State<PassengerTaskScreen> {
 
   bool _isSubmitting = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _trainFocusNode.addListener(_onTrainFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _trainFocusNode.removeListener(_onTrainFocusChange);
+    _trainFocusNode.dispose();
+    _trainNoController.dispose();
+    _seatNoController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _onTrainFocusChange() async {
+    if (!_trainFocusNode.hasFocus && _trainNoController.text.trim().isNotEmpty) {
+      setState(() => _isFetchingCoaches = true);
+      try {
+        final coaches = await PassengerService.fetchCoachesForTrain(_trainNoController.text.trim());
+        if (mounted) {
+          setState(() {
+            _availableCoaches = coaches;
+            if (!_availableCoaches.contains(_selectedCoach)) {
+              _selectedCoach = null;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint('Failed to fetch coaches: $e');
+      } finally {
+        if (mounted) {
+          setState(() => _isFetchingCoaches = false);
+        }
+      }
+    }
+  }
+
   Future<void> _submitTask() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -39,7 +83,7 @@ class _PassengerTaskScreenState extends State<PassengerTaskScreen> {
     try {
       final response = await PassengerService.createCleaningTask(
         trainNo: _trainNoController.text.trim(),
-        coachNo: _coachNoController.text.trim(),
+        coachNo: _selectedCoach ?? '',
         seatNo: _seatNoController.text.trim(),
         taskType: _selectedTaskType!,
         description: _descriptionController.text.trim(),
@@ -106,9 +150,16 @@ class _PassengerTaskScreenState extends State<PassengerTaskScreen> {
               
               TextFormField(
                 controller: _trainNoController,
+                focusNode: _trainFocusNode,
                 decoration: InputDecoration(
                   labelText: 'Train Number',
                   prefixIcon: const Icon(Icons.train),
+                  suffixIcon: _isFetchingCoaches 
+                      ? const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 validator: (value) => value == null || value.isEmpty ? 'Please enter train number' : null,
@@ -118,13 +169,31 @@ class _PassengerTaskScreenState extends State<PassengerTaskScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      controller: _coachNoController,
-                      decoration: InputDecoration(
-                        labelText: 'Coach No.',
-                        prefixIcon: const Icon(Icons.meeting_room),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    child: DropdownSearch<String>(
+                      popupProps: PopupProps.menu(
+                        showSearchBox: true,
+                        searchFieldProps: TextFieldProps(
+                          decoration: InputDecoration(
+                            hintText: "Search coach...",
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                        ),
                       ),
+                      items: _availableCoaches,
+                      dropdownDecoratorProps: DropDownDecoratorProps(
+                        dropdownSearchDecoration: InputDecoration(
+                          labelText: 'Coach No.',
+                          prefixIcon: const Icon(Icons.meeting_room),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedCoach = newValue;
+                        });
+                      },
+                      selectedItem: _selectedCoach,
                       validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                     ),
                   ),

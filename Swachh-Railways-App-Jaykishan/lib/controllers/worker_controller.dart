@@ -128,22 +128,20 @@ class WorkerController extends GetxController {
       final List<Map<String, dynamic>> collectedComplaints = [];
       final List<Map<String, dynamic>> collectedEmergency = [];
 
-      for (final cNo in currentCoachNos.isEmpty ? [null] : currentCoachNos) {
-        final response = await WorkerRepository.getPassengerTasks(
-          trainNo: tNo,
-          coachNo: cNo as String?,
-        );
+      final response = await WorkerRepository.getPassengerTasks(
+        trainNo: tNo,
+      );
 
-        if (response['success'] == true) {
-          final List<Map<String, dynamic>> tasks = 
-              List<Map<String, dynamic>>.from(response['tasks']);
-          
-          collectedComplaints.addAll(tasks.where(
-              (t) => t['taskSource'] == 'PASSENGER' || t['source'] == 'PASSENGER'));
-          collectedEmergency.addAll(tasks.where(
-              (t) => t['taskSource'] == 'CTS' || t['source'] == 'CTS'));
-        }
+      if (response['success'] == true) {
+        final List<Map<String, dynamic>> tasks = 
+            List<Map<String, dynamic>>.from(response['tasks']);
+        
+        collectedComplaints.addAll(tasks.where(
+            (t) => t['taskSource'] == 'PASSENGER' || t['source'] == 'PASSENGER'));
+        collectedEmergency.addAll(tasks.where(
+            (t) => t['taskSource'] == 'CTS' || t['source'] == 'CTS'));
       }
+
 
       complaintTasks.value = collectedComplaints;
       emergencyTasks.value = collectedEmergency;
@@ -784,6 +782,42 @@ class WorkerController extends GetxController {
         throw Exception('No run instance assigned for attendance.');
       }
 
+      final challenges = ['THUMBS_UP', 'FIST', 'SMILE'];
+      final challenge = challenges[DateTime.now().millisecond % challenges.length];
+      
+      String challengeText = '';
+      if (challenge == 'THUMBS_UP') challengeText = 'Thumbs Up gesture';
+      if (challenge == 'FIST') challengeText = 'Fist gesture';
+      if (challenge == 'SMILE') challengeText = 'wide Smile';
+
+      bool dialogResult = false;
+      await Get.defaultDialog(
+        title: 'Liveness Check',
+        content: Column(
+          children: [
+            const Icon(Icons.camera_front, size: 50, color: Colors.blue),
+            const SizedBox(height: 10),
+            Text(
+              'Please take a selfie showing a:\n\n$challengeText',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        confirm: ElevatedButton(
+          onPressed: () {
+            dialogResult = true;
+            Get.back();
+          },
+          child: const Text('Open Camera'),
+        ),
+        barrierDismissible: false,
+      );
+
+      if (!dialogResult) {
+        throw Exception('Attendance cancelled.');
+      }
+
       final photo = await _captureAttendancePhoto();
       final position = await _getAttendanceLocation();
       final imageUrl = await WorkerRepository.uploadMedia(photo.path);
@@ -794,6 +828,7 @@ class WorkerController extends GetxController {
         imageUrl: imageUrl,
         latitude: position.latitude,
         longitude: position.longitude,
+        livenessChallenge: challenge,
       ).timeout(
         const Duration(seconds: 40),
         onTimeout: () => throw Exception('Attendance server timeout. Please check your internet and try again.'),

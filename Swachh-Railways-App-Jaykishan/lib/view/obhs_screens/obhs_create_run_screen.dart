@@ -319,11 +319,14 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
 
     try {
       final apiCoaches = coaches.map((coach) {
+        bool isAC = coach.type != null && coach.type!.toUpperCase().contains('AC');
         return CoachAssignment(
           coachPosition: coach.position!,
           coachType: coach.type!,
-          janitorId: coach.assignedJanitorId,
-          janitorName: coach.assignedWorkerName,
+          janitorId: isAC ? null : coach.assignedJanitorId,
+          janitorName: isAC ? null : coach.assignedWorkerName,
+          attendantId: isAC ? coach.assignedJanitorId : null,
+          attendantName: isAC ? coach.assignedWorkerName : null,
         );
       }).toList();
 

@@ -178,9 +178,16 @@ class _OBHSReviewQueueScreenState extends State<OBHSReviewQueueScreen> {
                         final task = _tasks[index];
                         final String taskId = task['id'] ?? task['taskId'] ?? '';
                         final String taskName = task['taskName'] ?? task['taskType'] ?? 'Unknown Task';
-                        final String workerName = task['workerName'] ?? 'Unknown Worker';
-                        final String coachId = task['coachId'] ?? 'Unknown Coach';
-                        final String submittedAt = task['submittedAt'] ?? '';
+                        
+                        String workerName = 'Unknown Worker';
+                        if (task['workerName'] != null) {
+                          workerName = task['workerName'];
+                        } else if (task['submittedBy'] != null && task['submittedBy']['name'] != null) {
+                          workerName = task['submittedBy']['name'];
+                        }
+
+                        final String coachId = task['coachId'] ?? task['coachNo'] ?? 'Unknown Coach';
+                        final String submittedAt = task['submittedAt'] ?? task['serverCreatedAt'] ?? task['deviceTimestamp'] ?? '';
                         
                         String formattedTime = 'Recently';
                         if (submittedAt.isNotEmpty) {

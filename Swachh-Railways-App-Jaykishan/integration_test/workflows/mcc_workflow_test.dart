@@ -4,8 +4,7 @@ import 'package:crm_train/main.dart' as app;
 import '../helpers/test_helpers.dart';
 
 void main() {
-  final IntegrationTestWidgetsFlutterBinding binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  binding.enableEspressoIdlingResources = true;
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('MCC OBHS Workflow Tests', () {
     setUpAll(() async {

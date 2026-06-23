@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 dotenv.config();
 import axios from 'axios';
-import { RekognitionClient, CompareFacesCommand } from "@aws-sdk/client-rekognition";
+import { RekognitionClient, CompareFacesCommand, DetectLabelsCommand, DetectFacesCommand } from "@aws-sdk/client-rekognition";
 import sharp from 'sharp';
 import * as evidence from './evidence_manager.js';
 import { PDFRenderer } from './pdf_renderer.js';
@@ -772,7 +772,7 @@ app.post('/api/cts/create-emergency-task', verifyToken, async (req, res) => {
 });
 app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
   try {
-    const { trainNo, coachNo } = req.query;
+    const { trainNo } = req.query;
 
     let query = db.collection('passenger_tasks');
 
@@ -780,15 +780,17 @@ app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
       query = query.where('trainNo', '==', trainNo);
     }
 
-    if (coachNo) {
-      query = query.where('coachNo', '==', coachNo);
-    }
-
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await query.get();
 
     const tasks = [];
     snapshot.forEach(doc => {
       tasks.push({ uid: doc.id, ...doc.data() });
+    });
+
+    tasks.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return dateB - dateA;
     });
 
     return res.status(200).json({
@@ -798,11 +800,44 @@ app.get('/api/passenger/tasks', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('(Get Passenger Tasks) Failed:', error);
-    return res.status(500).json({
-      error: 'Internal Server Error',
-      details: error.message
+    console.error('(Passenger Tasks Retrieval) Failed:', error);
+    return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
+// API: Get Active Coaches for a Train (For Passenger App Dropdown)
+app.get('/api/passenger/train/:trainNo/coaches', async (req, res) => {
+  try {
+    const { trainNo } = req.params;
+    
+    // Find an active run instance for this train
+    const runsSnap = await db.collection('RunInstance')
+      .where('trainNo', '==', trainNo)
+      .where('status', 'in', ['ACTIVE', 'RUNNING', 'ALLOCATED', 'READY'])
+      .get();
+      
+    if (runsSnap.empty) {
+      return res.status(200).json({ success: true, coaches: [] });
+    }
+    
+    // Combine coaches from all active instances (usually there's only 1 or 2 overlapping)
+    const coachSet = new Set();
+    runsSnap.forEach(doc => {
+      const runData = doc.data();
+      if (runData.coaches && Array.isArray(runData.coaches)) {
+        runData.coaches.forEach(c => {
+          if (c.coachPosition) coachSet.add(c.coachPosition);
+          else if (c.coachNumber) coachSet.add(c.coachNumber);
+        });
+      }
     });
+    
+    const sortedCoaches = Array.from(coachSet).sort();
+    return res.status(200).json({ success: true, coaches: sortedCoaches });
+    
+  } catch (error) {
+    console.error('(Passenger Coaches Fetch) Failed:', error);
+    return res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 });
 
@@ -9113,6 +9148,73 @@ async function compareFaces(image1Url, image2Url) {
   }
 }
 
+async function verifyFaceLiveness(imageUrl, expectedChallenge) {
+  try {
+    if (!imageUrl || imageUrl.includes('undefined')) {
+      return { matched: false, reason: "Invalid image URL." };
+    }
+
+    const getStoragePath = (url) => {
+      try {
+        const decodedUrl = decodeURIComponent(url);
+        const parts = decodedUrl.split('/o/');
+        if (parts.length > 1) {
+          return parts[1].split('?')[0];
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const path = getStoragePath(imageUrl);
+    if (!path) return { matched: false, reason: "Failed to extract cloud path." };
+
+    const [fileBuffer] = await bucket.file(path).download();
+    if (!fileBuffer || fileBuffer.length === 0) return { matched: false, reason: "Empty image buffer." };
+
+    if (expectedChallenge === 'THUMBS_UP' || expectedChallenge === 'FIST') {
+      const command = new DetectLabelsCommand({
+        Image: { Bytes: fileBuffer },
+        MaxLabels: 20,
+        MinConfidence: 60
+      });
+      const data = await rekognition.send(command);
+      const labels = data.Labels.map(l => l.Name.toUpperCase());
+      
+      let isMatch = false;
+      if (expectedChallenge === 'THUMBS_UP' && labels.includes('THUMBS UP')) isMatch = true;
+      if (expectedChallenge === 'FIST' && (labels.includes('FIST') || labels.includes('HAND') || labels.includes('FINGERS'))) isMatch = true;
+
+      if (!isMatch) {
+        return { matched: false, reason: `Could not detect ${expectedChallenge} gesture in the photo.` };
+      }
+      return { matched: true };
+    } 
+    
+    if (expectedChallenge === 'SMILE') {
+      const command = new DetectFacesCommand({
+        Image: { Bytes: fileBuffer },
+        Attributes: ["ALL"]
+      });
+      const data = await rekognition.send(command);
+      if (!data.FaceDetails || data.FaceDetails.length === 0) {
+        return { matched: false, reason: "No face detected in the photo." };
+      }
+      const face = data.FaceDetails[0];
+      if (face.Smile && face.Smile.Value === true && face.Smile.Confidence > 60) {
+        return { matched: true };
+      }
+      return { matched: false, reason: "Could not detect a clear SMILE in the photo." };
+    }
+
+    return { matched: true }; // Default pass if unknown challenge
+  } catch (err) {
+    console.error("verifyFaceLiveness error:", err.message);
+    return { matched: false, reason: "Liveness verification failed due to internal error." };
+  }
+}
+
 // =======================================================
 // == API 4.7.1: Worker Attendance Issue Reporting
 // =======================================================
@@ -9247,7 +9349,8 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       'longitude',
       'deviceTimestamp',
       'mobileNumber',
-      'deviceId'
+      'deviceId',
+      'livenessChallenge'
     ];
 
     const bodyKeys = Object.keys(req.body);
@@ -9260,7 +9363,7 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
       }
     }
 
-    const { runInstanceId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId } = req.body;
+    const { runInstanceId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId, livenessChallenge } = req.body;
 
     if (!runInstanceId || !attendanceType || !imageUrl || !deviceTimestamp) {
       return res.status(400).send({
@@ -9275,6 +9378,16 @@ app.post('/api/obhs/attendance', verifyToken, async (req, res) => {
         error: "Invalid attendanceType.",
         details: "Allowed values are: 'start', 'mid', 'end'"
       });
+    }
+
+    if (livenessChallenge) {
+      const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
+      if (!livenessResult.matched) {
+        return res.status(400).send({
+          error: "Liveness Verification Failed",
+          details: livenessResult.reason
+        });
+      }
     }
 
     const { uid: workerId, fullName: workerName } = req.user;

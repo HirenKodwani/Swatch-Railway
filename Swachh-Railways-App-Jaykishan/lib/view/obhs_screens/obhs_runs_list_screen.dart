@@ -1290,8 +1290,9 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
       await showDialog(
         context: context,
         builder: (ctx) {
+          bool isSaving = false;
           return StatefulBuilder(
-            builder: (context, setStateDialog) {
+            builder: (dialogContext, setStateDialog) {
               return AlertDialog(
                 title: Text('Edit Assignment: Coach ${coach.coachPosition}'),
                 content: SizedBox(
@@ -1444,52 +1445,49 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
                     child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(ctx);
+                    onPressed: isSaving ? null : () async {
+                      setStateDialog(() => isSaving = true);
                       
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (context) => const Center(child: CircularProgressIndicator()),
-                      );
-
-                      final updatedCoaches = List<CoachAssignment>.from(instance.coaches);
-                      updatedCoaches[coachIndex] = updatedCoaches[coachIndex].copyWith(
-                        janitorId: selectedJanitor?.uid,
-                        janitorName: selectedJanitor?.fullName,
-                        attendantId: selectedAttendant?.uid,
-                        attendantName: selectedAttendant?.fullName,
-                        janitorTasks: selectedJanitorTasks,
-                        attendantTasks: selectedAttendantTasks,
-                      );
-
                       try {
+                        final updatedCoaches = List<CoachAssignment>.from(instance.coaches);
+                        updatedCoaches[coachIndex] = updatedCoaches[coachIndex].copyWith(
+                          janitorId: selectedJanitor?.uid,
+                          janitorName: selectedJanitor?.fullName,
+                          attendantId: selectedAttendant?.uid,
+                          attendantName: selectedAttendant?.fullName,
+                          janitorTasks: selectedJanitorTasks,
+                          attendantTasks: selectedAttendantTasks,
+                        );
+
                         await OBHSRepository.updateRunInstance(
                           runInstanceId: instanceId,
                           coaches: updatedCoaches,
                         );
 
                         if (!mounted) return;
-                        Navigator.pop(context); // close saving dialog
-                        Navigator.pop(context); // close bottom sheet
+                        
+                        // Close Edit Dialog
+                        if (mounted) {
+                          Navigator.of(ctx).pop();
+                        }
+                        
                         _loadRunInstances(); // reload list
                         
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Coach assignments updated successfully!'), backgroundColor: Colors.green),
                         );
                       } catch (e) {
+                        setStateDialog(() => isSaving = false);
                         if (!mounted) return;
-                        // Close saving dialog if still open
-                        if (Navigator.canPop(context)) {
-                          Navigator.pop(context);
-                        }
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Failed to assign worker: $e'), backgroundColor: Colors.red),
                         );
                       }
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue),
-                    child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+                    child: isSaving 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Save Changes', style: TextStyle(color: Colors.white)),
                   ),
                 ],
               );

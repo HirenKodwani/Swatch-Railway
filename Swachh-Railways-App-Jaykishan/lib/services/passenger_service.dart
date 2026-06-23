@@ -34,4 +34,24 @@ class PassengerService {
       throw Exception('Network error: $e');
     }
   }
+  static Future<List<String>> fetchCoachesForTrain(String trainNo) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/passenger/train/$trainNo/coaches'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['coaches'] != null) {
+          return List<String>.from(data['coaches']);
+        }
+        return [];
+      } else {
+        throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to fetch coaches');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
 }

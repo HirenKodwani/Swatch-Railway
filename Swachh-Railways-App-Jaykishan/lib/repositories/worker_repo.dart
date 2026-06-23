@@ -225,6 +225,7 @@ class WorkerRepository {
     required String imageUrl,
     double? latitude,
     double? longitude,
+    String? livenessChallenge,
   }) async {
     try {
       final token = await _getToken();
@@ -243,6 +244,7 @@ class WorkerRepository {
         'latitude': latitude?.toString() ?? '',
         'longitude': longitude?.toString() ?? '',
         'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
+        if (livenessChallenge != null) 'livenessChallenge': livenessChallenge,
       };
 
       final response = await _handleRequest(
