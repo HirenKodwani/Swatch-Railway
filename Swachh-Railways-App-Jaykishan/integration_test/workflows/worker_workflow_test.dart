@@ -26,6 +26,14 @@ void main() {
         // Find the "Mark" button next to Start Attendance
         final markBtn = find.text('Mark').first;
         await tester.tap(markBtn);
+        await tester.pumpAndSettle();
+
+        // Handle Liveness Dialog
+        final openCameraBtn = find.text('Open Camera');
+        if (openCameraBtn.evaluate().isNotEmpty) {
+          await tester.tap(openCameraBtn);
+        }
+        
         await tester.pumpAndSettle(const Duration(seconds: 4)); // Wait for GPS & API
       }
 
