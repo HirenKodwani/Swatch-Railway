@@ -525,15 +525,18 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
                         attendantTasks: tempAttendantTasks,
                       );
 
-                      if (currentInstance?.runInstanceId != null) {
+                      final instanceId = currentInstance?.runInstanceId ?? currentInstance?.id;
+                      if (instanceId != null) {
                         await OBHSRepository.updateRunInstance(
-                          runInstanceId: currentInstance!.runInstanceId!,
+                          runInstanceId: instanceId,
                           coaches: updatedCoaches,
                         );
+                      } else {
+                        debugPrint('Warning: Attempted to update coach assignment without a valid Run Instance ID');
                       }
 
                       if (!mounted) return;
-                      Navigator.pop(context); // close loading
+                      if (Navigator.canPop(context)) Navigator.pop(context); // close loading
                       setState(() => coaches = updatedCoaches);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

@@ -3809,6 +3809,34 @@ app.put('/api/run-instances/:runInstanceId', verifyToken, async (req, res) => {
       // Cache for worker names to avoid redundant DB calls
       const workerNamesCache = new Map();
 
+      // Bulk Fetch Technique: Collect all unique worker IDs and fetch them in one go
+      const uniqueWorkerIds = new Set();
+      coaches.forEach(c => {
+        if (c.janitorId || c.workerId) uniqueWorkerIds.add(c.janitorId || c.workerId);
+        if (c.attendantId) uniqueWorkerIds.add(c.attendantId);
+      });
+
+      const workerIdList = Array.from(uniqueWorkerIds).filter(id => id && typeof id === 'string');
+      
+      if (workerIdList.length > 0) {
+        // Fetch in batches of 30 (Firestore limit for 'in' queries)
+        const batches = [];
+        for (let i = 0; i < workerIdList.length; i += 30) {
+          batches.push(workerIdList.slice(i, i + 30));
+        }
+
+        await Promise.all(batches.map(async (batch) => {
+          const workersSnap = await db.collection('users')
+            .where(admin.firestore.FieldPath.documentId(), 'in', batch)
+            .get();
+          
+          workersSnap.forEach(doc => {
+            const data = doc.data();
+            workerNamesCache.set(doc.id, data.fullName || data.name || "Unknown Worker");
+          });
+        }));
+      }
+
       const coachesWithNames = await Promise.all(coaches.map(async (c) => {
         const actualJanitorId = c.janitorId || c.workerId || null;
         let janitorName = c.janitorName || "Unknown Worker";
