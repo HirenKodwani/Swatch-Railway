@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../utills/app_colors.dart';
 import '../../services/passenger_service.dart';
-import 'package:dropdown_search/dropdown_search.dart';
 
 class PassengerTaskScreen extends StatefulWidget {
   const PassengerTaskScreen({super.key});
@@ -169,31 +168,24 @@ class _PassengerTaskScreenState extends State<PassengerTaskScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownSearch<String>(
-                      popupProps: PopupProps.menu(
-                        showSearchBox: true,
-                        searchFieldProps: TextFieldProps(
-                          decoration: InputDecoration(
-                            hintText: "Search coach...",
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                        ),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedCoach,
+                      decoration: InputDecoration(
+                        labelText: 'Coach No.',
+                        prefixIcon: const Icon(Icons.meeting_room),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      items: _availableCoaches,
-                      dropdownDecoratorProps: DropDownDecoratorProps(
-                        dropdownSearchDecoration: InputDecoration(
-                          labelText: 'Coach No.',
-                          prefixIcon: const Icon(Icons.meeting_room),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
+                      items: _availableCoaches.map((String coach) {
+                        return DropdownMenuItem<String>(
+                          value: coach,
+                          child: Text(coach),
+                        );
+                      }).toList(),
                       onChanged: (String? newValue) {
                         setState(() {
                           _selectedCoach = newValue;
                         });
                       },
-                      selectedItem: _selectedCoach,
                       validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                     ),
                   ),
