@@ -9093,8 +9093,10 @@ async function compareFaces(image1Url, image2Url) {
 
     console.log(`[AWS Biometric] Downloading buffers directly: Path1 [${path1}], Path2 [${path2}]`);
 
-    const [fileBuffer1] = await bucket.file(path1).download();
-    const [fileBuffer2] = await bucket.file(path2).download();
+    const [[fileBuffer1], [fileBuffer2]] = await Promise.all([
+      bucket.file(path1).download(),
+      bucket.file(path2).download()
+    ]);
 
     if (!fileBuffer1 || fileBuffer1.length === 0) {
       console.error(`[AWS Buffer Block] First image buffer empty/corrupt. Path: ${path1}`);
@@ -9111,7 +9113,7 @@ async function compareFaces(image1Url, image2Url) {
       const command = new CompareFacesCommand({
         SourceImage: { Bytes: fileBuffer1 },
         TargetImage: { Bytes: fileBuffer2 },
-        SimilarityThreshold: 75
+        SimilarityThreshold: 60
       });
 
       const data = await rekognition.send(command);
@@ -9123,7 +9125,7 @@ async function compareFaces(image1Url, image2Url) {
       }
 
       if (data.UnmatchedFaces && data.UnmatchedFaces.length > 0) {
-        console.warn(`[AWS Rekognition Audit] Faces detected but all below 75% threshold. Unmatched: ${data.UnmatchedFaces.length}`);
+        console.warn(`[AWS Rekognition Audit] Faces detected but all below 60% threshold. Unmatched: ${data.UnmatchedFaces.length}`);
       } else {
         console.warn(`[AWS Rekognition Audit] No faces found in comparison. Possible: bad lighting, angle, or obstruction.`);
       }
@@ -9177,7 +9179,7 @@ async function verifyFaceLiveness(imageUrl, expectedChallenge) {
       const command = new DetectLabelsCommand({
         Image: { Bytes: fileBuffer },
         MaxLabels: 20,
-        MinConfidence: 60
+        MinConfidence: 50
       });
       const data = await rekognition.send(command);
       const labels = data.Labels.map(l => l.Name.toUpperCase());
@@ -9202,7 +9204,7 @@ async function verifyFaceLiveness(imageUrl, expectedChallenge) {
         return { matched: false, reason: "No face detected in the photo." };
       }
       const face = data.FaceDetails[0];
-      if (face.Smile && face.Smile.Value === true && face.Smile.Confidence > 60) {
+      if (face.Smile && face.Smile.Value === true && face.Smile.Confidence > 40) {
         return { matched: true };
       }
       return { matched: false, reason: "Could not detect a clear SMILE in the photo." };

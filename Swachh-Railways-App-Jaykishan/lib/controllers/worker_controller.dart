@@ -798,7 +798,7 @@ class WorkerController extends GetxController {
             const Icon(Icons.camera_front, size: 50, color: Colors.blue),
             const SizedBox(height: 10),
             Text(
-              'Please take a selfie showing a:\n\n$challengeText',
+              'Please take a selfie showing a:\n\n$challengeText\n\n(Keep your face clearly visible!)',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
