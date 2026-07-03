@@ -14,13 +14,13 @@ class UserService {
       throw new ValidationError("Email, Password, Role, and UserType are required.");
     }
 
-    const emailQuery = await db.collection('users').where('email', '==', normalizedEmail).get();
+    const emailQuery = await db.collection('users').where('email', '==', normalizedEmail).limit(1).get();
     if (!emailQuery.empty) {
       throw new ValidationError("Email already registered.");
     }
 
     if (mobile) {
-      const mobileQuery = await db.collection('users').where('mobile', '==', mobile).get();
+      const mobileQuery = await db.collection('users').where('mobile', '==', mobile).limit(1).get();
       if (!mobileQuery.empty) {
         throw new ValidationError("Mobile Number already registered.");
       }
@@ -238,7 +238,7 @@ class UserService {
 
   async getPendingUsers() {
     const usersRef = db.collection('users');
-    const snapshot = await usersRef.where('status', '==', 'PENDING').get();
+    const snapshot = await usersRef.where('status', '==', 'PENDING').limit(200).get();
 
     if (snapshot.empty) {
       return { count: 0, users: [], message: 'No pending users found.' };
@@ -358,7 +358,7 @@ class UserService {
       query = query.where('division', '==', userDivision);
     }
 
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     let userList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
 
@@ -412,14 +412,14 @@ class UserService {
       }
     }
 
-    let snapshot = await query.get();
+    let snapshot = await query.limit(200).get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 
     if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
       if (requesterZone) {
         console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
         const fallbackQuery = db.collection('users').where('role', '==', 'Railway Worker').where('zone', '==', requesterZone);
-        snapshot = await fallbackQuery.get();
+        snapshot = await fallbackQuery.limit(200).get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
     }
@@ -456,7 +456,7 @@ class UserService {
 
     const allRunsSnapshot = await db.collection('RunInstance')
       .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
-      .get();
+      .limit(200).get();
 
     let assignedRuns = [];
     allRunsSnapshot.forEach(doc => {
@@ -504,7 +504,7 @@ class UserService {
     const now = new Date();
     const runsSnapshot = await db.collection('RunInstance')
       .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
-      .get();
+      .limit(200).get();
 
     let activeRun = null;
     runsSnapshot.forEach(doc => {
@@ -521,7 +521,7 @@ class UserService {
       const runInstanceId = activeRun.runInstanceId;
       const coachType = activeRun.coachType || 'S2';
 
-      const completedSnapshot = await db.collection('obhs_tasks').where('runInstanceId', '==', runInstanceId).get();
+      const completedSnapshot = await db.collection('obhs_tasks').where('runInstanceId', '==', runInstanceId).limit(200).get();
       const completedTaskIds = new Set();
       completedSnapshot.forEach(doc => {
         completedTaskIds.add(doc.data().uid);
@@ -572,7 +572,7 @@ class UserService {
     const today = now.toISOString().split('T')[0];
     let attendancePercentage = 0;
     try {
-      const attendanceSnapshot = await db.collection('obhs_attendance').where('workerId', '==', uid).get();
+      const attendanceSnapshot = await db.collection('obhs_attendance').where('workerId', '==', uid).limit(200).get();
       let markedCount = 0;
       attendanceSnapshot.forEach(doc => {
         const d = doc.data();
@@ -589,7 +589,7 @@ class UserService {
 
     let complaintsRaised = 0;
     try {
-      const complaintsSnapshot = await db.collection('obhs_complaints').where('submittedBy.uid', '==', uid).get();
+      const complaintsSnapshot = await db.collection('obhs_complaints').where('submittedBy.uid', '==', uid).limit(200).get();
       complaintsRaised = complaintsSnapshot.size;
     } catch (_) {
       // Silently handle complaints error
@@ -597,7 +597,7 @@ class UserService {
 
     let averageRating = 0;
     try {
-      const ratingSnapshot = await db.collection('ratings').where('workerId', '==', uid).get();
+      const ratingSnapshot = await db.collection('ratings').where('workerId', '==', uid).limit(200).get();
       let total = 0, count = 0;
       ratingSnapshot.forEach(doc => {
         const r = doc.data().rating || 0;
@@ -627,7 +627,7 @@ class UserService {
   async getWorkers() {
     const snapshot = await db.collection('users')
       .where('role', 'in', ['Worker', 'Railway Worker', 'janitor', 'Janitor'])
-      .get();
+      .limit(200).get();
 
     if (snapshot.empty) {
       return { count: 0, workers: [] };
@@ -675,7 +675,7 @@ class UserService {
 
     let snapshot;
     try {
-      snapshot = await query.get();
+      snapshot = await query.limit(200).get();
     } catch (error) {
       if (error.code === 'FAILED_PRECONDITION') {
         throw new ValidationError(`Query requires an index. Firebase Console check karo. ${error.message}`);
@@ -714,7 +714,7 @@ class UserService {
     const workersSnapshot = await db.collection('users')
       .where('status', '==', 'APPROVED')
       .where('role', '==', 'Railway Worker')
-      .get();
+      .limit(200).get();
 
     if (workersSnapshot.empty) {
       return { success: true, message: "No active workers found.", data: [] };
@@ -748,7 +748,7 @@ class UserService {
       }
     });
 
-    const feedbackSnapshot = await db.collection('obhs_feedbacks').get();
+    const feedbackSnapshot = await db.collection('obhs_feedbacks').limit(200).get();
     feedbackSnapshot.docs.forEach(doc => {
       const fData = doc.data();
       if (!fData) return;
@@ -844,6 +844,35 @@ class UserService {
 
     delete targetUser.password;
     return targetUser;
+  }
+
+  async getWorkerTasks(workerId, query = {}) {
+    const snapshot = await db.collection('obhs_tasks').where('assignedTo', '==', workerId).limit(50).get();
+    const tasks = [];
+    snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
+    return { count: tasks.length, tasks };
+  }
+
+  async submitWorkerComplaint(user, body) {
+    const { title, description, category, priority } = body;
+    if (!title || !description) throw new ValidationError('Title and description are required.');
+    const complaintId = `cmp_${Date.now()}`;
+    const complaint = {
+      complaintId,
+      title,
+      description,
+      category: category || 'General',
+      priority: priority || 'MEDIUM',
+      status: 'OPEN',
+      raisedBy: user.uid,
+      raisedByName: user.fullName || 'Unknown',
+      division: user.division || null,
+      zone: user.zone || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await db.collection('complaints').doc(complaintId).set(complaint);
+    return { success: true, message: 'Complaint submitted successfully', complaintId };
   }
 }
 

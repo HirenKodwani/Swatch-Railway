@@ -4,7 +4,7 @@ import { NotFoundError, ValidationError, ConflictError, ForbiddenError, Firestor
 class StationService {
   async getStations(query = {}) {
     const { zone, division, category, active, userRole, userZone, userDivision } = query;
-    const snapshot = await db.collection('stations').get();
+    const snapshot = await db.collection('stations').limit(200).get();
     let stations = [];
     snapshot.forEach(doc => stations.push(doc.data()));
     const role = (userRole || '').toLowerCase();

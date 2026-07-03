@@ -6,7 +6,7 @@ import '../model/water_check_model.dart';
 import '../services/api_services.dart';
 
 class WaterRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,7 +36,7 @@ class WaterRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/water/checks').replace(
+      final uri = Uri.parse('$baseUrl/api/obhs/water-checks').replace(
         queryParameters: {'runInstanceId': runInstanceId},
       );
 
@@ -88,7 +88,7 @@ class WaterRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/water/checks'),
+          Uri.parse('$baseUrl/api/obhs/water-checks/submit'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -119,7 +119,7 @@ class WaterRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/water/alerts').replace(
+      final uri = Uri.parse('$baseUrl/api/obhs/water-checks/alerts').replace(
         queryParameters: {'runInstanceId': runInstanceId},
       );
 

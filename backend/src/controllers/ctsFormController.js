@@ -18,23 +18,28 @@ export const getById = asyncHandler(async (req, res) => {
 });
 
 export const approveManpower = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'CTS Form approved for scoring.' });
+  const result = await ctsFormService.approveManpower(req.user, req.params.formId);
+  res.status(200).json(result);
 });
 
 export const reject = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Form successfully rejected.' });
+  const result = await ctsFormService.rejectForm(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const submitScoring = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'CTS Scoring submitted successfully.' });
+  const result = await ctsFormService.submitScoring(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const acceptRating = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Rating accepted. CTS Form is now locked.' });
+  const result = await ctsFormService.acceptRating(req.user, req.params.formId);
+  res.status(200).json(result);
 });
 
 export const resubmit = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'CTS Form has been re-submitted successfully.' });
+  const result = await ctsFormService.resubmit(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const createEmergencyTask = asyncHandler(async (req, res) => {

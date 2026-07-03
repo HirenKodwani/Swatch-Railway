@@ -6,7 +6,7 @@ import '../model/garbage_task_model.dart';
 import '../services/api_services.dart';
 
 class GarbageRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,7 +36,7 @@ class GarbageRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/garbage/tasks').replace(
+      final uri = Uri.parse('$baseUrl/api/obhs/garbage-tasks').replace(
         queryParameters: {'runInstanceId': runInstanceId},
       );
 
@@ -75,6 +75,7 @@ class GarbageRepository {
       }
 
       final body = <String, dynamic>{
+        'taskId': taskId,
         'beforePhoto': beforePhoto,
         'afterPhoto': afterPhoto,
         'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
@@ -84,7 +85,7 @@ class GarbageRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/garbage/tasks/$taskId/complete'),
+          Uri.parse('$baseUrl/api/obhs/garbage-tasks/complete'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -115,7 +116,7 @@ class GarbageRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/garbage/pre-terminal').replace(
+      final uri = Uri.parse('$baseUrl/api/obhs/garbage-tasks/pre-terminal').replace(
         queryParameters: {'runInstanceId': runInstanceId},
       );
 

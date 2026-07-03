@@ -19,4 +19,26 @@ router.get('/tasks/:taskId', verifyToken, v2Controller.getTask);
 router.get('/obhs', verifyToken, v2Controller.listOBHS);
 router.get('/obhs/:obhsId', verifyToken, v2Controller.getOBHS);
 
+router.get('/task-masters', verifyToken, v2Controller.listTaskMasters);
+router.post('/task-masters', verifyToken, v2Controller.createTaskMaster);
+router.put('/task-masters/:taskCode', verifyToken, v2Controller.updateTaskMaster);
+router.post('/assignments/create', verifyToken, v2Controller.createAssignments);
+router.get('/assignments/:runInstanceId', verifyToken, v2Controller.getAssignments);
+router.get('/tasks/:runInstanceId', verifyToken, v2Controller.getTasks);
+router.post('/tasks/submit', verifyToken, v2Controller.submitTask);
+router.post('/tasks/start', verifyToken, v2Controller.startTask);
+router.post('/tasks/verify', verifyToken, v2Controller.verifyTask);
+router.post('/tasks/close', verifyToken, v2Controller.closeTask);
+router.post('/tasks/reopen', verifyToken, v2Controller.reopenTask);
+router.post('/tasks/not-applicable', verifyToken, v2Controller.markNotApplicable);
+router.put('/tasks/:taskInstanceId', verifyToken, v2Controller.updateTask);
+router.post('/escalations/create', verifyToken, v2Controller.createEscalation);
+router.post('/escalations/resolve/:escalationId', verifyToken, v2Controller.resolveEscalation);
+router.get('/escalations', verifyToken, v2Controller.listEscalations);
+router.get('/audit-logs', verifyToken, v2Controller.getAuditLogs);
+router.get('/closure-tasks/:runInstanceId', verifyToken, v2Controller.getClosureTasks);
+router.post('/closure-tasks/complete', verifyToken, v2Controller.completeClosureTask);
+router.get('/worker/my-tasks', verifyToken, v2Controller.getWorkerMyTasks);
+router.get('/journey/timeline/:runInstanceId', verifyToken, v2Controller.getJourneyTimeline);
+
 export default router;

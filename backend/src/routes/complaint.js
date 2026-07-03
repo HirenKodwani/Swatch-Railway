@@ -1,0 +1,21 @@
+import express from 'express';
+import { verifyToken } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/authorization.js';
+import { PERMISSIONS } from '../permissions/roles.js';
+import * as complaintController from '../controllers/complaintController.js';
+
+const router = express.Router();
+
+router.post('/api/complaints', verifyToken, requirePermission(PERMISSIONS.CREATE_COMPLAINT), complaintController.create);
+router.get('/api/complaints', verifyToken, requirePermission(PERMISSIONS.VIEW_COMPLAINTS), complaintController.list);
+router.post('/api/complaints/:uid/assign', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.assign);
+router.post('/api/complaints/:uid/resolve', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.resolve);
+router.post('/api/complaints/:uid/verify', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.verify);
+router.post('/api/complaints/:uid/close', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.close);
+
+router.post('/api/complaints/:uid/reopen', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.reopen);
+router.post('/api/complaints/:uid/reject', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.reject);
+router.get('/api/complaints/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_COMPLAINTS), complaintController.getById);
+router.delete('/api/complaints/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_COMPLAINTS), complaintController.remove);
+
+export default router;

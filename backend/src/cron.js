@@ -3,8 +3,14 @@ import { Resend } from 'resend';
 import ExcelJS from 'exceljs';
 import { db, admin } from './database/index.js';
 import * as evidence from '../evidence_manager.js';
+import logger from './logger/index.js';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend = null;
+try {
+  if (process.env.RESEND_API_KEY) resend = new Resend(process.env.RESEND_API_KEY);
+} catch (e) {
+  logger.warn('Resend not configured — email features disabled');
+}
 
 async function generateCoachExcelBuffer(data) {
   const workbook = new ExcelJS.Workbook();
@@ -79,6 +85,7 @@ async function sendEmailWithAttachments(email, division, coachBuffer, premisesBu
   const todayDate = new Date().toISOString().split('T')[0];
   try {
     const hasData = stats.coachCount > 0 || stats.premisesCount > 0;
+    if (!resend) { logger.warn('Resend not configured, skipping email'); return; }
     await resend.emails.send({
       from: 'Swachh Railways <reports@swachhrailways.com>',
       to: [email],
@@ -122,9 +129,9 @@ async function sendEmailWithAttachments(email, division, coachBuffer, premisesBu
         ...(premisesBuffer ? [{ filename: `Premises_Report_${division}_${todayDate}.xlsx`, content: premisesBuffer.toString('base64') }] : [])
       ],
     });
-    console.log(`Report successfully emailed to Admin: ${email} (${division})`);
+    logger.info('Cron', `Report successfully emailed to Admin: ${email} (${division})`);
   } catch (error) {
-    console.error(`Error sending email to ${email}:`, error);
+    logger.error('Cron', `Error sending email to ${email}:`, error);
   }
 }
 
@@ -134,12 +141,12 @@ async function getDailyReportData() {
   const endOfDay = new Date(today.setHours(23, 59, 59, 999));
   try {
     const adminSnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').get();
-    if (adminSnapshot.empty) { console.log("No admins found in the database."); return; }
+    if (adminSnapshot.empty) { logger.info('Cron', "No admins found in the database."); return; }
     for (const doc of adminSnapshot.docs) {
       const adminInfo = doc.data();
       const adminDivision = adminInfo.division;
       const adminEmail = adminInfo.email;
-      if (!adminDivision) { console.log(`Skipping admin ${adminEmail} because division is not set.`); continue; }
+      if (!adminDivision) { logger.info('Cron', `Skipping admin ${adminEmail} because division is not set.`); continue; }
       const coachSnapshot = await admin.firestore().collection('coachForms').where('submittedByDivision', '==', adminDivision).where('createdAt', '>=', startOfDay).where('createdAt', '<=', endOfDay).get();
       const coachData = coachSnapshot.docs.map(d => d.data());
       const premisesSnapshot = await admin.firestore().collection('premisesForms').where('submittedByDivision', '==', adminDivision).where('createdAt', '>=', startOfDay).where('createdAt', '<=', endOfDay).get();
@@ -148,7 +155,7 @@ async function getDailyReportData() {
       const premisesBuffer = premisesData.length > 0 ? await generatePremisesExcelBuffer(premisesData) : null;
       await sendEmailWithAttachments(adminEmail, adminDivision, coachBuffer, premisesBuffer, { coachCount: coachData.length, premisesCount: premisesData.length });
     }
-  } catch (error) { console.error("Error in Automated Reporting Loop:", error); }
+  } catch (error) { logger.error('Cron', "Error in Automated Reporting Loop:", error); }
 }
 
 const checkAndApprove = async (collectionName) => {
@@ -172,18 +179,18 @@ const checkAndApprove = async (collectionName) => {
         approvedCount++;
       }
     });
-    if (approvedCount > 0) { await batch.commit(); console.log(`[Cron] Auto-approved ${approvedCount} forms in ${collectionName}`); }
+    if (approvedCount > 0) { await batch.commit(); logger.info('Cron', `[Cron] Auto-approved ${approvedCount} forms in ${collectionName}`); }
   } catch (e) {
-    if (e.code !== 'FAILED_PRECONDITION') console.error(`[Cron Error] Form Approval:`, e.message);
+    if (e.code !== 'FAILED_PRECONDITION') logger.error('Cron', `[Cron Error] Form Approval:`, e.message);
   }
 };
 
 const checkContractExpiry = async () => {
   try {
-    console.log(' Checking for expired contracts...');
+    logger.info('Cron', ' Checking for expired contracts...');
     const now = new Date();
     const snapshot = await db.collection('contracts').where('status', 'in', ['Active', 'active']).get();
-    if (snapshot.empty) { console.log(' No active contracts found to check.'); return; }
+    if (snapshot.empty) { logger.info('Cron', ' No active contracts found to check.'); return; }
     const batch = db.batch();
     let expiredCount = 0;
     snapshot.forEach(doc => {
@@ -192,40 +199,40 @@ const checkContractExpiry = async () => {
         const endDate = new Date(data.endDate);
         endDate.setHours(23, 59, 59, 999);
         if (now > endDate) {
-          batch.update(db.collection('contracts').doc(doc.id), { status: 'Expired', updatedAt: new Date() });
+          batch.update(db.collection('contracts').doc(doc.id), { status: 'Expired', updatedAt: new Date().toISOString() });
           expiredCount++;
         }
       }
     });
-    if (expiredCount > 0) { await batch.commit(); console.log(` Successfully Expired ${expiredCount} contracts.`); }
-    else { console.log('All active contracts are still valid.'); }
-  } catch (e) { console.error(' [Cron Error] Contract Expiry:', e.message); }
+    if (expiredCount > 0) { await batch.commit(); logger.info('Cron', ` Successfully Expired ${expiredCount} contracts.`); }
+    else { logger.info('Cron', 'All active contracts are still valid.'); }
+  } catch (e) { logger.error('Cron', ' [Cron Error] Contract Expiry:', e.message); }
 };
 
 // ─── Daily midnight: Check contract expiry ───
 cron.schedule('0 0 * * *', () => {
-  console.log(' Running Midnight Cron Job...');
+  logger.info('Cron', ' Running Midnight Cron Job...');
   checkContractExpiry();
 });
 
 // ─── Daily 23:55: Automated daily reports ───
 cron.schedule('55 23 * * *', async () => {
-  console.log('--- Starting Automated Daily Reports ---');
+  logger.info('Cron', '--- Starting Automated Daily Reports ---');
   try {
     await getDailyReportData();
-    console.log('--- Finished Automated Daily Reports Successfully ---');
-  } catch (error) { console.error('--- Automated Daily Reports Failed ---', error); }
+    logger.info('Cron', '--- Finished Automated Daily Reports Successfully ---');
+  } catch (error) { logger.error('Cron', '--- Automated Daily Reports Failed ---', error); }
 });
 
 // ─── Daily 2 AM: Evidence archive ───
 cron.schedule('0 2 * * *', async () => {
-  console.log('--- Running Evidence Archive Cron ---');
+  logger.info('Cron', '--- Running Evidence Archive Cron ---');
   try {
     const result = await evidence.archiveOldRecords(db, db.getBucket(), 7);
-    console.log(`Archived ${result.archived} records older than ${result.daysOld} days`);
+    logger.info('Cron', `Archived ${result.archived} records older than ${result.daysOld} days`);
     const longResult = await evidence.moveToLongTerm(db, 30);
-    console.log(`Moved ${longResult.moved} records to long-term storage`);
-  } catch (error) { console.error('Evidence archive cron failed:', error); }
+    logger.info('Cron', `Moved ${longResult.moved} records to long-term storage`);
+  } catch (error) { logger.error('Cron', 'Evidence archive cron failed:', error); }
 });
 
 // ─── Every 10 minutes: Check forms and contracts as fallback ───
@@ -257,7 +264,7 @@ cron.schedule('*/15 * * * *', async () => {
         updateCount++;
       }
     });
-    if (updateCount > 0) { await headerBatch.commit(); console.log(`[Cron] Updated ${updateCount} task headers to OVERDUE`); }
+    if (updateCount > 0) { await headerBatch.commit(); logger.info('Cron', `[Cron] Updated ${updateCount} task headers to OVERDUE`); }
     const complaintSnapshot = await db.collection('obhs_complaints').where('status', '==', 'OPEN').get();
     const complaintBatch = db.batch();
     let escalatedCount = 0;
@@ -272,8 +279,8 @@ cron.schedule('*/15 * * * *', async () => {
         escalatedCount++;
       }
     });
-    if (escalatedCount > 0) { await complaintBatch.commit(); console.log(`[Cron] Auto-escalated ${escalatedCount} SLA-breached complaints`); }
-  } catch (error) { console.error('[Cron] Task status update error:', error); }
+    if (escalatedCount > 0) { await complaintBatch.commit(); logger.info('Cron', `[Cron] Auto-escalated ${escalatedCount} SLA-breached complaints`); }
+  } catch (error) { logger.error('Cron', '[Cron] Task status update error:', error); }
 });
 
 // ─── Every 5 minutes: Check task status transitions near scheduled times ───
@@ -301,8 +308,8 @@ cron.schedule('*/5 * * * *', async () => {
         dueSoonCount++;
       }
     });
-    if (openCount + dueSoonCount > 0) { await detailBatch.commit(); console.log(`[Cron] Task status updated: ${openCount} OPEN, ${dueSoonCount} DUE_SOON (${skippedCount} skipped - not active)`); }
-  } catch (error) { console.error('[Cron] Task detail status error:', error); }
+    if (openCount + dueSoonCount > 0) { await detailBatch.commit(); logger.info('Cron', `[Cron] Task status updated: ${openCount} OPEN, ${dueSoonCount} DUE_SOON (${skippedCount} skipped - not active)`); }
+  } catch (error) { logger.error('Cron', '[Cron] Task detail status error:', error); }
 });
 
 // ─── Every 5 minutes: Auto-escalate overdue tasks by time threshold ───
@@ -341,8 +348,8 @@ cron.schedule('*/5 * * * *', async () => {
         }
       }
     }
-    if (escalationCount > 0) { await batch.commit(); console.log(`[Cron] Auto-escalated ${escalationCount} overdue tasks`); }
-  } catch (error) { console.error('[Cron] Escalation error:', error); }
+    if (escalationCount > 0) { await batch.commit(); logger.info('Cron', `[Cron] Auto-escalated ${escalationCount} overdue tasks`); }
+  } catch (error) { logger.error('Cron', '[Cron] Escalation error:', error); }
 });
 
-console.log('Cron jobs initialized');
+logger.info('Cron', 'Cron jobs initialized');

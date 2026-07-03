@@ -5,7 +5,7 @@ import '../model/station_run_model.dart';
 import '../services/api_services.dart';
 
 class StationRunRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();

@@ -6,6 +6,8 @@ const router = express.Router();
 
 router.post('/', verifyToken, coachFormController.create);
 router.get('/', verifyToken, coachFormController.list);
+router.get('/submitted', verifyToken, coachFormController.getSubmitted);
+router.get('/pending/scoring', verifyToken, coachFormController.getPendingScoring);
 router.get('/:formId', verifyToken, coachFormController.getById);
 router.put('/:formId/approve-manpower', verifyToken, coachFormController.approveManpower);
 router.put('/:formId/scoring/draft', verifyToken, coachFormController.saveScoringDraft);

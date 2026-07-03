@@ -12,8 +12,12 @@ export const update = asyncHandler(async (req, res) => {
 });
 
 export const list = asyncHandler(async (req, res) => {
-  const { division, status } = req.query;
-  const result = await runInstanceService.getRunInstancesByDivision(division || req.user.division, status);
+  const { division: queryDivision, status } = req.query;
+  const division = queryDivision || req.user?.division;
+  if (!division) {
+    return res.status(400).json({ error: 'Division is required' });
+  }
+  const result = await runInstanceService.getRunInstancesByDivision(division, status);
   res.status(200).json(result);
 });
 
@@ -26,7 +30,8 @@ export const getByParentTrain = asyncHandler(async (req, res) => {
 });
 
 export const remove = asyncHandler(async (req, res) => {
-  res.status(200).json({ success: true, message: 'Run instance deleted successfully' });
+  const result = await runInstanceService.deleteRunInstance(req.params.runInstanceId);
+  res.status(200).json(result);
 });
 
 export const getObhsRun = asyncHandler(async (req, res) => {

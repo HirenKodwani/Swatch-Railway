@@ -4,7 +4,12 @@ dotenv.config();
 const config = Object.freeze({
   port: parseInt(process.env.PORT, 10) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
-  jwtSecret: process.env.JWT_SECRET,
+  jwtSecret: process.env.JWT_SECRET || (() => {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET environment variable is required');
+    }
+    return 'dev-secret-do-not-use-in-production';
+  })(),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   jwtOtpExpiresIn: '15d',
 

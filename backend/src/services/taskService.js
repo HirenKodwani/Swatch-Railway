@@ -7,7 +7,7 @@ class TaskService {
     let query = db.collection('obhs_tasks');
     if (status) query = query.where('status', '==', status);
     if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const tasks = [];
     snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
     return { success: true, count: tasks.length, data: tasks };
@@ -47,7 +47,7 @@ class TaskService {
   async getTaskSummary(runInstanceId) {
     let query = db.collection('obhs_tasks');
     if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     let total = 0, completed = 0;
     snapshot.forEach(doc => {
       total++;
@@ -90,7 +90,7 @@ class TaskService {
     const { trainNo } = filters;
     let query = db.collection('passenger_tasks');
     if (trainNo) query = query.where('trainNo', '==', trainNo);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const tasks = [];
     snapshot.forEach(doc => tasks.push({ uid: doc.id, ...doc.data() }));
     tasks.sort((a, b) => {
@@ -99,6 +99,39 @@ class TaskService {
       return dateB - dateA;
     });
     return { success: true, count: tasks.length, tasks };
+  }
+
+  async getTaskById(taskId) {
+    const doc = await db.collection('obhs_tasks').doc(taskId).get();
+    if (!doc.exists) throw new NotFoundError('Task not found');
+    return { success: true, data: { id: doc.id, ...doc.data() } };
+  }
+
+  async getMyTasks(workerId, query = {}) {
+    let q = db.collection('obhs_tasks').where('assignedTo', '==', workerId);
+    if (query.status) q = q.where('status', '==', query.status);
+    const snapshot = await q.limit(200).get();
+    const tasks = [];
+    snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
+    return { success: true, count: tasks.length, data: tasks };
+  }
+
+  async getTaskHistory(filters = {}) {
+    const { user, query } = filters;
+    let q = db.collection('obhs_tasks');
+    if (query.status) q = q.where('status', '==', query.status);
+    if (query.runInstanceId) q = q.where('runInstanceId', '==', query.runInstanceId);
+    if (user && user.division) q = q.where('division', '==', user.division);
+    const snapshot = await q.limit(200).get();
+    const tasks = [];
+    snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
+    tasks.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    return { success: true, count: tasks.length, data: tasks };
+  }
+
+  async deleteTask(taskId) {
+    await db.collection('obhs_tasks').doc(taskId).delete();
+    return { success: true, message: 'Task deleted' };
   }
 }
 

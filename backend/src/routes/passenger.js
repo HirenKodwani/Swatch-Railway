@@ -10,4 +10,11 @@ router.get('/:passengerId', verifyToken, passengerController.getById);
 router.put('/:passengerId', verifyToken, passengerController.update);
 router.delete('/:passengerId', verifyToken, passengerController.remove);
 
+router.post('/send-otp', passengerController.sendOtp);
+router.post('/verify-otp', passengerController.verifyOtp);
+router.post('/create-task', passengerController.createTask);
+router.get('/tasks', verifyToken, passengerController.getTasks);
+router.get('/train/:trainNo/coaches', passengerController.getTrainCoaches);
+router.post('/create-emergency-task', verifyToken, passengerController.createEmergencyTask);
+
 export default router;

@@ -71,4 +71,14 @@ export const getUserById = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
-export default { createUser, updateUser, approveUser, getPendingUsers, rejectUser, suspendUser, getUsers, getRailwayWorkers, getWorkerProfile, getWorkerStatistics, getWorkers, getRailwaySupervisors, getWorkersPerformance, getUserById };
+export const getWorkerTasks = asyncHandler(async (req, res) => {
+  const result = await userService.getWorkerTasks(req.user.uid, req.query);
+  res.status(200).json(result);
+});
+
+export const submitWorkerComplaint = asyncHandler(async (req, res) => {
+  const result = await userService.submitWorkerComplaint(req.user, req.body);
+  res.status(201).json(result);
+});
+
+export default { createUser, updateUser, approveUser, getPendingUsers, rejectUser, suspendUser, getUsers, getRailwayWorkers, getWorkerProfile, getWorkerStatistics, getWorkers, getRailwaySupervisors, getWorkersPerformance, getUserById, getWorkerTasks, submitWorkerComplaint };

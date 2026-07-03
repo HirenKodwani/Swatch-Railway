@@ -45,3 +45,13 @@ export const getById = asyncHandler(async (req, res) => {
   const result = await coachFormService.getCoachFormById(req.params.formId);
   res.status(200).json(result);
 });
+
+export const getSubmitted = asyncHandler(async (req, res) => {
+  const result = await coachFormService.getCoachForms({ user: req.user, query: { ...req.query, status: 'SUBMITTED' } });
+  res.status(200).json(result);
+});
+
+export const getPendingScoring = asyncHandler(async (req, res) => {
+  const result = await coachFormService.getCoachForms({ user: req.user, query: { ...req.query, status: 'APPROVED' } });
+  res.status(200).json(result);
+});

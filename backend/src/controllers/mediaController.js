@@ -21,6 +21,6 @@ export const getPublicUrl = asyncHandler(async (req, res) => {
 });
 
 export const list = asyncHandler(async (req, res) => {
-  const result = await mediaService.listFiles(req.query);
+  const result = await mediaService.searchEvidence(req.query);
   res.status(200).json(result);
 });

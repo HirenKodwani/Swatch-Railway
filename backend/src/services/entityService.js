@@ -12,7 +12,7 @@ class EntityService {
       throw new ValidationError('companyName and registrationType are required.');
     }
 
-    const existing = await db.collection('entities').where('companyName', '==', companyName).get();
+    const existing = await db.collection('entities').where('companyName', '==', companyName).limit(1).get();
     if (!existing.empty) {
       throw new ConflictError('Company with this name already exists.');
     }
@@ -95,14 +95,14 @@ class EntityService {
         updates.suspendedByName = editorName;
         updates.suspendedAt = new Date().toISOString();
 
-        const usersSnapshot = await db.collection('users').where('entityId', '==', uid).get();
+        const usersSnapshot = await db.collection('users').where('entityId', '==', uid).limit(200).get();
         if (!usersSnapshot.empty) {
           const batch = db.batch();
           usersSnapshot.forEach(doc => batch.update(doc.ref, { status: 'SUSPENDED' }));
           await batch.commit();
         }
 
-        const contractsSnapshot = await db.collection('contracts').where('entityId', '==', uid).get();
+        const contractsSnapshot = await db.collection('contracts').where('entityId', '==', uid).limit(200).get();
         if (!contractsSnapshot.empty) {
           const batch2 = db.batch();
           contractsSnapshot.forEach(doc => batch2.update(doc.ref, { status: 'SUSPENDED' }));
@@ -137,7 +137,7 @@ class EntityService {
       }
 
       if (isFilteredByContract) {
-        const contractSnap = await contractQuery.get();
+        const contractSnap = await contractQuery.limit(200).get();
         if (!contractSnap.empty) {
           finalEntityIds = [...new Set(contractSnap.docs.map(doc => doc.data().entityId))];
         }
@@ -159,7 +159,7 @@ class EntityService {
       entityQuery = entityQuery.where('status', '==', 'APPROVED');
     }
 
-    const snapshot = await entityQuery.get();
+    const snapshot = await entityQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contractors: [] };
 
     const contractorList = [];
@@ -273,7 +273,7 @@ class EntityService {
     if (!entityDoc.exists) throw new NotFoundError('Entity not found.');
 
     const entityData = entityDoc.data();
-    const contractsSnapshot = await contractsRef.where('entityId', '==', uid).get();
+    const contractsSnapshot = await contractsRef.where('entityId', '==', uid).limit(200).get();
 
     const contractsList = [];
     if (!contractsSnapshot.empty) {

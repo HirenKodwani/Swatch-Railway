@@ -10,7 +10,7 @@ import '../model/train_model.dart';
 
 class OBHSRepository {
 
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -182,7 +182,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/run-instances'),
+          Uri.parse('$baseUrl/api/runInstances'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -300,7 +300,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.put(
-          Uri.parse('$baseUrl/api/run-instances/$runInstanceId'),
+          Uri.parse('$baseUrl/api/runInstances/$runInstanceId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -342,7 +342,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.delete(
-          Uri.parse('$baseUrl/api/run-instances/$runInstanceId'),
+          Uri.parse('$baseUrl/api/runInstances/$runInstanceId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -408,7 +408,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.get(
-          Uri.parse('$baseUrl/api/run-instances'),
+          Uri.parse('$baseUrl/api/runInstances'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -518,7 +518,7 @@ class OBHSRepository {
         ? '$baseUrl/api/tasks/$taskId/approve'
         : '$baseUrl/api/tasks/$taskId/reject';
 
-      final response = await _handleRequest(() => http.post(
+      final response = await _handleRequest(() => http.put(
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',

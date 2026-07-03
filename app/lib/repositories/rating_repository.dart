@@ -6,7 +6,7 @@ import '../model/rating_model.dart';
 import '../services/api_services.dart';
 
 class RatingRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,7 +48,7 @@ class RatingRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/ratings'),
+          Uri.parse('$baseUrl/api/obhs/ratings/submit'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -79,7 +79,7 @@ class RatingRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/ratings/employee/$employeeId');
+      final uri = Uri.parse('$baseUrl/api/obhs/ratings/employee/$employeeId');
 
       final response = await _handleRequest(
         () => http.get(uri, headers: {
@@ -117,7 +117,7 @@ class RatingRepository {
 
       final response = await _handleRequest(
         () => http.get(
-          Uri.parse('$baseUrl/api/ratings/performance/$employeeId'),
+          Uri.parse('$baseUrl/api/obhs/ratings/performance/$employeeId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',

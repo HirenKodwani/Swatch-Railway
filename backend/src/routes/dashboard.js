@@ -4,7 +4,13 @@ import * as dashboardController from '../controllers/dashboardController.js';
 
 const router = express.Router();
 
-router.get('/stats', verifyToken, dashboardController.stats);
-router.get('/railway-dashboard-stats', verifyToken, dashboardController.railwayDashboardStats);
+router.get('/api/dashboard/stats', verifyToken, dashboardController.stats);
+router.get('/api/dashboard/user-stats', verifyToken, dashboardController.userStats);
+router.get('/api/dashboard/train-stats', verifyToken, dashboardController.trainStats);
+router.get('/api/dashboard/supervisor', verifyToken, dashboardController.supervisorStats);
+router.get('/api/dashboard/active-trains', verifyToken, dashboardController.activeTrains);
+router.get('/api/dashboard/active-workers', verifyToken, dashboardController.activeWorkers);
+router.get('/api/all-forms/stats', verifyToken, dashboardController.allFormsStats);
+router.get('/api/railway-dashboard-stats', verifyToken, dashboardController.railwayDashboardStats);
 
 export default router;

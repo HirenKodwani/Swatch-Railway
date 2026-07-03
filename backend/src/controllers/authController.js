@@ -61,4 +61,9 @@ export const changePassword = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
-export default { sendOtp, verifyOtp, sendEmailOtp, verifyEmailOtp, login, loginWithMobile, sendForgotPasswordOtp, verifyForgotPasswordOtp, resetPassword, sendForgotPasswordEmailOtp, verifyForgotPasswordEmailOtp, changePassword };
+export const updateProfile = asyncHandler(async (req, res) => {
+  const result = await authService.updateProfile(req.user.uid, req.body);
+  res.status(200).json(result);
+});
+
+export default { sendOtp, verifyOtp, sendEmailOtp, verifyEmailOtp, login, loginWithMobile, sendForgotPasswordOtp, verifyForgotPasswordOtp, resetPassword, sendForgotPasswordEmailOtp, verifyForgotPasswordEmailOtp, changePassword, updateProfile };

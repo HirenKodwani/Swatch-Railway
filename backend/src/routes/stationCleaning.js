@@ -15,8 +15,8 @@ router.get('/api/station-schedule/list/:stationId', verifyToken, stationCleaning
 
 router.post('/api/station-runs', verifyToken, stationCleaning.createStationRun);
 router.get('/api/station-runs', verifyToken, stationCleaning.listStationRuns);
-router.put('/api/station-runs/:runId', verifyToken, stationCleaning.updateStationRun);
 router.get('/api/station-runs/my-runs', verifyToken, stationCleaning.getMyStationRuns);
+router.put('/api/station-runs/:runId', verifyToken, stationCleaning.updateStationRun);
 router.delete('/api/station-runs/:runId', verifyToken, stationCleaning.deleteStationRun);
 
 router.post('/api/station-tasks/submit', verifyToken, stationCleaning.submitStationTask);

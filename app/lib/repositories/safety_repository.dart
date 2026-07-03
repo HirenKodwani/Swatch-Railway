@@ -6,7 +6,7 @@ import '../model/safety_check_model.dart';
 import '../services/api_services.dart';
 
 class SafetyRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,7 +36,7 @@ class SafetyRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/safety/checks').replace(
+      final uri = Uri.parse('$baseUrl/api/obhs/safety-checks').replace(
         queryParameters: {'runInstanceId': runInstanceId},
       );
 
@@ -76,7 +76,7 @@ class SafetyRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/safety/checks'),
+          Uri.parse('$baseUrl/api/obhs/safety-checks/submit'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -111,6 +111,7 @@ class SafetyRepository {
       }
 
       final body = <String, dynamic>{
+        'checkId': checkId,
         'deficiencyReport': deficiencyReport,
         'photoUrl': photoUrl,
         'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
@@ -118,7 +119,7 @@ class SafetyRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/safety/checks/$checkId/deficiency'),
+          Uri.parse('$baseUrl/api/obhs/safety-checks/report-deficiency'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',

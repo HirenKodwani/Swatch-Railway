@@ -1,4 +1,4 @@
-import { db } from '../database/index.js';
+import { db, admin } from '../database/index.js';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -44,7 +44,7 @@ class BillingService {
     } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
       query = query.where('division', '==', division);
     }
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const configs = [];
     snapshot.forEach(doc => configs.push(doc.data()));
     return { count: configs.length, configs };
@@ -102,7 +102,7 @@ class BillingService {
     if (zone) query = query.where('zone', '==', zone);
     if (month) query = query.where('month', '==', parseInt(month));
     if (year) query = query.where('year', '==', parseInt(year));
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const reports = [];
     snapshot.forEach(doc => reports.push(doc.data()));
     reports.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
@@ -137,7 +137,7 @@ class BillingService {
       status: 'APPROVED', approvedBy: approverId, approvedByName: fullName,
       approvedAt: new Date().toISOString(), invoiceNumber,
       invoiceGeneratedAt: new Date().toISOString(),
-      auditLog: db.arrayUnion({ action: 'APPROVED', performedBy: approverId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Bill approved by ${fullName}` })
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'APPROVED', performedBy: approverId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Bill approved by ${fullName}` })
     });
     return { message: 'Bill approved', invoiceNumber };
   }
@@ -152,7 +152,7 @@ class BillingService {
     await ref.update({
       status: 'REJECTED', rejectedBy: rejectorId, rejectedByName: fullName,
       rejectedAt: new Date().toISOString(), rejectionReason: reason || 'No reason provided',
-      auditLog: db.arrayUnion({ action: 'REJECTED', performedBy: rejectorId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Bill rejected by ${fullName}` })
+      auditLog: admin.firestore.FieldValue.arrayUnion({ action: 'REJECTED', performedBy: rejectorId, performedByName: fullName, timestamp: new Date().toISOString(), details: `Bill rejected by ${fullName}` })
     });
     return { message: 'Bill rejected' };
   }
@@ -163,7 +163,7 @@ class BillingService {
     if (userType === 'contractor') query = query.where('entityId', '==', entityId);
     else if ((role || '').toLowerCase() === 'railway master') query = query.where('zone', '==', zone);
     else if ((role || '').toLowerCase().includes('admin') || (role || '').toLowerCase().includes('supervisor')) query = query.where('division', '==', division);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const summary = { pendingBills: 0, approvedBills: 0, rejectedBills: 0, totalContractValue: 0, totalDeductions: 0, totalPayable: 0, activeContracts: 0 };
     const contractIds = new Set();
     snapshot.forEach(doc => {
@@ -195,8 +195,8 @@ class BillingService {
     const { entityId } = user;
     if (!entityId) throw new ForbiddenError('Entity ID missing.');
     const [ruleSnapshot, reportSnapshot] = await Promise.all([
-      db.collection('billingRules').where('entityId', '==', entityId).get(),
-      db.collection('billingReports').where('entityId', '==', entityId).get()
+      db.collection('billingRules').where('entityId', '==', entityId).limit(200).get(),
+      db.collection('billingReports').where('entityId', '==', entityId).limit(200).get()
     ]);
     const configs = [];
     ruleSnapshot.forEach(doc => configs.push(doc.data()));
@@ -215,8 +215,8 @@ class BillingService {
   async getSupervisorDashboard(user) {
     const { division } = user;
     const [contractsSnapshot, reportSnapshot] = await Promise.all([
-      db.collection('contracts').where('division', '==', division).where('status', '==', 'Active').get(),
-      db.collection('billingReports').where('division', '==', division).get()
+      db.collection('contracts').where('division', '==', division).where('status', '==', 'Active').limit(200).get(),
+      db.collection('billingReports').where('division', '==', division).limit(200).get()
     ]);
     const reports = [];
     reportSnapshot.forEach(doc => reports.push(doc.data()));

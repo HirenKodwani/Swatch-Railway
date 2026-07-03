@@ -6,7 +6,7 @@ import '../model/supervisor_dashboard_model.dart';
 import '../services/api_services.dart';
 
 class DashboardRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();

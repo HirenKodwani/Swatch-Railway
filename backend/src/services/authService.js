@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { db, admin } from '../database/index.js';
 import { AppError, AuthenticationError, ForbiddenError, NotFoundError, ValidationError } from '../errors/index.js';
 import config from '../config/index.js';
+import logger from '../logger/index.js';
 import { notificationService } from '../notifications/index.js';
 import otpStore from '../utils/otpStore.js';
 
@@ -13,7 +14,7 @@ class AuthService {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await otpStore.set(phone, otp);
     await notificationService.sendOtpSms(phone, otp);
-    console.log(`(2Factor) OTP ${otp} sent to ${phone}`);
+    logger.info('Auth', `(2Factor) OTP sent to ${phone}`);
     return { success: true, message: "OTP has been sent to your mobile number." };
   }
 
@@ -47,12 +48,12 @@ class AuthService {
       }
     }
     const token = jwt.sign(
-      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, mobile: userData.mobile, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId, entityDetails: entityDetails },
+      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, mobile: userData.mobile, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId },
       config.jwtSecret,
-      { expiresIn: '15d' }
+      { expiresIn: '7d' }
     );
     delete userData.password;
-    console.log(`(Login) Success via 2Factor OTP for ${phone}`);
+    logger.info('Auth', `(Login) Success via 2Factor OTP for ${phone}`);
     return { success: true, message: "Login Successful", token, user: userData };
   }
 
@@ -66,7 +67,7 @@ class AuthService {
     }
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await otpStore.set(email, otp);
-    console.log(`(Resend) Generated OTP ${otp} for ${email}`);
+    logger.info('Auth', `(Resend) Generated OTP for ${email}`);
     await notificationService.sendOtpEmail(email, otp, 'login');
     return { message: "OTP has been sent to your email." };
   }
@@ -101,12 +102,12 @@ class AuthService {
       }
     }
     const token = jwt.sign(
-      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId, entityDetails: entityDetails },
+      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId },
       config.jwtSecret,
       { expiresIn: '7d' }
     );
     delete userData.password;
-    console.log(`(Login) Success via Resend OTP for ${email}`);
+    logger.info('Auth', `(Login) Success via Resend OTP for ${email}`);
     return { message: "Login Successful", token, user: userData };
   }
 
@@ -118,16 +119,16 @@ class AuthService {
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('email', '==', normalizedEmail).limit(1).get();
     if (snapshot.empty) {
-      console.log(`(Login) Failed login: Email not found ${normalizedEmail}`);
+      logger.info('Auth', `(Login) Failed login: Email not found ${normalizedEmail}`);
       throw new AuthenticationError("Invalid credentials.");
     }
     const userData = snapshot.docs[0].data();
     if (userData.password !== password) {
-      console.log(`(Login) Failed login: Password mismatch for ${normalizedEmail}`);
+      logger.info('Auth', `(Login) Failed login: Password mismatch for ${normalizedEmail}`);
       throw new AuthenticationError("Invalid credentials.");
     }
     if (userData.status !== 'APPROVED') {
-      console.log(`(Login) Failed login for ${normalizedEmail}: Status is ${userData.status}`);
+      logger.info('Auth', `(Login) Failed login for ${normalizedEmail}: Status is ${userData.status}`);
       throw new ForbiddenError(`Your account status is: ${userData.status}. Contact admin.`);
     }
     let entityDetails = null;
@@ -143,6 +144,7 @@ class AuthService {
       if (userData.uid) {
         const runInstanceSnapshot = await db.collection('RunInstance')
           .where('status', 'in', ['PLANNED', 'ALLOCATED', 'READY', 'Active', 'ACTIVE', 'active', 'Scheduled', 'scheduled', 'Running', 'running'])
+          .limit(200)
           .get();
         for (const doc of runInstanceSnapshot.docs) {
           const runData = doc.data();
@@ -156,15 +158,15 @@ class AuthService {
         }
       }
     } catch (runError) {
-      console.error('(Login) Optional RunInstance fetch failed:', runError);
+      logger.error('Auth', '(Login) Optional RunInstance fetch failed:', runError);
     }
     userData.activeRunInstanceId = activeRunInstanceId;
     const customAppToken = jwt.sign(
-      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId, entityDetails: entityDetails, activeRunInstanceId: activeRunInstanceId },
+      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId, activeRunInstanceId: activeRunInstanceId },
       config.jwtSecret,
       { expiresIn: '7d' }
     );
-    console.log(`(Login) Successful login for ${normalizedEmail}, ActiveRunInstance: ${activeRunInstanceId}`);
+    logger.info('Auth', `(Login) Successful login for ${normalizedEmail}, ActiveRunInstance: ${activeRunInstanceId}`);
     delete userData.password;
     return { message: "Login Successful", token: customAppToken, user: userData };
   }
@@ -176,16 +178,16 @@ class AuthService {
     const usersRef = db.collection('users');
     const snapshot = await usersRef.where('mobile', '==', mobile).limit(1).get();
     if (snapshot.empty) {
-      console.log(`(Login) Failed login: Mobile not found ${mobile}`);
+      logger.info('Auth', `(Login) Failed login: Mobile not found ${mobile}`);
       throw new AuthenticationError("Invalid credentials.");
     }
     const userData = snapshot.docs[0].data();
     if (userData.password !== password) {
-      console.log(`(Login) Failed login: Password mismatch for mobile ${mobile}`);
+      logger.info('Auth', `(Login) Failed login: Password mismatch for mobile ${mobile}`);
       throw new AuthenticationError("Invalid credentials.");
     }
     if (userData.status !== 'APPROVED') {
-      console.log(`(Login) Failed login for mobile ${mobile}: Status is ${userData.status}`);
+      logger.info('Auth', `(Login) Failed login for mobile ${mobile}: Status is ${userData.status}`);
       throw new ForbiddenError(`Your account status is: ${userData.status}. Contact admin.`);
     }
     let entityDetails = null;
@@ -197,11 +199,11 @@ class AuthService {
       }
     }
     const customAppToken = jwt.sign(
-      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, mobile: userData.mobile, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId, entityDetails: entityDetails },
+      { uid: userData.uid, role: userData.role, userType: userData.userType, fullName: userData.fullName, email: userData.email, mobile: userData.mobile, zone: userData.zone, division: userData.division, depot: userData.depot, entityId: userData.entityId },
       config.jwtSecret,
       { expiresIn: '7d' }
     );
-    console.log(`(Login) Successful login for mobile ${mobile}`);
+    logger.info('Auth', `(Login) Successful login for mobile ${mobile}`);
     delete userData.password;
     return { message: "Login Successful", token: customAppToken, user: userData };
   }
@@ -221,11 +223,11 @@ class AuthService {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await otpStore.set(`RESET_${mobile}`, otp);
     if (!config.sms.twilio.phoneNumber) {
-      console.error(' TWILIO_PHONE_NUMBER not configured');
+      logger.error('Auth', ' TWILIO_PHONE_NUMBER not configured');
       throw new AppError("SMS service not configured", 500);
     }
     await notificationService.sendPasswordResetOtpSms(mobile, otp);
-    console.log(`(ForgotPwd) OTP ${otp} sent to ${mobile}`);
+    logger.info('Auth', `(ForgotPwd) OTP sent to ${mobile}`);
     return { message: "OTP sent to your registered mobile number." };
   }
 
@@ -248,7 +250,7 @@ class AuthService {
     }
     const userDoc = snapshot.docs[0];
     const resetToken = jwt.sign({ uid: userDoc.id, purpose: 'password_reset' }, config.jwtSecret, { expiresIn: '10m' });
-    console.log(`(ForgotPwd) OTP Verified for ${mobile}. Sending Reset Token.`);
+    logger.info('Auth', `(ForgotPwd) OTP Verified for ${mobile}. Sending Reset Token.`);
     return { message: "OTP Verified. Please proceed to reset password.", resetToken };
   }
 
@@ -267,7 +269,7 @@ class AuthService {
     }
     const uid = decoded.uid;
     await db.collection('users').doc(uid).update({ password: newPassword, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-    console.log(`(ForgotPwd) Password reset success for User UID: ${uid}`);
+    logger.info('Auth', `(ForgotPwd) Password reset success for User UID: ${uid}`);
     return { message: "Password has been reset successfully. You can now login." };
   }
 
@@ -283,7 +285,7 @@ class AuthService {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await otpStore.set(`RESET_EMAIL_${email}`, otp);
     await notificationService.sendOtpEmail(email, otp, 'reset');
-    console.log(`(ForgotPwd) Email OTP ${otp} sent to ${email}`);
+    logger.info('Auth', `(ForgotPwd) Email OTP sent to ${email}`);
     return { message: "OTP sent to your registered email." };
   }
 
@@ -306,8 +308,36 @@ class AuthService {
     }
     const userDoc = snapshot.docs[0];
     const resetToken = jwt.sign({ uid: userDoc.id, purpose: 'password_reset' }, config.jwtSecret, { expiresIn: '10m' });
-    console.log(`(ForgotPwd) Email OTP Verified for ${email}. Sending Token.`);
+    logger.info('Auth', `(ForgotPwd) Email OTP Verified for ${email}. Sending Token.`);
     return { message: "OTP Verified. Please proceed to reset password.", resetToken };
+  }
+
+  async updateProfile(userId, updateData) {
+    const allowedFields = ['fullName', 'mobile', 'designation', 'profilePhoto', 'email'];
+    const ref = db.collection('users').doc(userId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('User not found');
+
+    const data = {};
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        if (field === 'mobile' && !/^\d{10}$/.test(updateData.mobile)) {
+          throw new ValidationError('Invalid mobile number. Must be 10 digits.');
+        }
+        data[field] = updateData[field];
+      }
+    }
+
+    if (Object.keys(data).length === 0) throw new ValidationError('No fields to update');
+
+    data.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    data.updatedBy = userId;
+
+    await ref.update(data);
+    const updated = await ref.get();
+    const userData = updated.data();
+    delete userData.password;
+    return { message: 'Profile updated successfully', user: userData };
   }
 
   async changePassword(uid, currentPassword, newPassword, userDetails) {

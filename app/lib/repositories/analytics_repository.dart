@@ -7,7 +7,7 @@ import '../model/coach_cleanliness_model.dart';
 import '../services/api_services.dart';
 
 class AnalyticsRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();

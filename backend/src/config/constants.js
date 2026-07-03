@@ -24,20 +24,7 @@ export const COLORS = {
 
 export const PENALTY_MAP = { 'A': 0, 'B': 50, 'C': 100, 'D': 200 };
 
-export const ROLE_HIERARCHY = {
-  'SUPER_ADMIN': 100,
-  'COMPANY_MASTER': 90,
-  'RAILWAY_MASTER': 80,
-  'ADMIN': 70,
-  'RAILWAY_ADMIN': 60,
-  'RAILWAY_SUPERVISOR': 50,
-  'CONTRACTOR_SUPERVISOR': 40,
-  'CTS': 30,
-  'WORKER': 10,
-  'RAILWAY_WORKER': 10,
-  'JANITOR': 10,
-  'ATTENDANT': 10
-};
+export { ROLE_HIERARCHY } from '../permissions/roles.js';
 
 export const CLEANING_TIMES = [
   '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',

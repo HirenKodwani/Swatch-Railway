@@ -1,42 +1,62 @@
 import { billingService } from '../services/billingService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
-export const create = asyncHandler(async (req, res) => {
+export const createConfig = asyncHandler(async (req, res) => {
+  const result = await billingService.saveBillingConfig(req.body, req.user);
+  res.status(201).json(result);
+});
+
+export const listConfig = asyncHandler(async (req, res) => {
+  const result = await billingService.listBillingConfigs(req.user);
+  res.status(200).json(result);
+});
+
+export const getConfigByContract = asyncHandler(async (req, res) => {
+  const result = await billingService.getBillingConfigByContract(req.params.contractId);
+  res.status(200).json(result);
+});
+
+export const generateReport = asyncHandler(async (req, res) => {
   const result = await billingService.createInvoice(req.user, req.body);
   res.status(201).json(result);
 });
 
-export const list = asyncHandler(async (req, res) => {
-  const result = await billingService.getInvoices(req.user, req.query);
+export const listReports = asyncHandler(async (req, res) => {
+  const result = await billingService.getInvoices({ user: req.user, ...req.query });
   res.status(200).json(result);
 });
 
-export const getById = asyncHandler(async (req, res) => {
-  const result = await billingService.getInvoiceById(req.params.invoiceId);
+export const getReportById = asyncHandler(async (req, res) => {
+  const result = await billingService.getInvoiceById(req.params.uid);
   res.status(200).json(result);
 });
 
-export const update = asyncHandler(async (req, res) => {
-  const result = await billingService.updateInvoice(req.params.invoiceId, req.user, req.body);
+export const approveReport = asyncHandler(async (req, res) => {
+  const result = await billingService.approveBill(req.params.uid, req.user);
   res.status(200).json(result);
 });
 
-export const remove = asyncHandler(async (req, res) => {
-  await billingService.deleteInvoice(req.params.invoiceId);
-  res.status(200).json({ message: 'Invoice deleted successfully' });
-});
-
-export const markPaid = asyncHandler(async (req, res) => {
-  const result = await billingService.markInvoicePaid(req.params.invoiceId, req.user);
+export const rejectReport = asyncHandler(async (req, res) => {
+  const result = await billingService.rejectBill(req.params.uid, req.body, req.user);
   res.status(200).json(result);
 });
 
-export const getPayments = asyncHandler(async (req, res) => {
-  const result = await billingService.getPayments(req.query);
+export const dashboard = asyncHandler(async (req, res) => {
+  const result = await billingService.getDashboard(req.user);
   res.status(200).json(result);
 });
 
-export const recordPayment = asyncHandler(async (req, res) => {
-  const result = await billingService.recordPayment(req.user, req.body);
-  res.status(201).json(result);
+export const generateInvoice = asyncHandler(async (req, res) => {
+  const result = await billingService.generateInvoiceNumber(req.params.uid);
+  res.status(200).json(result);
+});
+
+export const contractorReports = asyncHandler(async (req, res) => {
+  const result = await billingService.getContractorDashboard(req.user);
+  res.status(200).json(result);
+});
+
+export const supervisorReports = asyncHandler(async (req, res) => {
+  const result = await billingService.getSupervisorDashboard(req.user);
+  res.status(200).json(result);
 });

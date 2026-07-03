@@ -18,7 +18,7 @@ class ContractService {
     if (depot) {
       duplicateQuery = duplicateQuery.where('depot', '==', depot);
     }
-    const duplicateSnap = await duplicateQuery.get();
+    const duplicateSnap = await duplicateQuery.limit(1).get();
     if (!duplicateSnap.empty) {
       const locationName = depot ? `Depot: ${depot}` : `Division: ${division}`;
       throw new ValidationError(`Restriction: This Contractor already has a contract in this ${locationName}. Same company cannot have multiple contracts in the same division/depot.`);
@@ -110,7 +110,7 @@ class ContractService {
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
     if (entityId && userType !== 'contractor') firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
 
-    const snapshot = await firestoreQuery.get();
+    const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
 
     const contracts = [];
@@ -167,7 +167,7 @@ class ContractService {
     if (division) firestoreQuery = firestoreQuery.where('division', '==', division);
     if (zone) firestoreQuery = firestoreQuery.where('zone', '==', zone);
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
-    const snapshot = await firestoreQuery.get();
+    const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
     const contracts = [];
     snapshot.forEach(doc => {

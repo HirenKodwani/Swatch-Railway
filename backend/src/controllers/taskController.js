@@ -2,7 +2,7 @@ import { taskService } from '../services/taskService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 export const list = asyncHandler(async (req, res) => {
-  const result = await taskService.getTasks({ user: req.user, query: req.query });
+  const result = await taskService.getTasksForRun(req.user, req.query.runInstanceId, req.query);
   res.status(200).json(result);
 });
 
@@ -12,12 +12,12 @@ export const getById = asyncHandler(async (req, res) => {
 });
 
 export const create = asyncHandler(async (req, res) => {
-  const result = await taskService.createTask(req.user, req.body);
+  const result = await taskService.createEmergencyTask(req.user, req.body);
   res.status(201).json(result);
 });
 
 export const update = asyncHandler(async (req, res) => {
-  const result = await taskService.updateTask(req.params.taskId, req.user, req.body);
+  const result = await taskService.updateTaskStatus(req.params.taskId, req.body);
   res.status(200).json(result);
 });
 
@@ -33,5 +33,20 @@ export const myTasks = asyncHandler(async (req, res) => {
 
 export const history = asyncHandler(async (req, res) => {
   const result = await taskService.getTaskHistory({ user: req.user, query: req.query });
+  res.status(200).json(result);
+});
+
+export const pendingReview = asyncHandler(async (req, res) => {
+  const result = await taskService.getTasksForRun(req.user, req.query.runInstanceId, { ...req.query, status: 'PENDING_REVIEW' });
+  res.status(200).json(result);
+});
+
+export const approveTask = asyncHandler(async (req, res) => {
+  const result = await taskService.updateTaskStatus(req.user.uid, { ...req.body, action: 'APPROVE' });
+  res.status(200).json(result);
+});
+
+export const rejectTask = asyncHandler(async (req, res) => {
+  const result = await taskService.updateTaskStatus(req.user.uid, { ...req.body, action: 'REJECT' });
   res.status(200).json(result);
 });

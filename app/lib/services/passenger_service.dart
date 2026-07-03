@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'api_services.dart';
 
 class PassengerService {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<Map<String, dynamic>> createCleaningTask({
     required String trainNo,

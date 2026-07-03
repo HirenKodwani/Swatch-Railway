@@ -238,7 +238,7 @@ class AuthService {
     }
 
     return await _makeRequest(
-      endpoint: '/api/auth/forgot-password/send-otp',
+      endpoint: '/api/auth/forgot-password/email/send-otp',
       body: {'email': email},
     );
   }

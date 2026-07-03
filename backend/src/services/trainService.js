@@ -61,7 +61,7 @@ class TrainService {
     const userName = name || email || role || 'Unknown';
 
     if (trainNo) {
-      const existingTrain = await db.collection('trains').where('trainNo', '==', trainNo).get();
+      const existingTrain = await db.collection('trains').where('trainNo', '==', trainNo).limit(1).get();
       if (!existingTrain.empty) {
         throw new ConflictError('A train with this number already exists.');
       }
@@ -195,7 +195,7 @@ class TrainService {
       const finalTrainName = trainName || existingData.trainName;
       const finalInbound = inboundTrainNo || existingData.inboundTrainNo;
       const finalOutbound = outboundTrainNo || existingData.outboundTrainNo;
-      const oldPairs = await db.collection('TrainPairs').where('parentTrainId', '==', uid).get();
+      const oldPairs = await db.collection('TrainPairs').where('parentTrainId', '==', uid).limit(200).get();
       const deleteBatch = db.batch();
       oldPairs.forEach(doc => deleteBatch.delete(doc.ref));
       await deleteBatch.commit();
@@ -256,7 +256,7 @@ class TrainService {
       query = query.where('status', '==', status);
     }
 
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     if (snapshot.empty) return { count: 0, trains: [] };
 
     const trainList = [];
@@ -274,7 +274,7 @@ class TrainService {
     let query = db.collection('trains');
     if (zone) query = query.where('zone', '==', zone);
     if (division) query = query.where('division', '==', division);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     if (snapshot.empty) return { count: 0, trains: [] };
     const trainList = [];
     snapshot.forEach(doc => {
@@ -314,6 +314,44 @@ class TrainService {
     if (!doc.exists) throw new NotFoundError("Train not found.");
     await docRef.delete();
     return { uid, deleted: true };
+  }
+
+  async getTrainPairs(trainId) {
+    if (!trainId) throw new ValidationError("Train ID is required.");
+    const snapshot = await db.collection('TrainPairs').where('parentTrainId', '==', trainId).limit(200).get();
+    const pairs = [];
+    snapshot.forEach(doc => pairs.push({ id: doc.id, ...doc.data() }));
+    return { count: pairs.length, data: pairs };
+  }
+
+  async generateSchedule(creatorData, trainId, body) {
+    const { startDate, endDate } = body;
+    if (!startDate || !endDate) throw new ValidationError('startDate and endDate are required.');
+    const trainDoc = await db.collection('trains').doc(trainId).get();
+    if (!trainDoc.exists) throw new NotFoundError('Train not found.');
+    const train = trainDoc.data();
+    const pairsSnap = await db.collection('TrainPairs').where('parentTrainId', '==', trainId).limit(200).get();
+    if (pairsSnap.empty) throw new NotFoundError('No train pairs found for this train.');
+    const batch = db.batch();
+    const schedules = [];
+    pairsSnap.forEach(doc => {
+      const pair = doc.data();
+      const scheduleId = `sched_${pair.instanceId}_${Date.now()}`;
+      const schedule = {
+        scheduleId,
+        trainId,
+        instanceId: pair.instanceId,
+        startDate,
+        endDate,
+        status: 'SCHEDULED',
+        createdBy: creatorData.uid,
+        createdAt: new Date().toISOString()
+      };
+      batch.set(db.collection('Schedules').doc(scheduleId), schedule);
+      schedules.push(schedule);
+    });
+    await batch.commit();
+    return { message: 'Schedule generated successfully', count: schedules.length, schedules };
   }
 }
 

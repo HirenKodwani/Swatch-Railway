@@ -25,7 +25,7 @@ class StationCleaningService {
   }
 
   async listStationAreas(stationId) {
-    const snapshot = await db.collection('stationAreas').where('stationId', '==', stationId).get();
+    const snapshot = await db.collection('stationAreas').where('stationId', '==', stationId).limit(200).get();
     const areas = [];
     snapshot.forEach(doc => areas.push(doc.data()));
     areas.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -42,7 +42,7 @@ class StationCleaningService {
   }
 
   async listStationZones(stationId, areaId) {
-    const snapshot = await db.collection('stationZones').where('stationId', '==', stationId).get();
+    const snapshot = await db.collection('stationZones').where('stationId', '==', stationId).limit(200).get();
     const zones = [];
     snapshot.forEach(doc => zones.push(doc.data()));
     const filtered = areaId ? zones.filter(z => z.areaId === areaId) : zones;
@@ -59,7 +59,7 @@ class StationCleaningService {
   }
 
   async listContractorMappings(stationId) {
-    const snapshot = await db.collection('stationContractors').where('stationId', '==', stationId).get();
+    const snapshot = await db.collection('stationContractors').where('stationId', '==', stationId).limit(200).get();
     const mappings = [];
     snapshot.forEach(doc => mappings.push(doc.data()));
     return { count: mappings.length, mappings };
@@ -75,7 +75,7 @@ class StationCleaningService {
   }
 
   async listSchedules(stationId) {
-    const snapshot = await db.collection('stationSchedules').where('stationId', '==', stationId).get();
+    const snapshot = await db.collection('stationSchedules').where('stationId', '==', stationId).limit(200).get();
     const schedules = [];
     snapshot.forEach(doc => schedules.push(doc.data()));
     return { count: schedules.length, schedules };
@@ -95,7 +95,7 @@ class StationCleaningService {
   }
 
   async listStationRuns() {
-    const snapshot = await db.collection('StationCleaningRuns').orderBy('createdAt', 'desc').get();
+    const snapshot = await db.collection('StationCleaningRuns').orderBy('createdAt', 'desc').limit(200).get();
     const runs = [];
     snapshot.forEach(doc => runs.push({ id: doc.id, ...doc.data() }));
     return { success: true, data: runs };
@@ -148,7 +148,7 @@ class StationCleaningService {
   async listPendingStationTasks(runInstanceId) {
     let query = db.collection('station_tasks').where('status', '==', 'Completed');
     if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const tasks = [];
     snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
     return { success: true, count: tasks.length, data: tasks };
@@ -259,7 +259,7 @@ class StationCleaningService {
   async listStationCleaningForms(query, user) {
     const { status, stationId, areaId, zoneId, division } = query;
     const { role, division: userDiv, entityId, userType } = user;
-    const snapshot = await db.collection('stationCleaningForms').get();
+    const snapshot = await db.collection('stationCleaningForms').limit(200).get();
     let forms = [];
     snapshot.forEach(doc => forms.push(doc.data()));
 
@@ -298,7 +298,7 @@ class StationCleaningService {
       formQuery = formQuery.where('entityId', '==', entityId);
     }
 
-    const [stationSnap, formSnap] = await Promise.all([stationQuery.get(), formQuery.get()]);
+    const [stationSnap, formSnap] = await Promise.all([stationQuery.limit(200).get(), formQuery.limit(200).get()]);
 
     let totalScore = 0, scoredCount = 0;
     let draftForms = 0, submittedForms = 0, approvedForms = 0, scoredForms = 0, lockedForms = 0, rejectedForms = 0;
@@ -323,7 +323,6 @@ class StationCleaningService {
       averageScore: scoredCount > 0 ? Math.round((totalScore / scoredCount) * 100) / 100 : 0,
     };
   }
-}
 
   // ─── Pest Control ──────────────────────────────────────────────────────
   async recordPestControl(data, user) {
@@ -346,7 +345,7 @@ class StationCleaningService {
     let q = db.collection('pestControlRecords').where('stationId', '==', stationId);
     if (query.status) q = q.where('status', '==', query.status);
     if (query.pestType) q = q.where('pestType', '==', query.pestType);
-    const snapshot = await q.orderBy('createdAt', 'desc').get();
+    const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const records = [];
     snapshot.forEach(doc => records.push(doc.data()));
     return records;
@@ -355,7 +354,7 @@ class StationCleaningService {
   async listAllPestControl(query) {
     let q = db.collection('pestControlRecords');
     if (query.status) q = q.where('status', '==', query.status);
-    const snapshot = await q.orderBy('createdAt', 'desc').get();
+    const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const records = [];
     snapshot.forEach(doc => records.push(doc.data()));
     return records;
@@ -371,7 +370,7 @@ class StationCleaningService {
   }
 
   async pestControlReport(query) {
-    const snapshot = await db.collection('pestControlRecords').get();
+    const snapshot = await db.collection('pestControlRecords').limit(200).get();
     let records = [];
     snapshot.forEach(doc => records.push(doc.data()));
     const summary = { total: records.length, pending: 0, approved: 0, rejected: 0, followUp: 0 };
@@ -409,7 +408,7 @@ class StationCleaningService {
     if (query.stationId) q = q.where('stationId', '==', query.stationId);
     if (query.status) q = q.where('status', '==', query.status);
     if (query.machineType) q = q.where('machineType', '==', query.machineType);
-    const snapshot = await q.orderBy('createdAt', 'desc').get();
+    const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const items = [];
     snapshot.forEach(doc => items.push(doc.data()));
     return items;
@@ -433,7 +432,7 @@ class StationCleaningService {
   async machineReport(query) {
     let q = db.collection('machineDeployments');
     if (query.stationId) q = q.where('stationId', '==', query.stationId);
-    const snapshot = await q.get();
+    const snapshot = await q.limit(200).get();
     const items = [];
     snapshot.forEach(doc => items.push(doc.data()));
     const summary = { total: items.length, deployed: 0, returned: 0, maintenance: 0 };
@@ -467,7 +466,7 @@ class StationCleaningService {
   async listGarbageRecords(query) {
     let q = db.collection('garbageDisposalRecords');
     if (query.stationId) q = q.where('stationId', '==', query.stationId);
-    const snapshot = await q.orderBy('createdAt', 'desc').get();
+    const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const records = [];
     snapshot.forEach(doc => records.push(doc.data()));
     return records;
@@ -476,7 +475,7 @@ class StationCleaningService {
   async garbageReport(query) {
     let q = db.collection('garbageDisposalRecords');
     if (query.stationId) q = q.where('stationId', '==', query.stationId);
-    const snapshot = await q.get();
+    const snapshot = await q.limit(200).get();
     const records = [];
     snapshot.forEach(doc => records.push(doc.data()));
     const totalKg = records.reduce((sum, r) => sum + (r.quantityKg || 0), 0);

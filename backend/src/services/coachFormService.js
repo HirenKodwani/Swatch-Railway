@@ -137,7 +137,7 @@ class CoachFormService {
     }
 
     try {
-      const snapshot = await firestoreQuery.orderBy('createdAt', 'desc').get();
+      const snapshot = await firestoreQuery.orderBy('createdAt', 'desc').limit(200).get();
       const list = [];
       snapshot.forEach(d => list.push(d.data()));
       return { count: list.length, forms: list };

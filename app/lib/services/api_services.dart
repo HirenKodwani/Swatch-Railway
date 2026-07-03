@@ -31,7 +31,8 @@ class ApiService {
     }
   }
 
-  static const String baseUrl = 'https://backend-railway-opf5.onrender.com';
+  static String baseUrl = 'http://localhost:5000';
+  static void setBaseUrl(String url) { baseUrl = url; }
 
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -535,9 +536,13 @@ class ApiService {
 
   static Future<Map<String, dynamic>> rejectEntity(String id) async {
     try {
+      final token = await getToken();
       final response = await http.post(
         Uri.parse('$baseUrl/api/master/rejectContractor/$id'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
       );
 
       if (response.statusCode == 200) {
@@ -772,10 +777,15 @@ class ApiService {
     String zone,
     String division,
   ) async {
+    final token = await getToken();
     final response = await http.get(
       Uri.parse(
         '$baseUrl/api/contracts/by-entity/$entityId?zone=$zone&division=$division',
       ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -791,10 +801,15 @@ class ApiService {
     String zone,
     String division,
   ) async {
+    final token = await getToken();
     final response = await http.get(
       Uri.parse(
         '$baseUrl/api/contracts/by-entity/$entityId?zone=$zone&division=$division&status=Active',
       ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -1229,7 +1244,7 @@ class ApiService {
     }
   }
 
-  static Future<List<TrainModel>> getSupervisors() async {
+  static Future<List<Map<String, dynamic>>> getSupervisors() async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/api/users/railway-supervisors'),
@@ -1238,19 +1253,15 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List trains = data['trains'] ?? [];
+        final List supervisors = data['supervisors'] ?? [];
 
-        return trains
-            .map<TrainModel>(
-              (t) => TrainModel.fromJson(Map<String, dynamic>.from(t)),
-            )
-            .toList();
+        return supervisors.cast<Map<String, dynamic>>();
       } else {
         final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Failed to fetch trains');
+        throw Exception(error['error'] ?? 'Failed to fetch supervisors');
       }
     } catch (e) {
-      throw Exception('Error fetching trains: $e');
+      throw Exception('Error fetching supervisors: $e');
     }
   }
 
@@ -1455,7 +1466,7 @@ class ApiService {
 
       print("Approve Manpower URL: $url");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -1491,7 +1502,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/coach-forms/pending-scoring'),
+        Uri.parse('$baseUrl/api/coach-forms/pending/scoring'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -1526,7 +1537,7 @@ class ApiService {
 
       if (token == null) throw Exception('No authentication token found.');
 
-      final url = Uri.parse('$baseUrl/api/coach-forms/$formId/submit-scoring');
+      final url = Uri.parse('$baseUrl/api/coach-forms/$formId/scoring');
 
       final body = {
         "workType": workType,
@@ -1537,7 +1548,7 @@ class ApiService {
         "railwayRemarks": 'NA',
       };
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           'Content-Type': 'application/json',
@@ -1570,7 +1581,7 @@ class ApiService {
       if (token == null) throw Exception('No authentication token found.');
 
       final url = Uri.parse(
-        '$baseUrl/api/coach-forms/$formId/save-scoring-draft',
+        '$baseUrl/api/coach-forms/$formId/scoring/draft',
       );
 
       final body = {
@@ -1642,7 +1653,7 @@ class ApiService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/api/coach-forms/submitted?status=$status'),
+        Uri.parse('$baseUrl/api/coach-forms?status=$status'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -1679,7 +1690,7 @@ class ApiService {
 
       print("Accept Scored URL: $url");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -1721,7 +1732,7 @@ class ApiService {
 
       print("Reject Form URL: $url");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -1764,7 +1775,7 @@ class ApiService {
 
       print("Reject Form URL: $url");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -1888,7 +1899,7 @@ class ApiService {
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -1919,7 +1930,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/premises-forms/pending-scoring'),
+        Uri.parse('$baseUrl/api/premises-forms/pending/scoring'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -1963,7 +1974,7 @@ class ApiService {
       if (token == null) throw Exception('No authentication token found.');
 
       final url = Uri.parse(
-        '$baseUrl/api/premises-forms/$formId/submit-scoring',
+        '$baseUrl/api/premises-forms/$formId/scoring',
       );
 
       final body = {
@@ -1978,7 +1989,7 @@ class ApiService {
       print('URL: $url');
       print('Payload: ${jsonEncode(body)}');
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           'Content-Type': 'application/json',
@@ -2008,7 +2019,7 @@ class ApiService {
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2559,7 +2570,7 @@ class ApiService {
       final token = await getToken();
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/cts-forms'),
+        Uri.parse('$baseUrl/api/cts'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -2602,7 +2613,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cts-forms'),
+        Uri.parse('$baseUrl/api/cts'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -2626,7 +2637,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cts-forms?type=history'),
+        Uri.parse('$baseUrl/api/cts?type=history'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -2651,11 +2662,11 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts-forms/$formId/approve-manpower";
+      final String endpoint = "/api/cts/$formId/approve-manpower";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2679,11 +2690,11 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts-forms/$formId/reject";
+      final String endpoint = "/api/cts/$formId/reject";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2721,7 +2732,7 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts-forms/$formId/submit-scoring";
+      final String endpoint = "/api/cts/$formId/scoring";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
@@ -2734,7 +2745,7 @@ class ApiService {
         "railwaySignatureDate": railwaySignatureDate,
       };
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2769,11 +2780,11 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts-forms/$formId/accept-rating";
+      final String endpoint = "/api/cts/$formId/accept-rating";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.post(
+      final response = await http.put(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2830,7 +2841,7 @@ class ApiService {
       throw Exception('No token found');
     }
 
-    final url = Uri.parse('$baseUrl/api/cts-forms/$formId/resubmit');
+    final url = Uri.parse('$baseUrl/api/cts/$formId/resubmit');
 
     final body = jsonEncode({
       'contractorRemarks': contractorRemarks,
@@ -3410,7 +3421,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/create'),
+        Uri.parse('$baseUrl/api/cleaning-forms'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode(formData),
       );
@@ -3425,7 +3436,7 @@ class ApiService {
     try {
       final token = await getToken();
       await http.put(
-        Uri.parse('$baseUrl/api/cleaning-form/save-draft/$uid'),
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/draft'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode(formData),
       );
@@ -3437,8 +3448,8 @@ class ApiService {
   static Future<void> submitCleaningForm(String uid) async {
     try {
       final token = await getToken();
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/submit/$uid'),
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/submit'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
       if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to submit');
@@ -3450,8 +3461,8 @@ class ApiService {
   static Future<void> approveCleaningForm(String uid) async {
     try {
       final token = await getToken();
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/approve/$uid'),
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/approve'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
       if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to approve');
@@ -3463,8 +3474,8 @@ class ApiService {
   static Future<void> rejectCleaningForm(String uid, {String reason = 'No reason provided'}) async {
     try {
       final token = await getToken();
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/reject/$uid'),
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/reject'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({'reason': reason}),
       );
@@ -3477,8 +3488,8 @@ class ApiService {
   static Future<Map<String, dynamic>> scoreCleaningForm(String uid, {required double totalScore, double maxTotalScore = 100, String? remarks, String? grade, List<Map<String, dynamic>>? criteria}) async {
     try {
       final token = await getToken();
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/score/$uid'),
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/score'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({
           'totalScore': totalScore,
@@ -3498,8 +3509,8 @@ class ApiService {
   static Future<void> acknowledgeCleaningForm(String uid) async {
     try {
       final token = await getToken();
-      await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/acknowledge/$uid'),
+      await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/acknowledge'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
     } catch (e) {
@@ -3510,8 +3521,8 @@ class ApiService {
   static Future<void> autoApproveCleaningForm(String uid) async {
     try {
       final token = await getToken();
-      await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/auto-approve/$uid'),
+      await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/auto-approve'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
     } catch (e) {
@@ -3522,8 +3533,8 @@ class ApiService {
   static Future<void> lockCleaningForm(String uid) async {
     try {
       final token = await getToken();
-      await http.post(
-        Uri.parse('$baseUrl/api/cleaning-form/lock/$uid'),
+      await http.put(
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid/lock'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
     } catch (e) {
@@ -3535,7 +3546,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cleaning-form/details/$uid'),
+        Uri.parse('$baseUrl/api/cleaning-forms/$uid'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) return jsonDecode(response.body);
@@ -3549,7 +3560,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cleaning-form/report/$uid'),
+        Uri.parse('$baseUrl/api/cleaning-forms/report/$uid'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) return jsonDecode(response.body);
@@ -3568,7 +3579,7 @@ class ApiService {
       if (contractId != null) params['contractId'] = contractId;
       if (division != null) params['division'] = division;
       if (depot != null) params['depot'] = depot;
-      final uri = Uri.parse('$baseUrl/api/cleaning-form/list').replace(queryParameters: params.isNotEmpty ? params : null);
+      final uri = Uri.parse('$baseUrl/api/cleaning-forms').replace(queryParameters: params.isNotEmpty ? params : null);
       final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -3584,7 +3595,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cleaning-form/dashboard'),
+        Uri.parse('$baseUrl/api/cleaning-forms/dashboard/data'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) return CleaningDashboardSummary.fromJson(jsonDecode(response.body));
@@ -3600,7 +3611,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.post(
-        Uri.parse('$baseUrl/api/stations/create'),
+        Uri.parse('$baseUrl/api/stations'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode(data),
       );
@@ -3616,7 +3627,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.put(
-        Uri.parse('$baseUrl/api/stations/update/$uid'),
+        Uri.parse('$baseUrl/api/stations/$uid'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode(data),
       );
@@ -3635,7 +3646,7 @@ class ApiService {
       if (division != null) params['division'] = division;
       if (category != null) params['category'] = category;
       if (active != null) params['active'] = active.toString();
-      final uri = Uri.parse('$baseUrl/api/stations/list').replace(queryParameters: params.isNotEmpty ? params : null);
+      final uri = Uri.parse('$baseUrl/api/stations').replace(queryParameters: params.isNotEmpty ? params : null);
       final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

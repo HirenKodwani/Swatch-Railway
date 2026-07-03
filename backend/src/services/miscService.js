@@ -17,7 +17,7 @@ class MiscService {
   }
 
   async getAuditLogStats() {
-    const snapshot = await db.collection('audit_logs').get();
+    const snapshot = await db.collection('audit_logs').limit(200).get();
     const stats = { totalLogs: snapshot.size };
     const actionCounts = {};
     snapshot.forEach(doc => {
@@ -69,7 +69,7 @@ class MiscService {
     let query = db.collection('notifications').where('read', '==', false);
     if (entityId) query = query.where('entityId', '==', entityId);
     else query = query.where('userId', '==', uid);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     const batch = db.batch();
     snapshot.forEach(doc => batch.update(doc.ref, { read: true }));
     await batch.commit();
@@ -81,7 +81,7 @@ class MiscService {
     let query = db.collection('notifications').where('read', '==', false);
     if (entityId) query = query.where('entityId', '==', entityId);
     else query = query.where('userId', '==', uid);
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     return { count: snapshot.size };
   }
 
@@ -102,7 +102,7 @@ class MiscService {
   }
 
   async getDivisions() {
-    const snapshot = await db.collection('divisions').get();
+    const snapshot = await db.collection('divisions').limit(200).get();
     const divisions = [];
     snapshot.forEach(doc => divisions.push(doc.data()));
     return { count: divisions.length, divisions };

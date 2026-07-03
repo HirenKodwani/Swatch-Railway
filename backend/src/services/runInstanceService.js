@@ -1,16 +1,14 @@
 import { db, admin } from '../database/index.js';
+import logger from '../logger/index.js';
 import { ValidationError, NotFoundError, ConflictError, FirestoreError } from '../errors/index.js';
 import { CLEANING_TIMES, GARBAGE_TIMES, WATER_CHECK_TIMES, SAFETY_INSPECTION_TIMES, PETTY_REPAIR_TIMES, LINEN_CHANGE_TIMES, BERTH_INSPECTION_TIMES, AC_COACH_PREFIXES } from '../config/constants.js';
-
-function isACCoach(coachType) {
-  if (!coachType) return false;
-  const upper = coachType.toUpperCase();
-  return AC_COACH_PREFIXES.includes(upper) || /^[ABHMC]\d*$/.test(upper);
-}
+import { isACCoach } from '../utils/helpers.js';
 
 async function generateTaskInstancesForRun(runData) {
-  const batch = db.batch();
+  const CHUNK_SIZE = 400;
+  let batch = db.batch();
   let taskCount = 0;
+  let opCount = 0;
   const departureDate = runData.departureDate || new Date().toISOString().split('T')[0];
   for (const coach of runData.coaches) {
     if (!coach.workerId) continue;
@@ -25,35 +23,47 @@ async function generateTaskInstancesForRun(runData) {
       const headerId = `${runData.runInstanceId}_${taskTypeName}_${timeSlot.replace(':', '')}`;
       const headerRef = db.collection('task_headers').doc(headerId);
       batch.set(headerRef, { headerId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, taskType: taskTypeName, displayName, scheduledTime: timeSlot, scheduledDate: departureDate, status: 'PLANNED', taskSource: 'SYSTEM', workerId, workerName, coachNo, childTaskIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
       const detailId = `${headerId}_${coachNo}`;
       const detailRef = db.collection('task_details').doc(detailId);
       batch.set(detailRef, { detailId, headerId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: taskTypeName, scheduledTime: timeSlot, scheduledDate: departureDate, toiletStatus: null, washBasinStatus: null, dustbinStatus: null, consumableStatus: null, status: 'PLANNED', beforePhoto: null, afterPhoto: null, gpsLatitude: null, gpsLongitude: null, employeeId: workerId, deviceId: null, mobileNumber: null, checklist: null, remarks: null, completionTime: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
       batch.update(headerRef, { childTaskIds: admin.firestore.FieldValue.arrayUnion(detailId) });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
     for (const timeSlot of GARBAGE_TIMES) {
       const garbageId = `${runData.runInstanceId}_garbage_${timeSlot.replace(':', '')}_${coachNo}`;
       const garbageRef = db.collection('garbage_tasks').doc(garbageId);
       batch.set(garbageRef, { id: garbageId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, scheduledTime: timeSlot, scheduledDate: departureDate, isPreTerminal: false, status: 'PENDING', beforePhoto: null, afterPhoto: null, gpsLatitude: null, gpsLongitude: null, completedAt: null, createdAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
     for (const timeSlot of WATER_CHECK_TIMES) {
       const waterId = `${runData.runInstanceId}_water_${timeSlot.replace(':', '')}_${coachNo}`;
       const waterRef = db.collection('water_checks').doc(waterId);
       batch.set(waterRef, { id: waterId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, checkTime: timeSlot, checkDate: departureDate, waterStatus: 'pending', lowWaterAlert: false, wateringPointSchedule: null, status: 'PENDING', photoUrl: null, completedAt: null, createdAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
     for (const timeSlot of SAFETY_INSPECTION_TIMES) {
       const safetyId = `${runData.runInstanceId}_safety_${timeSlot.replace(':', '')}_${coachNo}`;
       const safetyRef = db.collection('safety_checks').doc(safetyId);
       batch.set(safetyRef, { id: safetyId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, scheduledTime: timeSlot, scheduledDate: departureDate, fireExtinguisherStatus: null, fsdsStatus: null, cctvStatus: null, emergencyEquipmentStatus: null, photos: [], deficiencyReports: [], status: 'PENDING', remarks: null, completedAt: null, createdAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
     for (const timeSlot of PETTY_REPAIR_TIMES) {
       const repairId = `${runData.runInstanceId}_repair_${timeSlot.replace(':', '')}_${coachNo}`;
       const repairRef = db.collection('petty_repairs').doc(repairId);
       batch.set(repairRef, { id: repairId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, inspectionTime: timeSlot, inspectionDate: departureDate, items: { latches: 'ok', windows: 'ok', doors: 'ok', seats: 'ok', lights: 'ok', fans: 'ok', taps: 'ok', flush: 'ok' }, isEscalated: false, escalatedTo: null, status: 'PENDING', remarks: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
   }
   for (const coach of runData.coaches) {
@@ -66,16 +76,20 @@ async function generateTaskInstancesForRun(runData) {
       const linenId = `${runData.runInstanceId}_linen_${timeSlot.replace(':', '')}_${coachNo}`;
       const linenRef = db.collection('linen_tasks').doc(linenId);
       batch.set(linenRef, { id: linenId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, coachType: coach.coachType || 'AC', assignedTo: attendantId, assignedToName: attendantName, workerType: 'ATTENDANT', taskType: 'LINEN_CHANGE', displayName: 'Linen Change & Berth Setup', scheduledTime: timeSlot, scheduledDate: departureDate, status: 'PENDING', linenItemsChecklist: { bedsheet: false, pillowCover: false, blanket: false, towel: false }, beforePhoto: null, afterPhoto: null, remarks: null, completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
     for (const timeSlot of BERTH_INSPECTION_TIMES) {
       const berthId = `${runData.runInstanceId}_berth_${timeSlot.replace(':', '')}_${coachNo}`;
       const berthRef = db.collection('berth_inspections').doc(berthId);
       batch.set(berthRef, { id: berthId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, coachType: coach.coachType || 'AC', assignedTo: attendantId, assignedToName: attendantName, workerType: 'ATTENDANT', taskType: 'BERTH_INSPECTION', displayName: 'Berth & Cabin Inspection', scheduledTime: timeSlot, scheduledDate: departureDate, status: 'PENDING', berthChecklist: { cushionCondition: null, berthLatch: null, readingLight: null, acVent: null, windowBlind: null }, deficiencies: [], beforePhoto: null, afterPhoto: null, remarks: null, completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
   }
-  if (taskCount > 0) { await batch.commit(); console.log(`[New Engine] Generated ${taskCount} tasks for Run ${runData.runInstanceId}`); }
+  if (taskCount > 0) { await batch.commit(); logger.info('RunInstance', `[New Engine] Generated ${taskCount} tasks for Run ${runData.runInstanceId}`); }
 }
 
 async function generatePreTerminalGarbageTasks(runInstanceId) {
@@ -83,8 +97,10 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
     const runDoc = await db.collection('RunInstance').doc(runInstanceId).get();
     if (!runDoc.exists) return;
     const runData = runDoc.data();
-    const batch = db.batch();
+    const CHUNK_SIZE = 400;
+    let batch = db.batch();
     let count = 0;
+    let opCount = 0;
     for (const coach of (runData.coaches || [])) {
       const effectiveWorkerId = coach.workerId || coach.janitorId || null;
       if (!effectiveWorkerId) continue;
@@ -93,10 +109,12 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
       const garbageId = `${runInstanceId}_garbage_${timeSlot}_${coachNo}`;
       const garbageRef = db.collection('garbage_tasks').doc(garbageId);
       batch.set(garbageRef, { id: garbageId, runInstanceId, trainNo: runData.trainNo, coachNo, workerId: effectiveWorkerId, workerName: coach.workerName || coach.janitorName || 'Unknown', scheduledTime: timeSlot, scheduledDate: new Date().toISOString().split('T')[0], isPreTerminal: true, status: 'PENDING', beforePhoto: null, afterPhoto: null, gpsLatitude: null, gpsLongitude: null, completedAt: null, createdAt: new Date().toISOString() });
+      opCount++;
       count++;
+      if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
-    if (count > 0) { await batch.commit(); console.log(`Generated ${count} pre-terminal garbage tasks for ${runInstanceId}`); }
-  } catch (error) { console.error('(PreTerminalGarbage) Error:', error); }
+    if (count > 0) { await batch.commit(); logger.info('RunInstance', `Generated ${count} pre-terminal garbage tasks for ${runInstanceId}`); }
+  } catch (error) { logger.error('RunInstance', '(PreTerminalGarbage) Error:', error); }
 }
 
 async function generateTasksFromMasters(runData) {
@@ -208,7 +226,7 @@ class RunInstanceService {
         const batches = [];
         for (let i = 0; i < workerIdList.length; i += 30) { batches.push(workerIdList.slice(i, i + 30)); }
         await Promise.all(batches.map(async (batch) => {
-          const workersSnap = await db.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', batch).get();
+          const workersSnap = await db.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', batch).limit(200).get();
           workersSnap.forEach(snapDoc => { workerNamesCache.set(snapDoc.id, snapDoc.data().fullName || snapDoc.data().name || "Unknown Worker"); });
         }));
       }
@@ -218,21 +236,21 @@ class RunInstanceService {
         if (actualJanitorId) {
           if (workerNamesCache.has(actualJanitorId)) { janitorName = workerNamesCache.get(actualJanitorId); }
           else if (!c.janitorName || c.janitorName === "Unknown Worker") {
-            try { const workerDoc = await db.collection('users').doc(actualJanitorId).get(); if (workerDoc.exists) { janitorName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker"; workerNamesCache.set(actualJanitorId, janitorName); } } catch (err) { console.error(`Error fetching janitor ${actualJanitorId}:`, err.message); }
+            try { const workerDoc = await db.collection('users').doc(actualJanitorId).get(); if (workerDoc.exists) { janitorName = workerDoc.data().fullName || workerDoc.data().name || "Unknown Worker"; workerNamesCache.set(actualJanitorId, janitorName); } } catch (err) { logger.error('RunInstance', `Error fetching janitor ${actualJanitorId}:`, err.message); }
           }
         }
         let actualAttendantName = c.attendantName || null;
         if (c.attendantId) {
           if (workerNamesCache.has(c.attendantId)) { actualAttendantName = workerNamesCache.get(c.attendantId); }
           else if (!actualAttendantName || actualAttendantName === 'Unknown') {
-            try { const attDoc = await db.collection('users').doc(c.attendantId).get(); if (attDoc.exists) { actualAttendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown'; workerNamesCache.set(c.attendantId, actualAttendantName); } } catch (err) { console.error(`Error fetching attendant ${c.attendantId}:`, err.message); }
+            try { const attDoc = await db.collection('users').doc(c.attendantId).get(); if (attDoc.exists) { actualAttendantName = attDoc.data().fullName || attDoc.data().name || 'Unknown'; workerNamesCache.set(c.attendantId, actualAttendantName); } } catch (err) { logger.error('RunInstance', `Error fetching attendant ${c.attendantId}:`, err.message); }
           }
         }
         const cType = c.coachType || '';
         const cPos = c.coachPosition || '';
         const isAC = isACCoach(cType) || /^[ABHMC]/i.test(cPos);
-        if (c.attendantId && !isAC) { console.warn(`[Assignment Warning] Attendant ${c.attendantId} assigned to non-AC coach ${cPos}`); }
-        if (isAC && !c.attendantId && (status === 'Active' || status === 'Ready')) { console.warn(`[Assignment Warning] AC Coach ${cPos} has no attendant in ${status} journey`); }
+        if (c.attendantId && !isAC) { logger.warn('RunInstance', `[Assignment Warning] Attendant ${c.attendantId} assigned to non-AC coach ${cPos}`); }
+        if (isAC && !c.attendantId && (status === 'Active' || status === 'Ready')) { logger.warn('RunInstance', `[Assignment Warning] AC Coach ${cPos} has no attendant in ${status} journey`); }
         return { coachPosition: cPos || null, coachNo: c.coachNo || cPos || null, coachType: cType || null, janitorId: actualJanitorId, janitorName, workerId: actualJanitorId, workerName: janitorName, attendantId: c.attendantId || null, attendantName: actualAttendantName, janitorTasks: c.janitorTasks || [], attendantTasks: c.attendantTasks || [], tasks: c.tasks || c.janitorTasks || [], attendanceStatus: c.attendanceStatus || 'Pending' };
       }));
       updateData.numberOfCoaches = coachesWithNames.length;
@@ -241,7 +259,7 @@ class RunInstanceService {
 
     if (status) {
       if (status.toUpperCase() === 'CLOSED' || status.toUpperCase() === 'COMPLETED') {
-        const pendingTasksSnapshot = await db.collection('task_instances').where('runInstanceId', '==', uid).where('status', 'in', ['PENDING', 'SUBMITTED']).get();
+        const pendingTasksSnapshot = await db.collection('task_instances').where('runInstanceId', '==', uid).where('status', 'in', ['PENDING', 'SUBMITTED']).limit(200).get();
         if (!pendingTasksSnapshot.empty) {
           throw new ValidationError(`Cannot close run instance. There are still ${pendingTasksSnapshot.size} pending or unreviewed tasks.`);
         }
@@ -257,7 +275,7 @@ class RunInstanceService {
   async getRunInstancesByDivision(division, status) {
     let query = db.collection('RunInstance').where('division', '==', division);
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await query.orderBy('createdAt', 'desc').limit(200).get();
     if (snapshot.empty) { return { success: true, count: 0, data: [] }; }
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
@@ -267,7 +285,7 @@ class RunInstanceService {
   async getRunInstancesByZone(zone, status) {
     let query = db.collection('RunInstance').where('zone', '==', zone);
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await query.orderBy('createdAt', 'desc').limit(200).get();
     if (snapshot.empty) { return { success: true, count: 0, data: [] }; }
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
@@ -289,7 +307,7 @@ class RunInstanceService {
     if (!date) {
       throw new ValidationError('date is required (YYYY-MM-DD).');
     }
-    const snapshot = await db.collection('RunInstance').where('departureDate', '==', date).orderBy('createdAt', 'desc').get();
+    const snapshot = await db.collection('RunInstance').where('departureDate', '==', date).orderBy('createdAt', 'desc').limit(200).get();
     if (snapshot.empty) { return { success: true, count: 0, data: [] }; }
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
@@ -366,7 +384,7 @@ class RunInstanceService {
     if (trainNo) {
       query = query.where('trainNo', '==', trainNo);
     }
-    const snapshot = await query.get();
+    const snapshot = await query.limit(200).get();
     if (snapshot.empty) { return null; }
 
     let found = null;
@@ -381,6 +399,44 @@ class RunInstanceService {
       }
     });
     return found;
+  }
+  async deleteRunInstance(uid) {
+    if (!uid) {
+      throw new ValidationError('runInstanceId is required.');
+    }
+    const runInstanceRef = db.collection('RunInstance').doc(uid);
+    const doc = await runInstanceRef.get();
+    if (!doc.exists) {
+      throw new NotFoundError('Run Instance not found.');
+    }
+    const data = doc.data();
+    const validStatuses = ['PLANNED', 'ALLOCATED'];
+    if (!validStatuses.includes(data.status)) {
+      throw new ValidationError(
+        'Invalid State Transition',
+        `Cannot delete a run instance with status '${data.status}'. Only 'PLANNED' or 'ALLOCATED' can be deleted.`
+      );
+    }
+
+    const collections = ['task_headers', 'task_details'];
+    for (const collectionName of collections) {
+      const snapshot = await db.collection(collectionName).where('runInstanceId', '==', uid).limit(200).get();
+      if (!snapshot.empty) {
+        const batch = db.batch();
+        snapshot.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
+    }
+
+    if (data.instanceId) {
+      try {
+        await db.collection('TrainPairs').doc(data.instanceId).update({ status: 'Available' });
+      } catch (_) {}
+    }
+
+    await runInstanceRef.delete();
+
+    return { success: true, message: 'Run instance deleted successfully' };
   }
 }
 

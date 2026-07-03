@@ -16,6 +16,8 @@ router.get('/api/admin/users', verifyToken, requirePermission(PERMISSIONS.VIEW_U
 router.get('/api/admin/railway-workers', verifyToken, requirePermission(PERMISSIONS.VIEW_USERS), userController.getRailwayWorkers);
 router.get('/api/worker/profile', verifyToken, userController.getWorkerProfile);
 router.get('/api/worker/statistics', verifyToken, userController.getWorkerStatistics);
+router.get('/api/worker/tasks', verifyToken, userController.getWorkerTasks);
+router.post('/api/worker/complaints', verifyToken, userController.submitWorkerComplaint);
 router.get('/api/users/workers', verifyToken, requirePermission(PERMISSIONS.VIEW_USERS), userController.getWorkers);
 router.get('/api/users/railway-supervisors', verifyToken, requirePermission(PERMISSIONS.VIEW_USERS), userController.getRailwaySupervisors);
 router.get('/api/admin/analytics/workers-performance', verifyToken, requirePermission(PERMISSIONS.VIEW_ANALYTICS), userController.getWorkersPerformance);

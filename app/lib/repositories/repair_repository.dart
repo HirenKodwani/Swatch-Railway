@@ -6,7 +6,7 @@ import '../model/petty_repair_model.dart';
 import '../services/api_services.dart';
 
 class RepairRepository {
-  static const String baseUrl = ApiService.baseUrl;
+  static String get baseUrl => ApiService.baseUrl;
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,7 +36,7 @@ class RepairRepository {
         throw Exception('AUTH_ERROR');
       }
 
-      final uri = Uri.parse('$baseUrl/api/repairs').replace(
+      final uri = Uri.parse('$baseUrl/api/obhs/petty-repairs').replace(
         queryParameters: {'runInstanceId': runInstanceId},
       );
 
@@ -76,7 +76,7 @@ class RepairRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/repairs'),
+          Uri.parse('$baseUrl/api/obhs/petty-repairs'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -111,13 +111,14 @@ class RepairRepository {
       }
 
       final body = <String, dynamic>{
+        'repairId': repairId,
         'escalatedTo': escalatedTo,
         'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
       };
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/repairs/$repairId/escalate'),
+          Uri.parse('$baseUrl/api/obhs/petty-repairs/escalate'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',

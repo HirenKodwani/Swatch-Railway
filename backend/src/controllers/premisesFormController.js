@@ -17,27 +17,33 @@ export const getById = asyncHandler(async (req, res) => {
 });
 
 export const approveManpower = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Manpower approved' });
+  const result = await premisesFormService.approveManpower(req.user, req.params.formId);
+  res.status(200).json(result);
 });
 
 export const saveScoringDraft = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Draft saved' });
+  const result = await premisesFormService.saveScoringDraft(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const submitScoring = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Scoring submitted' });
+  const result = await premisesFormService.submitScoring(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const acceptRating = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Rating accepted' });
+  const result = await premisesFormService.acceptRating(req.user, req.params.formId);
+  res.status(200).json(result);
 });
 
 export const resubmit = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Form resubmitted' });
+  const result = await premisesFormService.resubmit(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const reject = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'Form rejected' });
+  const result = await premisesFormService.rejectForm(req.user, req.params.formId, req.body);
+  res.status(200).json(result);
 });
 
 export const submitted = asyncHandler(async (req, res) => {
@@ -46,5 +52,6 @@ export const submitted = asyncHandler(async (req, res) => {
 });
 
 export const pendingScoring = asyncHandler(async (req, res) => {
-  res.status(200).json({ count: 0, forms: [] });
+  const result = await premisesFormService.getPendingScoring(req.user);
+  res.status(200).json(result);
 });

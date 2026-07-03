@@ -1,5 +1,6 @@
 import { db, admin } from '../database/index.js';
 import { ValidationError, ForbiddenError } from '../errors/index.js';
+import config from '../config/index.js';
 
 class DashboardService {
   async getDashboardStats(requesterData) {
@@ -7,10 +8,10 @@ class DashboardService {
     const userRole = (role || '').trim().toLowerCase();
 
     const [userSnap, entitySnap, trainSnap, contractSnap] = await Promise.all([
-      db.collection('users').get(),
-      db.collection('entities').get(),
-      db.collection('trains').get(),
-      db.collection('contracts').get()
+      db.collection('users').limit(config.pagination.defaultLimit).get(),
+      db.collection('entities').limit(config.pagination.defaultLimit).get(),
+      db.collection('trains').limit(config.pagination.defaultLimit).get(),
+      db.collection('contracts').limit(config.pagination.defaultLimit).get()
     ]);
 
     const stats = {
@@ -73,12 +74,12 @@ class DashboardService {
     const { uid: userId, role, division: userDivision, entityId: userEntityId } = requesterData;
 
     const [divisionsSnap, depotsSnap, usersSnap, companiesSnap, contractsSnap, formsSnap] = await Promise.all([
-      db.collection("divisions").get(),
-      db.collection("depots").get(),
-      db.collection("users").get(),
-      db.collection("companies").get(),
-      db.collection("contracts").get(),
-      db.collection("forms_processed").get()
+      db.collection("divisions").limit(config.pagination.defaultLimit).get(),
+      db.collection("depots").limit(config.pagination.defaultLimit).get(),
+      db.collection("users").limit(config.pagination.defaultLimit).get(),
+      db.collection("companies").limit(config.pagination.defaultLimit).get(),
+      db.collection("contracts").limit(config.pagination.defaultLimit).get(),
+      db.collection("forms_processed").limit(config.pagination.defaultLimit).get()
     ]);
 
     const allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -121,6 +122,75 @@ class DashboardService {
     }
 
     return { success: true, data: stats };
+  }
+
+  async getUserStats(requesterData) {
+    const snapshot = await db.collection('users').limit(config.pagination.defaultLimit).get();
+    const users = snapshot.docs.map(d => d.data());
+    return {
+      total: users.length,
+      approved: users.filter(u => u.status === 'APPROVED').length,
+      pending: users.filter(u => u.status === 'PENDING').length,
+      railway: users.filter(u => u.userType === 'railway').length,
+      contractor: users.filter(u => u.userType === 'contractor').length
+    };
+  }
+
+  async getTrainStats(requesterData) {
+    const snapshot = await db.collection('trains').limit(config.pagination.defaultLimit).get();
+    const trains = snapshot.docs.map(d => d.data());
+    return {
+      total: trains.length,
+      active: trains.filter(t => t.status === 'ACTIVE' || t.status === 'active').length,
+      obhsEnabled: trains.filter(t => (t.TrainApplicableFor || []).includes('OBHS')).length,
+      ctsEnabled: trains.filter(t => (t.TrainApplicableFor || []).includes('CTS')).length
+    };
+  }
+
+  async getSupervisorStats(requesterData) {
+    const { division } = requesterData;
+    const [usersSnap, formsSnap, tasksSnap] = await Promise.all([
+      db.collection('users').where('division', '==', division).limit(config.pagination.defaultLimit).get(),
+      db.collection('coachForms').where('division', '==', division).limit(config.pagination.defaultLimit).get(),
+      db.collection('obhs_tasks').where('division', '==', division).limit(config.pagination.defaultLimit).get()
+    ]);
+    const users = usersSnap.docs.map(d => d.data());
+    const forms = formsSnap.docs.map(d => d.data());
+    const tasks = tasksSnap.docs.map(d => d.data());
+    return {
+      totalWorkers: users.filter(u => u.userType === 'contractor').length,
+      activeForms: forms.filter(f => f.status === 'SUBMITTED' || f.status === 'APPROVED').length,
+      pendingReview: tasks.filter(t => t.status === 'PENDING_REVIEW').length,
+      completedToday: tasks.filter(t => t.status === 'COMPLETED').length
+    };
+  }
+
+  async getActiveTrains(requesterData) {
+    const snapshot = await db.collection('trains').where('status', '==', 'active').limit(config.pagination.defaultLimit).get();
+    const trains = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
+    return { count: trains.length, trains };
+  }
+
+  async getActiveWorkers(requesterData) {
+    const snapshot = await db.collection('users').where('userType', '==', 'contractor').where('status', '==', 'APPROVED').limit(config.pagination.defaultLimit).get();
+    const workers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return { count: workers.length, workers };
+  }
+
+  async getAllFormsStats(requesterData) {
+    const [coachSnap, premisesSnap, ctsSnap, cleaningSnap] = await Promise.all([
+      db.collection('coachForms').limit(config.pagination.defaultLimit).get(),
+      db.collection('premisesForms').limit(config.pagination.defaultLimit).get(),
+      db.collection('ctsForms').limit(config.pagination.defaultLimit).get(),
+      db.collection('cleaningForms').limit(config.pagination.defaultLimit).get()
+    ]);
+    return {
+      coachForms: coachSnap.size,
+      premisesForms: premisesSnap.size,
+      ctsForms: ctsSnap.size,
+      cleaningForms: cleaningSnap.size,
+      total: coachSnap.size + premisesSnap.size + ctsSnap.size + cleaningSnap.size
+    };
   }
 }
 
