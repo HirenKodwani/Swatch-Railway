@@ -12,5 +12,6 @@ router.post('/api/station-feedback/submit', stationFeedbackController.submit);
 router.get('/api/station-feedback/list', verifyToken, requirePermission(PERMISSIONS.VIEW_FORMS), stationFeedbackController.list);
 router.get('/api/station-feedback/summary/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_FORMS), stationFeedbackController.summary);
 router.get('/api/station-feedback/qr/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_FORMS), stationFeedbackController.qrCode);
+router.post('/api/station-feedback/:uid/moderate', verifyToken, requirePermission(PERMISSIONS.MANAGE_FORMS), stationFeedbackController.moderate);
 
 export default router;

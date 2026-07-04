@@ -17,5 +17,10 @@ router.delete('/api/execution-plans/:uid', verifyToken, requirePermission(PERMIS
 router.post('/api/execution-logs', verifyToken, requirePermission(PERMISSIONS.MANAGE_EXECUTION), executionController.createLog);
 router.get('/api/execution-logs', verifyToken, requirePermission(PERMISSIONS.VIEW_EXECUTION), executionController.listLogs);
 router.get('/api/execution-logs/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_EXECUTION), executionController.getLogById);
+router.put('/api/execution-logs/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_EXECUTION), executionController.updateLog);
+router.post('/api/execution-logs/:uid/submit', verifyToken, requirePermission(PERMISSIONS.MANAGE_EXECUTION), executionController.submitLog);
+router.post('/api/execution-logs/:uid/approve', verifyToken, requirePermission(PERMISSIONS.APPROVE_EXECUTION), executionController.approveLog);
+router.post('/api/execution-logs/:uid/reject', verifyToken, requirePermission(PERMISSIONS.APPROVE_EXECUTION), executionController.rejectLog);
+router.delete('/api/execution-logs/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_EXECUTION), executionController.deleteLog);
 
 export default router;

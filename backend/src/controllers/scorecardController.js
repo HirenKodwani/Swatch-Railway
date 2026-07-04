@@ -6,6 +6,22 @@ export const createDaily = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+export const submit = asyncHandler(async (req, res) => {
+  res.json(await scorecardService.submitScorecard(req.params.uid, req.user));
+});
+
+export const approve = asyncHandler(async (req, res) => {
+  res.json(await scorecardService.approveScorecard(req.params.uid, req.user, req.body));
+});
+
+export const reject = asyncHandler(async (req, res) => {
+  res.json(await scorecardService.rejectScorecard(req.params.uid, req.user, req.body));
+});
+
+export const autoGenerate = asyncHandler(async (req, res) => {
+  res.json(await scorecardService.autoGenerateFromInspections(req.body.stationId, req.body.date));
+});
+
 export const list = asyncHandler(async (req, res) => {
   const result = await scorecardService.getDailyScorecards(req.query);
   res.status(200).json(result);

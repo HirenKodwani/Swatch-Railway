@@ -1,10 +1,10 @@
-import { db } from '../database/index.js';
+import { db, admin } from '../database/index.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
 import { paginate } from '../utils/paginate.js';
 
 class MaterialService {
   async createMaterial(userData, body) {
-    const { materialName, materialType, unit, stationId, openingBalance, reorderLevel, unitPrice } = body;
+    const { materialName, materialType, unit, stationId, openingBalance, reorderLevel, unitPrice, monthlyRequirement, remarks } = body;
     if (!materialName || !materialType || !unit) {
       throw new ValidationError('materialName, materialType, and unit are required');
     }
@@ -18,8 +18,12 @@ class MaterialService {
       stationId: stationId || null,
       openingBalance: openingBalance || 0,
       currentStock: openingBalance || 0,
+      issuedQuantity: 0,
+      usedQuantity: 0,
+      monthlyRequirement: monthlyRequirement || 0,
       reorderLevel: reorderLevel || 0,
       unitPrice: unitPrice || 0,
+      remarks: remarks || '',
       status: 'active',
       createdBy: userData.uid,
       createdAt: new Date().toISOString(),
@@ -50,7 +54,7 @@ class MaterialService {
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Material not found');
     const updates = {};
-    const allowed = ['materialName', 'materialType', 'unit', 'stationId', 'reorderLevel', 'unitPrice', 'status'];
+    const allowed = ['materialName', 'materialType', 'unit', 'stationId', 'reorderLevel', 'unitPrice', 'status', 'monthlyRequirement', 'remarks'];
     for (const key of allowed) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
@@ -109,6 +113,8 @@ class MaterialService {
 
     await matRef.update({
       currentStock: logData.stockAfter,
+      issuedQuantity: admin.firestore.FieldValue.increment(qty),
+      usedQuantity: admin.firestore.FieldValue.increment(qty),
       updatedAt: new Date().toISOString()
     });
     await logRef.set(logData);

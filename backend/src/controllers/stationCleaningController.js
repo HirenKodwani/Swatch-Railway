@@ -47,7 +47,7 @@ export const createStationRun = asyncHandler(async (req, res) => {
 });
 
 export const listStationRuns = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listStationRuns();
+  const result = await stationCleaningService.listStationRuns(req.query);
   res.status(200).json(result);
 });
 

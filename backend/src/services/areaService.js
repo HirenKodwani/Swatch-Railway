@@ -5,7 +5,9 @@ import { paginate } from '../utils/paginate.js';
 const VALID_AREA_TYPES = [
   'Toilet', 'Waiting Hall', 'Track', 'Escalator', 'Lift',
   'Dustbin', 'Water Booth', 'Parking', 'Entrance', 'Corridor',
-  'Staircase', 'Office', 'Canteen', 'Other'
+  'Staircase', 'Office', 'Canteen', 'Concourse', 'FOB',
+  'Circulating Area', 'Approach Road', 'Gardens',
+  'Goods Platform/Goods Line', 'Drains', 'Other'
 ];
 
 const TENDER_FIELDS = ['section', 'sectionName', 'platformRef', 'surfaceType', 'areaSqft', 'shiftConsidered', 'tenderedAreaPerDay', 'cleaningInterval'];

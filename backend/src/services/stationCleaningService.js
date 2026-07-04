@@ -1,5 +1,6 @@
 import { db, admin } from '../database/index.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
+import { paginate } from '../utils/paginate.js';
 
 class StationCleaningService {
   async generateStationFormId(stationCode) {
@@ -94,11 +95,13 @@ class StationCleaningService {
     return { success: true, message: 'Station Run created successfully', data };
   }
 
-  async listStationRuns() {
-    const snapshot = await db.collection('StationCleaningRuns').orderBy('createdAt', 'desc').limit(200).get();
+  async listStationRuns(query = {}) {
+    let q = db.collection('StationCleaningRuns');
+    if (query.stationId) q = q.where('stationId', '==', query.stationId);
+    const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const runs = [];
     snapshot.forEach(doc => runs.push({ id: doc.id, ...doc.data() }));
-    return { success: true, data: runs };
+    return { success: true, count: runs.length, data: runs };
   }
 
   async updateStationRun(runId, data) {
@@ -112,18 +115,39 @@ class StationCleaningService {
 
   async getMyStationRuns(uid) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const snapshot = await db.collection('StationCleaningRuns')
-      .where('createdAt', '>=', thirtyDaysAgo)
-      .orderBy('createdAt', 'desc')
-      .limit(100)
-      .get();
+    const [assignedSnap, allSnap] = await Promise.all([
+      db.collection('StationCleaningRuns')
+        .where('janitorId', '==', uid)
+        .where('createdAt', '>=', thirtyDaysAgo)
+        .orderBy('createdAt', 'desc')
+        .limit(100)
+        .get(),
+      db.collection('StationCleaningRuns')
+        .where('createdAt', '>=', thirtyDaysAgo)
+        .orderBy('createdAt', 'desc')
+        .limit(100)
+        .get(),
+    ]);
+
+    const seen = new Set();
     const myRuns = [];
-    snapshot.forEach(doc => {
+
+    assignedSnap.forEach(doc => {
+      seen.add(doc.id);
+      myRuns.push({ id: doc.id, ...doc.data() });
+    });
+
+    allSnap.forEach(doc => {
+      if (seen.has(doc.id)) return;
       const data = { id: doc.id, ...doc.data() };
       const platforms = data.platforms || [];
       const isAssigned = platforms.some(p => p.janitorId === uid);
-      if (isAssigned) myRuns.push(data);
+      if (isAssigned) {
+        seen.add(doc.id);
+        myRuns.push(data);
+      }
     });
+
     return { success: true, data: myRuns };
   }
 
@@ -257,24 +281,25 @@ class StationCleaningService {
   }
 
   async listStationCleaningForms(query, user) {
-    const { status, stationId, areaId, zoneId, division } = query;
+    const { status, stationId, areaId, zoneId, division, limit, cursor } = query;
     const { role, division: userDiv, entityId, userType } = user;
-    const snapshot = await db.collection('stationCleaningForms').limit(200).get();
-    let forms = [];
-    snapshot.forEach(doc => forms.push(doc.data()));
+    const userRole = (role || '').toLowerCase();
 
-    if (userType === 'contractor') {
-      forms = forms.filter(f => f.entityId === entityId);
-    } else if (!(role || '').toLowerCase().includes('master')) {
-      forms = forms.filter(f => f.division === userDiv);
+    let q = db.collection('stationCleaningForms');
+
+    if (userType === 'contractor' && entityId) {
+      q = q.where('entityId', '==', entityId);
+    } else if (!userRole.includes('master') && userDiv) {
+      q = q.where('division', '==', userDiv);
     }
-    if (status) forms = forms.filter(f => f.status === status);
-    if (stationId) forms = forms.filter(f => f.stationId === stationId);
-    if (areaId) forms = forms.filter(f => f.areaId === areaId);
-    if (zoneId) forms = forms.filter(f => f.zoneId === zoneId);
-    if (division) forms = forms.filter(f => f.division === division);
-    forms.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    return { count: forms.length, forms };
+    if (division) q = q.where('division', '==', division);
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (areaId) q = q.where('areaId', '==', areaId);
+    if (zoneId) q = q.where('zoneId', '==', zoneId);
+    if (status) q = q.where('status', '==', status);
+
+    const result = await paginate(q, { limit, cursor, orderBy: 'createdAt', orderDir: 'desc' });
+    return { count: result.items.length, forms: result.items, pagination: result.pagination };
   }
 
   async getStationCleaningFormDetail(uid) {
@@ -353,6 +378,7 @@ class StationCleaningService {
 
   async listAllPestControl(query) {
     let q = db.collection('pestControlRecords');
+    if (query.stationId) q = q.where('stationId', '==', query.stationId);
     if (query.status) q = q.where('status', '==', query.status);
     const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const records = [];

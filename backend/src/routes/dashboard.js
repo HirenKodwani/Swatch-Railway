@@ -5,6 +5,7 @@ import * as dashboardController from '../controllers/dashboardController.js';
 const router = express.Router();
 
 router.get('/api/dashboard/stats', verifyToken, dashboardController.stats);
+router.get('/api/dashboard/station/:stationId', verifyToken, dashboardController.stationDashboard);
 router.get('/api/dashboard/user-stats', verifyToken, dashboardController.userStats);
 router.get('/api/dashboard/train-stats', verifyToken, dashboardController.trainStats);
 router.get('/api/dashboard/supervisor', verifyToken, dashboardController.supervisorStats);

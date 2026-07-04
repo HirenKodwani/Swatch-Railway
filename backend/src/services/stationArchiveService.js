@@ -1,0 +1,138 @@
+import { db, admin } from '../database/index.js';
+import { NotFoundError, ValidationError } from '../errors/index.js';
+import logger from '../logger/index.js';
+
+const ARCHIVE_TYPES = ['cleaning_forms', 'attendance', 'daily_activities', 'scorecards', 'complaints', 'inspections', 'execution_logs'];
+const RETENTION_MONTHS = 12;
+
+class StationArchiveService {
+  async triggerArchive(stationId, archiveType, month, year, user) {
+    if (!stationId || !archiveType || !month || !year) {
+      throw new ValidationError('stationId, archiveType, month, and year are required');
+    }
+    if (!ARCHIVE_TYPES.includes(archiveType)) {
+      throw new ValidationError(`archiveType must be one of: ${ARCHIVE_TYPES.join(', ')}`);
+    }
+
+    const stationDoc = await db.collection('stations').doc(stationId).get();
+    if (!stationDoc.exists) throw new NotFoundError('Station not found');
+
+    const monthPad = String(month).padStart(2, '0');
+    const startDate = `${year}-${monthPad}-01`;
+    const endDate = `${year}-${monthPad}-31`;
+
+    const collectionMap = {
+      cleaning_forms: 'stationCleaningForms',
+      attendance: 'station_attendance',
+      daily_activities: 'station_daily_activities',
+      scorecards: 'daily_scorecards',
+      complaints: 'complaints',
+      inspections: 'inspections',
+      execution_logs: 'execution_logs',
+    };
+
+    const collectionName = collectionMap[archiveType];
+    let sourceQuery = db.collection(collectionName);
+
+    if (archiveType === 'cleaning_forms') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'attendance') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate);
+    } else if (archiveType === 'daily_activities') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate);
+    } else if (archiveType === 'scorecards') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate);
+    } else if (archiveType === 'complaints') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'inspections') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'execution_logs') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    }
+
+    const snapshot = await sourceQuery.limit(500).get();
+    if (snapshot.empty) {
+      return { message: `No ${archiveType} records found for ${month}/${year}`, archived: 0 };
+    }
+
+    const records = [];
+    snapshot.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
+
+    const ref = db.collection('station_archives').doc();
+    const now = new Date().toISOString();
+    const archive = {
+      uid: ref.id,
+      stationId,
+      stationName: stationDoc.data().stationName || '',
+      archiveType,
+      month: parseInt(month),
+      year: parseInt(year),
+      recordCount: records.length,
+      data: records,
+      status: 'archived',
+      archivedBy: user.uid,
+      archivedByName: user.fullName || '',
+      archivedAt: now,
+      createdAt: now,
+    };
+    await ref.set(archive);
+
+    logger.info('StationArchive', `Archived ${records.length} ${archiveType} records for ${stationId} ${month}/${year}`);
+    return { message: `${records.length} ${archiveType} records archived`, uid: ref.id, recordCount: records.length };
+  }
+
+  async listArchives(query = {}) {
+    const { stationId, archiveType, month, year, limit = 50 } = query;
+    let q = db.collection('station_archives').orderBy('archivedAt', 'desc');
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (archiveType) q = q.where('archiveType', '==', archiveType);
+    if (month) q = q.where('month', '==', parseInt(month));
+    if (year) q = q.where('year', '==', parseInt(year));
+    const snapshot = await q.limit(parseInt(limit)).get();
+    const archives = [];
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      archives.push({
+        uid: d.uid, stationId, stationName: d.stationName,
+        archiveType: d.archiveType, month: d.month, year: d.year,
+        recordCount: d.recordCount, status: d.status,
+        archivedBy: d.archivedBy, archivedAt: d.archivedAt,
+      });
+    });
+    return { count: archives.length, archives };
+  }
+
+  async getArchiveById(uid) {
+    const doc = await db.collection('station_archives').doc(uid).get();
+    if (!doc.exists) throw new NotFoundError('Archive not found');
+    return { id: doc.id, ...doc.data() };
+  }
+
+  async purgeArchives(stationId, archiveType, olderThanMonths = RETENTION_MONTHS) {
+    let q = db.collection('station_archives');
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (archiveType) q = q.where('archiveType', '==', archiveType);
+
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - olderThanMonths);
+    const cutoffStr = cutoffDate.toISOString();
+
+    const snapshot = await q.get();
+    const batch = db.batch();
+    let count = 0;
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      if (d.archivedAt && d.archivedAt < cutoffStr) {
+        batch.delete(doc.ref);
+        count++;
+      }
+    });
+
+    if (count > 0) await batch.commit();
+    logger.info('StationArchive', `Purged ${count} archives older than ${olderThanMonths} months`);
+    return { message: `${count} archives purged`, purged: count };
+  }
+}
+
+export const stationArchiveService = new StationArchiveService();

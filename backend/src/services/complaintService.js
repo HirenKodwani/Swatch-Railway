@@ -12,22 +12,22 @@ class ComplaintService {
     if (severity && !COMPLAINT_SEVERITIES.includes(severity)) throw new ValidationError(`severity must be one of: ${COMPLAINT_SEVERITIES.join(', ')}`);
 
     const ref = db.collection('complaints').doc();
+    const slaHours = { low: 72, medium: 48, high: 24, critical: 12 };
+    const sla = slaHours[severity || 'medium'];
+    const targetClosure = new Date(Date.now() + sla * 3600000).toISOString();
+
     const data = {
-      uid: ref.id, stationId,
-      area: body.area || '',
-      category, severity: severity || 'medium',
-      description,
-      evidence: body.evidence || '',
+      uid: ref.id, stationId, area: body.area || '', category, severity: severity || 'medium',
+      description, evidence: body.evidence || '',
       status: 'REPORTED',
-      reportedBy: userData.uid,
-      reportedByName: userData.fullName || '',
-      assignedTo: null, assignedAt: null, targetClosureTime: null,
+      slaDeadline: targetClosure, slaBreached: false, slaNotified: false,
+      reportedBy: userData.uid, reportedByName: userData.fullName || '',
+      assignedTo: null, assignedAt: null, targetClosureTime: targetClosure,
       actionTaken: null, closureProof: null, closurePhotoUrl: null, resolvedAt: null,
-      rejectionReason: null,
-      reopenedCount: 0,
+      rejectionReason: null, reopenedCount: 0,
+      escalatedTo: null, escalatedAt: null,
       auditLog: [{ action: 'CREATED', by: userData.uid, at: new Date().toISOString() }],
-      createdBy: userData.uid,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      createdBy: userData.uid, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
     await ref.set(data);
     return { message: 'Complaint created', uid: ref.id, complaint: data };
@@ -54,37 +54,28 @@ class ComplaintService {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
-    if (!['REPORTED', 'REOPENED'].includes(doc.data().status)) throw new ValidationError('Complaint can only be assigned when status is REPORTED or REOPENED');
+    if (!['REPORTED', 'REOPENED'].includes(doc.data().status)) throw new ValidationError('Complaint must be REPORTED or REOPENED');
     if (!body.assignedTo) throw new ValidationError('assignedTo is required');
-
-    const updates = {
-      status: 'ASSIGNED',
-      assignedTo: body.assignedTo,
-      assignedAt: new Date().toISOString(),
-      targetClosureTime: body.targetClosureTime || null,
-      updatedAt: new Date().toISOString()
-    };
-    await ref.update(updates);
+    await ref.update({ status: 'ASSIGNED', assignedTo: body.assignedTo, assignedAt: new Date().toISOString(), targetClosureTime: body.targetClosureTime || null, updatedAt: new Date().toISOString() });
     return { message: 'Complaint assigned', uid };
+  }
+
+  async startProgress(uid, userData) {
+    const ref = db.collection('complaints').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Complaint not found');
+    if (doc.data().status !== 'ASSIGNED') throw new ValidationError('Complaint must be ASSIGNED to start work');
+    await ref.update({ status: 'IN_PROGRESS', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    return { message: 'Work started on complaint', uid };
   }
 
   async resolveComplaint(uid, userData, body) {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
-    if (doc.data().status !== 'ASSIGNED' && doc.data().status !== 'IN_PROGRESS') throw new ValidationError('Complaint must be ASSIGNED or IN_PROGRESS to resolve');
+    if (!['ASSIGNED', 'IN_PROGRESS'].includes(doc.data().status)) throw new ValidationError('Complaint must be ASSIGNED or IN_PROGRESS');
     if (!body.actionTaken) throw new ValidationError('actionTaken is required');
-
-    const updates = {
-      status: 'RESOLVED',
-      actionTaken: body.actionTaken,
-      closureProof: body.closureProof || '',
-      closurePhotoUrl: body.closurePhotoUrl || null,
-      resolvedAt: new Date().toISOString(),
-      resolvedBy: userData.uid,
-      updatedAt: new Date().toISOString()
-    };
-    await ref.update(updates);
+    await ref.update({ status: 'RESOLVED', actionTaken: body.actionTaken, closureProof: body.closureProof || '', closurePhotoUrl: body.closurePhotoUrl || null, resolvedAt: new Date().toISOString(), resolvedBy: userData.uid, updatedAt: new Date().toISOString() });
     return { message: 'Complaint resolved', uid };
   }
 
@@ -92,7 +83,7 @@ class ComplaintService {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
-    if (doc.data().status !== 'RESOLVED') throw new ValidationError('Complaint must be RESOLVED to verify');
+    if (doc.data().status !== 'RESOLVED') throw new ValidationError('Complaint must be RESOLVED');
     await ref.update({ status: 'RAILWAY_VERIFIED', verifiedBy: userData.uid, verifiedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Complaint verified', uid };
   }
@@ -101,7 +92,7 @@ class ComplaintService {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
-    if (doc.data().status !== 'RAILWAY_VERIFIED') throw new ValidationError('Complaint must be RAILWAY_VERIFIED to close');
+    if (doc.data().status !== 'RAILWAY_VERIFIED') throw new ValidationError('Complaint must be RAILWAY_VERIFIED');
     await ref.update({ status: 'CLOSED', closedBy: userData.uid, closedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Complaint closed', uid };
   }
@@ -110,16 +101,9 @@ class ComplaintService {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
-    if (doc.data().status !== 'CLOSED' && doc.data().status !== 'RESOLVED') throw new ValidationError('Complaint must be CLOSED or RESOLVED to reopen');
+    if (!['CLOSED', 'RESOLVED'].includes(doc.data().status)) throw new ValidationError('Complaint must be CLOSED or RESOLVED');
     const current = doc.data();
-    await ref.update({
-      status: 'REOPENED',
-      reopenedCount: (current.reopenedCount || 0) + 1,
-      reopenReason: body.reason || '',
-      reopenedBy: userData.uid,
-      reopenedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
+    await ref.update({ status: 'REOPENED', reopenedCount: (current.reopenedCount || 0) + 1, reopenReason: body.reason || '', reopenedBy: userData.uid, reopenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Complaint reopened', uid };
   }
 
@@ -127,16 +111,40 @@ class ComplaintService {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
-    if (doc.data().status !== 'REPORTED') throw new ValidationError('Complaint must be REPORTED to reject');
+    if (doc.data().status !== 'REPORTED') throw new ValidationError('Complaint must be REPORTED');
     if (!body.reason) throw new ValidationError('Rejection reason is required');
     await ref.update({ status: 'REJECTED', rejectionReason: body.reason, rejectedBy: userData.uid, rejectedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Complaint rejected', uid };
   }
 
-  async deleteComplaint(uid) {
+  async escalateComplaint(uid, userData, body) {
     const ref = db.collection('complaints').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Complaint not found');
+    if (!['ASSIGNED', 'IN_PROGRESS'].includes(doc.data().status)) throw new ValidationError('Only ASSIGNED or IN_PROGRESS complaints can be escalated');
+    await ref.update({ status: 'ESCALATED', escalatedTo: body.escalatedTo, escalatedAt: new Date().toISOString(), escalationReason: body.reason || '', updatedAt: new Date().toISOString() });
+    return { message: 'Complaint escalated', uid };
+  }
+
+  async checkSlaBreaches() {
+    const now = new Date().toISOString();
+    const snap = await db.collection('complaints').where('status', 'in', ['REPORTED', 'ASSIGNED', 'IN_PROGRESS']).get();
+    let breached = 0;
+    const batch = db.batch();
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.slaDeadline && d.slaDeadline < now && !d.slaBreached) {
+        batch.update(doc.ref, { slaBreached: true, slaBreachedAt: now, updatedAt: now });
+        breached++;
+      }
+    });
+    if (breached > 0) await batch.commit();
+    return { checked: snap.size, breached };
+  }
+
+  async deleteComplaint(uid) {
+    const ref = db.collection('complaints').doc(uid);
+    if (!(await ref.get()).exists) throw new NotFoundError('Complaint not found');
     await ref.update({ status: 'CLOSED', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Complaint closed' };
   }

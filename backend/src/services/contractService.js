@@ -3,25 +3,19 @@ import { NotFoundError, ConflictError, ValidationError } from '../errors/index.j
 
 class ContractService {
   async createContract(creatorData, body) {
-    const { contractNumber, contractName, entityId, zone, division, depot, startDate, endDate, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber } = body;
+    const { contractNumber, contractName, entityId, stationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle } = body;
     const { uid, name, fullName, email, role } = creatorData;
     const creatorName = fullName || name || email || role || 'Unknown';
 
     if (!entityId) {
       throw new ValidationError("Please select a Contractor (Entity) to create a contract.");
     }
-    if (!contractNumber || !contractName || !zone || !startDate || !endDate || !workCategories || !repName || !repMobile || !repEmail) {
-      throw new ValidationError("Please fill all other mandatory fields (*) like Contract No, Name, Dates, etc.");
+    if (!contractNumber || !contractName || !stationIds || !stationIds.length || !startDate || !endDate || !workCategories || !repName || !repMobile || !repEmail) {
+      throw new ValidationError("Please fill all mandatory fields: Contract No, Name, Stations, Dates, Work Categories, Representative.");
     }
 
-    let duplicateQuery = db.collection('contracts').where('entityId', '==', entityId).where('zone', '==', zone).where('division', '==', division || null);
-    if (depot) {
-      duplicateQuery = duplicateQuery.where('depot', '==', depot);
-    }
-    const duplicateSnap = await duplicateQuery.limit(1).get();
-    if (!duplicateSnap.empty) {
-      const locationName = depot ? `Depot: ${depot}` : `Division: ${division}`;
-      throw new ValidationError(`Restriction: This Contractor already has a contract in this ${locationName}. Same company cannot have multiple contracts in the same division/depot.`);
+    if (new Date(endDate) <= new Date(startDate)) {
+      throw new ValidationError("End date must be after start date.");
     }
 
     const entityDoc = await db.collection('entities').doc(entityId).get();
@@ -34,7 +28,33 @@ class ContractService {
     }
     const entityName = entityData.companyName;
 
+    const stationNames = [];
+    if (stationIds && stationIds.length) {
+      for (const sid of stationIds) {
+        const snap = await db.collection('stations').doc(sid).get();
+        if (snap.exists) stationNames.push(snap.data().stationName || sid);
+        else throw new NotFoundError(`Station ${sid} not found.`);
+      }
+    }
+
+    const duplicateSnap = await db.collection('contracts')
+      .where('entityId', '==', entityId)
+      .where('status', '==', 'active').get();
+    if (!duplicateSnap.empty) {
+      for (const doc of duplicateSnap.docs) {
+        const existingStations = doc.data().stationIds || [];
+        const overlap = existingStations.filter(s => stationIds.includes(s));
+        if (overlap.length > 0) {
+          throw new ValidationError(`This Contractor already has an active contract covering station(s): ${overlap.join(', ')}.`);
+        }
+      }
+    }
+
     const representative = { name: repName, designation: repDesignation || null, mobile: repMobile, email: repEmail, idProofType: repIdProofType || null, idProofNumber: repIdProofNumber || null };
+
+    const startMs = new Date(startDate).getTime();
+    const endMs = new Date(endDate).getTime();
+    const durationDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
 
     const docRef = db.collection('contracts').doc();
     await docRef.set({
@@ -43,15 +63,20 @@ class ContractService {
       contractName,
       entityId,
       entityName,
-      zone,
-      division: division || null,
-      depot: depot || null,
+      stationIds,
+      stationNames,
       startDate,
       endDate,
+      contractDuration: `${durationDays} days`,
+      contractValue: contractValue || 0,
       workCategories,
       remarks: remarks || null,
       status: status || 'active',
       representative,
+      assignedRailwayOfficials: assignedRailwayOfficials || [],
+      assignedContractorUsers: assignedContractorUsers || [],
+      scoringApplicability: scoringApplicability || false,
+      billingCycle: billingCycle || 'monthly',
       createdAt: db.Timestamp(),
       createdBy: uid,
       createdByName: creatorName
@@ -83,24 +108,14 @@ class ContractService {
   }
 
   async getContracts(requesterData, query) {
-    const { status, division: queryDivision, zone: queryZone, entityId } = query;
+    const { status, stationId, entityId } = query;
     const { userType, zone: userZone, division: userDivision, role } = requesterData;
     const userRole = (role || '').trim().toLowerCase();
 
     let firestoreQuery = db.collection('contracts');
 
     if (userType === 'railway') {
-      if (userRole === 'company master' || userRole === 'super admin') {
-        if (queryZone) firestoreQuery = firestoreQuery.where('zone', '==', queryZone);
-        if (queryDivision) firestoreQuery = firestoreQuery.where('division', '==', queryDivision);
-      } else if (userRole === 'railway master') {
-        if (!userZone) throw new ValidationError("Zone missing in profile.");
-        firestoreQuery = firestoreQuery.where('zone', '==', userZone);
-        if (queryDivision) firestoreQuery = firestoreQuery.where('division', '==', queryDivision);
-      } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
-        if (!userDivision) throw new ValidationError("Division missing in profile.");
-        firestoreQuery = firestoreQuery.where('division', '==', userDivision);
-      }
+      // All railway users can see all contracts (filtered by stationId if provided)
     } else if (userType === 'contractor') {
       const contractorEntityId = requesterData.entityId;
       if (!contractorEntityId) throw new ValidationError("Entity linkage missing.");
@@ -113,10 +128,15 @@ class ContractService {
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
 
-    const contracts = [];
+    let contracts = [];
     snapshot.forEach(doc => {
       contracts.push({ ...doc.data(), uid: doc.id });
     });
+
+    if (stationId) {
+      contracts = contracts.filter(c => (c.stationIds || []).includes(stationId));
+    }
+
     return { count: contracts.length, contracts };
   }
 
@@ -162,10 +182,8 @@ class ContractService {
 
   async getContractsByEntity(entityId, query) {
     if (!entityId) throw new ValidationError("Entity ID is required.");
-    const { division, zone, status, category } = query || {};
+    const { status, stationId, category } = query || {};
     let firestoreQuery = db.collection('contracts').where('entityId', '==', entityId);
-    if (division) firestoreQuery = firestoreQuery.where('division', '==', division);
-    if (zone) firestoreQuery = firestoreQuery.where('zone', '==', zone);
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };

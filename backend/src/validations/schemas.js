@@ -35,8 +35,10 @@ export const createStationSchema = z.object({
   stationCode: z.string().min(1, 'Station code is required').max(50, 'Station code too long'),
   stationName: z.string().min(1, 'Station name is required').max(200, 'Station name too long'),
   division: z.string().min(1, 'Division is required').max(100, 'Division too long'),
-  zone: z.string().max(100, 'Zone too long').optional().nullable(),
+  zone: z.string().min(1, 'Zone is required').max(100, 'Zone too long'),
   address: z.string().max(500, 'Address too long').optional().nullable(),
+  category: z.string().max(50, 'Category too long').optional().nullable(),
+  stationType: z.string().max(50, 'Station type too long').optional().nullable(),
   latitude: z.number().min(-90).max(90).optional().nullable(),
   longitude: z.number().min(-180).max(180).optional().nullable(),
   active: z.boolean().optional()
@@ -44,13 +46,26 @@ export const createStationSchema = z.object({
 
 export const createContractSchema = z.object({
   contractNumber: z.string().min(1, 'Contract number is required').max(100, 'Contract number too long'),
+  contractName: z.string().min(1, 'Contract name is required').max(200, 'Contract name too long'),
   entityId: z.string().min(1, 'Entity ID is required').max(100, 'Entity ID too long'),
-  entityName: z.string().min(1, 'Entity name is required').max(200, 'Entity name too long'),
-  zone: z.string().min(1, 'Zone is required').max(100, 'Zone too long'),
-  division: z.string().min(1, 'Division is required').max(100, 'Division too long'),
+  stationIds: z.array(z.string().min(1)).min(1, 'At least one station is required'),
   startDate: z.string().min(1, 'Start date is required').max(20, 'Invalid date format'),
   endDate: z.string().min(1, 'End date is required').max(20, 'Invalid date format'),
-  contractValue: z.number().positive('Contract value must be positive'),
+  contractValue: z.number().min(0, 'Contract value must be non-negative').optional(),
+  workCategories: z.array(z.string()).optional(),
+  billingCycle: z.enum(['monthly', 'quarterly', 'half_yearly', 'yearly']).optional(),
+  scoringApplicability: z.boolean().optional(),
+  assignedRailwayOfficials: z.array(z.object({
+    uid: z.string().optional(),
+    name: z.string().optional(),
+    designation: z.string().optional(),
+    email: z.string().optional()
+  })).optional(),
+  assignedContractorUsers: z.array(z.object({
+    uid: z.string().optional(),
+    name: z.string().optional(),
+    role: z.string().optional()
+  })).optional(),
   status: z.string().max(50).optional()
 });
 
@@ -134,7 +149,14 @@ export const createMachineSchema = z.object({
   maintenanceSchedule: z.string().optional().nullable(),
   hourlyRate: z.number().min(0).optional().nullable(),
   dailyRate: z.number().min(0).optional().nullable(),
-  remarks: z.string().optional().nullable()
+  downtimeEntry: z.object({
+    downtimeDate: z.string().optional(),
+    downtimeReason: z.string().optional(),
+    estimatedRepairDate: z.string().optional(),
+    actualRepairDate: z.string().optional()
+  }).optional().nullable(),
+  replacementStatus: z.enum(['none', 'requested', 'approved', 'replaced']).optional(),
+  remarks: z.string().max(500).optional().nullable()
 });
 
 export const createMaterialSchema = z.object({
@@ -143,8 +165,10 @@ export const createMaterialSchema = z.object({
   unit: z.string().min(1, 'Unit is required'),
   stationId: z.string().optional().nullable(),
   openingBalance: z.number().min(0).optional(),
+  monthlyRequirement: z.number().min(0).optional(),
   reorderLevel: z.number().min(0).optional(),
-  unitPrice: z.number().min(0).optional().nullable()
+  unitPrice: z.number().min(0).optional().nullable(),
+  remarks: z.string().max(500).optional().nullable()
 });
 
 export const paginationSchema = z.object({

@@ -102,10 +102,9 @@ class BillingService {
     if (zone) query = query.where('zone', '==', zone);
     if (month) query = query.where('month', '==', parseInt(month));
     if (year) query = query.where('year', '==', parseInt(year));
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.orderBy('createdAt', 'desc').limit(200).get();
     const reports = [];
     snapshot.forEach(doc => reports.push(doc.data()));
-    reports.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
     return { count: reports.length, reports };
   }
 

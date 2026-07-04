@@ -5,46 +5,17 @@ import { stationBillingService } from '../services/stationBillingService.js';
 
 const router = Router();
 
-// Generate a monthly billing support pack
-router.post('/api/station-billing/generate', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.generateBillingSupportPack(req.user, req.body);
-  res.status(201).json(result);
-}));
-
-// List billing packs
-router.get('/api/station-billing', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.listPacks(req.query);
-  res.status(200).json(result);
-}));
-
-// Get single billing pack
-router.get('/api/station-billing/:uid', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.getPackById(req.params.uid);
-  res.status(200).json(result);
-}));
-
-// Update compliance checklist
-router.patch('/api/station-billing/:uid/compliance', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.updateCompliance(req.params.uid, req.body.checklist, req.user);
-  res.status(200).json(result);
-}));
-
-// Submit pack for review
-router.post('/api/station-billing/:uid/submit', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.submitPack(req.params.uid, req.user);
-  res.status(200).json(result);
-}));
-
-// Approve pack
-router.post('/api/station-billing/:uid/approve', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.approvePack(req.params.uid, req.user);
-  res.status(200).json(result);
-}));
-
-// Reject pack
-router.post('/api/station-billing/:uid/reject', verifyToken, asyncHandler(async (req, res) => {
-  const result = await stationBillingService.rejectPack(req.params.uid, req.body.reason, req.user);
-  res.status(200).json(result);
-}));
+router.post('/api/station-billing/generate', verifyToken, asyncHandler(async (req, res) => res.status(201).json(await stationBillingService.generateBillingSupportPack(req.user, req.body))));
+router.get('/api/station-billing', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.listPacks(req.query))));
+router.get('/api/station-billing/:uid', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.getPackById(req.params.uid))));
+router.patch('/api/station-billing/:uid/compliance', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.updateCompliance(req.params.uid, req.body.checklist))));
+router.post('/api/station-billing/:uid/submit', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.submitPack(req.params.uid, req.user))));
+router.post('/api/station-billing/:uid/approve', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.approvePack(req.params.uid, req.user))));
+router.post('/api/station-billing/:uid/reject', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.rejectPack(req.params.uid, req.body.reason, req.user))));
+router.post('/api/station-billing/:uid/payment', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.recordPayment(req.params.uid, req.user, req.body))));
+router.put('/api/station-billing/:uid', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.updatePack(req.params.uid, req.body))));
+router.delete('/api/station-billing/:uid', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.deletePack(req.params.uid))));
+router.post('/api/station-billing/:uid/return-to-draft', verifyToken, asyncHandler(async (req, res) => res.json(await stationBillingService.returnToDraft(req.params.uid, req.user))));
+router.post('/api/station-billing/auto-generate-monthly', verifyToken, asyncHandler(async (req, res) => res.status(201).json(await stationBillingService.generateMonthlyBillingPacks(req.body.month, req.body.year, req.user))));
 
 export default router;

@@ -1,21 +1,75 @@
 import { db } from '../database/index.js';
-import { NotFoundError, ValidationError, ConflictError, ForbiddenError, FirestoreError } from '../errors/index.js';
+import { NotFoundError, ValidationError, ConflictError } from '../errors/index.js';
 
 class StationService {
   async getStations(query = {}) {
-    const { zone, division, category, active, userRole, userZone, userDivision } = query;
-    const snapshot = await db.collection('stations').limit(200).get();
-    let stations = [];
-    snapshot.forEach(doc => stations.push(doc.data()));
+    const { zone, division, category, active, userRole, userZone, userDivision, limit, cursor } = query;
+    let q = db.collection('stations');
     const role = (userRole || '').toLowerCase();
-    if (!role.includes('master')) {
-      const divFilter = division || userDivision;
-      if (divFilter) stations = stations.filter(s => s.division === divFilter);
+
+    if (!role.includes('master') && userDivision) {
+      q = q.where('division', '==', userDivision);
     }
-    if (zone) stations = stations.filter(s => s.zone === zone);
-    if (category) stations = stations.filter(s => s.category === category);
-    if (active !== undefined) stations = stations.filter(s => s.active === (active === 'true'));
-    stations.sort((a, b) => (a.stationName || '').localeCompare(b.stationName || ''));
+    if (division) q = q.where('division', '==', division);
+    if (zone) q = q.where('zone', '==', zone);
+    if (category) q = q.where('category', '==', category);
+    if (active !== undefined) q = q.where('active', '==', active === 'true');
+
+    let snapped;
+    const pageSize = Math.min(200, Math.max(1, parseInt(limit) || 200));
+
+    if (cursor) {
+      const cursorDoc = await db.collection('stations').doc(cursor).get();
+      snapped = await q.orderBy('stationName', 'asc').startAfter(cursorDoc).limit(pageSize).get();
+    } else {
+      snapped = await q.orderBy('stationName', 'asc').limit(pageSize).get();
+    }
+
+    const stations = [];
+    snapped.forEach(doc => stations.push({ id: doc.id, ...doc.data() }));
+
+    return { count: stations.length, stations };
+  }
+
+  async getStationById(uid) {
+    const doc = await db.collection('stations').doc(uid).get();
+    if (!doc.exists) throw new NotFoundError('Station not found');
+    return { id: doc.id, ...doc.data() };
+  }
+
+  async searchStations(queryStr) {
+    if (!queryStr || queryStr.length < 2) throw new ValidationError('Search query must be at least 2 characters');
+    const keyword = queryStr.toLowerCase();
+
+    const keywordUpper = keyword.toUpperCase();
+    const keywordLower = keyword.toLowerCase();
+
+    const [codeSnap, namePrefixSnap, fullSnap] = await Promise.all([
+      db.collection('stations').where('stationCode', '>=', keywordUpper).where('stationCode', '<=', keywordUpper + '\uf8ff').limit(20).get(),
+      db.collection('stations').where('stationName', '>=', keyword).where('stationName', '<=', keyword + '\uf8ff').limit(20).get(),
+      db.collection('stations').limit(200).get(),
+    ]);
+
+    const stationsMap = new Map();
+    codeSnap.forEach(doc => stationsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+    namePrefixSnap.forEach(doc => {
+      if (!stationsMap.has(doc.id)) stationsMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
+    fullSnap.forEach(doc => {
+      if (!stationsMap.has(doc.id) && (doc.data().stationName || '').toLowerCase().includes(keywordLower)) {
+        stationsMap.set(doc.id, { id: doc.id, ...doc.data() });
+      }
+    });
+
+    const stations = Array.from(stationsMap.values()).slice(0, 20);
+    return { count: stations.length, stations };
+  }
+
+  async getStationsByDivision(division) {
+    if (!division) throw new ValidationError('Division is required');
+    const snapshot = await db.collection('stations').where('division', '==', division).orderBy('stationName', 'asc').limit(200).get();
+    const stations = [];
+    snapshot.forEach(doc => stations.push({ id: doc.id, ...doc.data() }));
     return { count: stations.length, stations };
   }
 
@@ -39,7 +93,7 @@ class StationService {
     return { message: 'Station created', uid: ref.id, station: data };
   }
 
-  async updateStation(uid, body) {
+  async updateStation(uid, userData, body) {
     const ref = db.collection('stations').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station not found');
@@ -49,8 +103,17 @@ class StationService {
       if (body[key] !== undefined) updates[key] = body[key];
     }
     updates.updatedAt = new Date().toISOString();
+    updates.updatedBy = userData.uid;
     await ref.update(updates);
     return { message: 'Station updated' };
+  }
+
+  async deleteStation(uid) {
+    const ref = db.collection('stations').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station not found');
+    await ref.update({ active: false, deletedAt: new Date().toISOString() });
+    return { message: 'Station deactivated' };
   }
 }
 

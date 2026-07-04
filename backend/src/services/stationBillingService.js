@@ -1,19 +1,23 @@
+/*
+ * Required Firestore composite indexes:
+ *  1. `station_billing_packs` – `contractId` ASC, `stationId` ASC, `month` ASC, `year` ASC
+ *  2. `station_billing_packs` – `stationId` ASC, `createdAt` DESC
+ *  3. `machine_downtime` – `stationId` ASC, `startTime` ASC
+ *  4. `inspections` – `stationId` ASC, `createdAt` ASC
+ */
+
 import { db, admin } from '../database/index.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
 import logger from '../logger/index.js';
 
 class StationBillingService {
-  // ─── Generate Billing Support Pack ────────────────────────────────────────
   async generateBillingSupportPack(user, data) {
     const { contractId, stationId, month, year } = data;
-    if (!contractId || !stationId || !month || !year) {
-      throw new ValidationError('contractId, stationId, month, and year are required');
-    }
+    if (!contractId || !stationId || !month || !year) throw new ValidationError('contractId, stationId, month, and year are required');
 
     const contractDoc = await db.collection('contracts').doc(contractId).get();
     if (!contractDoc.exists) throw new NotFoundError('Contract not found');
     const contractData = contractDoc.data();
-
     const stationDoc = await db.collection('stations').doc(stationId).get();
     if (!stationDoc.exists) throw new NotFoundError('Station not found');
     const stationName = stationDoc.data().stationName || '';
@@ -22,222 +26,239 @@ class StationBillingService {
     const startDate = `${year}-${monthPad}-01`;
     const endDate = `${year}-${monthPad}-31`;
 
-    // Parallel fetch of all data sources
-    const [
-      attendanceSnap, activitySnap, scorecardSnap,
-      complaintSnap, feedbackSnap, inspectionSnap, machineSnap,
-    ] = await Promise.all([
+    const [attendanceSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap] = await Promise.all([
       db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
       db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
       db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('complaints').where('stationId', '==', stationId).where('createdAt', '>=', startDate).get(),
-      db.collection('station_feedback').where('stationId', '==', stationId).get(),
-      db.collection('inspections').where('stationId', '==', stationId).get(),
-      db.collection('machineDeployments').where('stationId', '==', stationId).get(),
+      db.collection('complaints').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
+      db.collection('station_feedback').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
+      db.collection('inspections').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
+      db.collection('machines').where('stationId', '==', stationId).get(),
+      db.collection('machine_downtime').where('stationId', '==', stationId).where('startTime', '>=', startDate).where('startTime', '<=', endDate + 'T23:59:59').get(),
     ]);
 
-    // Attendance Summary
-    const attendanceRecords = [];
-    attendanceSnap.forEach(doc => attendanceRecords.push(doc.data()));
+    const attendanceRecords = []; attendanceSnap.forEach(d => attendanceRecords.push(d.data()));
     const presentCount = attendanceRecords.filter(r => ['present', 'late'].includes(r.status)).length;
-    const absentCount = attendanceRecords.filter(r => r.status === 'absent').length;
     const uniqueDates = [...new Set(attendanceRecords.map(r => r.date))].length;
-    const avgDailyManpower = uniqueDates > 0 ? Math.round(presentCount / uniqueDates) : 0;
-    const attendanceSummary = {
-      totalDaysRecorded: uniqueDates,
-      totalAttendanceEntries: attendanceRecords.length,
-      totalPresent: presentCount,
-      totalAbsent: absentCount,
-      averageDailyManpower: avgDailyManpower,
-      attendancePercentage: attendanceRecords.length > 0 ? Math.round((presentCount / attendanceRecords.length) * 100) : 0,
-    };
+    const attendanceSummary = { totalDaysRecorded: uniqueDates, totalAttendanceEntries: attendanceRecords.length, totalPresent: presentCount, totalAbsent: attendanceRecords.filter(r => r.status === 'absent').length, averageDailyManpower: uniqueDates > 0 ? Math.round(presentCount / uniqueDates) : 0, attendancePercentage: attendanceRecords.length > 0 ? Math.round(presentCount / attendanceRecords.length * 100) : 0 };
 
-    // Activity Summary
-    const activities = [];
-    activitySnap.forEach(doc => activities.push(doc.data()));
-    const actSummary = { total: activities.length, approved: 0, completed: 0, rejected: 0, pending: 0, missed: 0 };
+    const activities = []; activitySnap.forEach(d => activities.push(d.data()));
+    const actSummary = { total: activities.length, APPROVED: 0, COMPLETED: 0, REJECTED: 0, PENDING: 0, IN_PROGRESS: 0, PARTIALLY_COMPLETED: 0, RESUBMITTED: 0 };
     activities.forEach(a => { if (actSummary[a.status] !== undefined) actSummary[a.status]++; });
-    const activityCompletionRate = actSummary.total > 0
-      ? Math.round(((actSummary.approved + actSummary.completed) / actSummary.total) * 100) : 0;
+    const activityCompletionRate = actSummary.total > 0 ? Math.round((actSummary.APPROVED + actSummary.COMPLETED) / actSummary.total * 100) : 0;
 
-    // Scorecard Summary
-    const scorecards = [];
-    scorecardSnap.forEach(doc => scorecards.push(doc.data()));
+    const scorecards = []; scorecardSnap.forEach(d => scorecards.push(d.data()));
     const totalScore = scorecards.reduce((s, c) => s + (c.overallStationScore || 0), 0);
-    const avgScore = scorecards.length > 0 ? Math.round((totalScore / scorecards.length) * 10) / 10 : 0;
-    const gradeMap = { A: 0, B: 0, C: 0, D: 0 };
-    scorecards.forEach(c => { if (gradeMap[c.grade] !== undefined) gradeMap[c.grade]++; });
-    const scorecardSummary = {
-      daysWithScorecard: scorecards.length,
-      averageScore: avgScore,
-      gradeDistribution: gradeMap,
-      certified: scorecards.every(c => c.certified),
-    };
+    const avgScore = scorecards.length > 0 ? Math.round(totalScore / scorecards.length * 10) / 10 : 0;
+    const gradeMap = {}; scorecards.forEach(c => { const g = c.grade || 'N/A'; gradeMap[g] = (gradeMap[g] || 0) + 1; });
+    const scorecardSummary = { daysWithScorecard: scorecards.length, averageScore: avgScore, gradeDistribution: gradeMap, certified: scorecards.every(c => c.certified) };
 
-    // Complaint Summary
-    const complaints = [];
-    complaintSnap.forEach(doc => {
-      const d = doc.data();
-      const created = d.createdAt || '';
-      if (created >= startDate && created <= endDate + 'T23:59:59') complaints.push(d);
-    });
-    const cmpSummary = { total: complaints.length, closed: 0, open: 0, pending: 0, rejected: 0 };
-    complaints.forEach(c => {
-      if (c.status === 'CLOSED') cmpSummary.closed++;
-      else if (c.status === 'REJECTED') cmpSummary.rejected++;
-      else if (['REPORTED', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)) cmpSummary.open++;
-      else cmpSummary.pending++;
-    });
+    const complaints = []; complaintSnap.forEach(d => complaints.push(d.data()));
+    const cmpSummary = { total: complaints.length, closed: complaints.filter(c => c.status === 'CLOSED').length, open: complaints.filter(c => ['REPORTED', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length, rejected: complaints.filter(c => c.status === 'REJECTED').length };
 
-    // Feedback Summary
-    const feedbackRecords = [];
-    feedbackSnap.forEach(doc => {
-      const d = doc.data();
-      if ((d.createdAt || '') >= startDate) feedbackRecords.push(d);
-    });
+    const feedbackRecords = []; feedbackSnap.forEach(d => feedbackRecords.push(d.data()));
     const totalRating = feedbackRecords.reduce((s, f) => s + (f.rating || 0), 0);
-    const feedbackSummary = {
-      totalFeedbacks: feedbackRecords.length,
-      averageRating: feedbackRecords.length > 0 ? Math.round((totalRating / feedbackRecords.length) * 10) / 10 : 0,
-      negativeFeedbacks: feedbackRecords.filter(f => f.isNegative).length,
-    };
+    const feedbackSummary = { totalFeedbacks: feedbackRecords.length, averageRating: feedbackRecords.length > 0 ? Math.round(totalRating / feedbackRecords.length * 10) / 10 : 0, negativeFeedbacks: feedbackRecords.filter(f => f.isNegative).length };
 
-    // Penalty / Deduction Computation
+    const inspections = []; inspectionSnap.forEach(d => inspections.push(d.data()));
+    const totalDeficiencies = inspections.reduce((s, i) => s + (i.deficiencies || []).length, 0);
+    const closedDeficiencies = inspections.reduce((s, i) => s + ((i.deficiencies || []).filter(d => d.status === 'CLOSED' || d.status === 'VERIFIED').length), 0);
+    const inspectionSummary = { totalInspections: inspections.length, totalDeficiencies, closedDeficiencies, openDeficiencies: totalDeficiencies - closedDeficiencies, inspectionTypes: [...new Set(inspections.map(i => i.inspectionType || 'standard'))].length };
+
+    const downtimeRecords = []; downtimeSnap.forEach(d => downtimeRecords.push(d.data()));
+    const totalDowntimeHours = downtimeRecords.reduce((s, d) => s + (d.totalDowntimeHours || 0), 0);
+    const totalMachinePenalty = downtimeRecords.reduce((s, d) => s + (d.penaltyAmount || 0), 0);
+    const machineDowntimeSummary = { incidents: downtimeRecords.length, totalHours: totalDowntimeHours, totalPenalty: totalMachinePenalty };
+
     const billingRuleSnap = await db.collection('billingRules').where('contractId', '==', contractId).limit(1).get();
     let penalties = { totalPenaltyAmount: 0, deductions: [] };
-
     if (!billingRuleSnap.empty) {
       const rules = billingRuleSnap.docs[0].data();
-      const contractValue = contractData.contractValue || 0;
-      const monthlyBase = contractValue / 12;
-
-      // Attendance-based penalty
+      const monthlyBase = (contractData.contractValue || 0) / 12;
       if (attendanceSummary.attendancePercentage < 90 && rules.attendancePenaltyRate) {
-        const shortfall = 90 - attendanceSummary.attendancePercentage;
-        const penaltyAmt = (shortfall / 100) * monthlyBase * (rules.attendancePenaltyRate || 0.01);
-        penalties.deductions.push({ reason: 'Attendance Shortfall', percentage: shortfall, amount: Math.round(penaltyAmt) });
-        penalties.totalPenaltyAmount += Math.round(penaltyAmt);
+        const amt = Math.round(((90 - attendanceSummary.attendancePercentage) / 100) * monthlyBase * (rules.attendancePenaltyRate || 0.01));
+        penalties.deductions.push({ reason: 'Attendance Shortfall', percentage: 90 - attendanceSummary.attendancePercentage, amount: amt });
+        penalties.totalPenaltyAmount += amt;
       }
-
-      // Score-based penalty
       if (avgScore < 70 && rules.scorePenaltyRate) {
-        const shortfall = 70 - avgScore;
-        const penaltyAmt = (shortfall / 100) * monthlyBase * (rules.scorePenaltyRate || 0.02);
-        penalties.deductions.push({ reason: 'Cleanliness Score Below 70%', percentage: shortfall, amount: Math.round(penaltyAmt) });
-        penalties.totalPenaltyAmount += Math.round(penaltyAmt);
+        const amt = Math.round(((70 - avgScore) / 100) * monthlyBase * (rules.scorePenaltyRate || 0.02));
+        penalties.deductions.push({ reason: 'Score Below 70%', percentage: 70 - avgScore, amount: amt });
+        penalties.totalPenaltyAmount += amt;
       }
     }
-
-    // Machine downtime summary
-    const machines = [];
-    machineSnap.forEach(doc => machines.push(doc.data()));
-    const machineDowntime = machines.filter(m => m.status === 'MAINTENANCE').length;
-
-    const billableAmount = Math.max(0,
-      (contractData.contractValue / 12) - penalties.totalPenaltyAmount
-    );
+    if (machineDowntimeSummary.totalPenalty > 0) {
+      penalties.deductions.push({ reason: 'Machine Downtime Penalty', percentage: 0, amount: machineDowntimeSummary.totalPenalty });
+      penalties.totalPenaltyAmount += machineDowntimeSummary.totalPenalty;
+    }
+    const machines = []; machineSnap.forEach(d => machines.push(d.data()));
+    const inMaintenanceCount = machines.filter(m => m.workingStatus === 'under_maintenance' || m.workingStatus === 'broken').length;
+    const billableAmount = Math.max(0, (contractData.contractValue / 12) - penalties.totalPenaltyAmount);
 
     const ref = db.collection('station_billing_packs').doc();
     const now = new Date().toISOString();
     const pack = {
-      uid: ref.id,
-      contractId, stationId, stationName,
+      uid: ref.id, contractId, stationId, stationName,
       month: parseInt(month), year: parseInt(year),
       contractNumber: contractData.contractNumber || '',
       contractorName: contractData.contractorName || contractData.entityName || '',
-      monthlyContractValue: Math.round(contractData.contractValue / 12),
-      attendanceSummary,
-      activitySummary: { ...actSummary, completionRate: activityCompletionRate },
-      scorecardSummary,
-      complaintSummary: cmpSummary,
-      feedbackSummary,
-      machineSummary: { total: machines.length, inMaintenance: machineDowntime, deployed: machines.filter(m => m.status === 'DEPLOYED').length },
-      penalties,
-      billableAmount,
-      status: 'DRAFT',
-      complianceChecklist: {
-        attendanceSheetAttached: false,
-        wagesheetAttached: false,
-        bankStatementAttached: false,
-        policeVerificationAttached: false,
-        medicalCertificateAttached: false,
-        biometricSheetAttached: false,
-        scorecardAttached: scorecardSummary.daysWithScorecard > 0,
-        gstInvoiceAttached: false,
-      },
-      generatedBy: user.uid,
-      generatedByName: user.fullName || '',
-      generatedAt: now,
-      createdAt: now, updatedAt: now,
+      monthlyContractValue: Math.round((contractData.contractValue || 0) / 12),
+      gstRate: contractData.gstRate || 18,
+      gstAmount: Math.round((billableAmount * (contractData.gstRate || 18)) / 100),
+      totalPayableWithGst: Math.round(billableAmount * (1 + (contractData.gstRate || 18) / 100)),
+      attendanceSummary, activitySummary: { ...actSummary, completionRate: activityCompletionRate },
+      scorecardSummary, complaintSummary: cmpSummary, feedbackSummary, inspectionSummary,
+      machineSummary: { total: machines.length, inMaintenance: inMaintenanceCount, deployed: machines.length - inMaintenanceCount, downtime: machineDowntimeSummary },
+      penalties, billableAmount, status: 'DRAFT',
+      paymentStatus: 'unpaid', paymentDate: null, paymentRef: null, paymentAmount: null,
+      complianceChecklist: { attendanceSheetAttached: false, wagesheetAttached: false, bankStatementAttached: false, policeVerificationAttached: false, medicalCertificateAttached: false, biometricSheetAttached: false, scorecardAttached: scorecardSummary.daysWithScorecard > 0, gstInvoiceAttached: false },
+      generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: now, createdAt: now, updatedAt: now,
     };
-
     await ref.set(pack);
-    logger.info('StationBilling', `Billing pack generated: ${ref.id} for ${stationId} ${month}/${year}`);
     return { message: 'Billing support pack generated', uid: ref.id, pack };
   }
 
-  // ─── Get Pack by ID ───────────────────────────────────────────────────────
   async getPackById(uid) {
     const doc = await db.collection('station_billing_packs').doc(uid).get();
     if (!doc.exists) throw new NotFoundError('Billing pack not found');
     return { id: doc.id, ...doc.data() };
   }
 
-  // ─── List Packs ───────────────────────────────────────────────────────────
   async listPacks(query = {}) {
-    const { contractId, stationId, month, year, status, limit = 50 } = query;
+    const { contractId, stationId, month, year, status, paymentStatus, limit = 50 } = query;
     let q = db.collection('station_billing_packs');
     if (contractId) q = q.where('contractId', '==', contractId);
     if (stationId) q = q.where('stationId', '==', stationId);
     if (month) q = q.where('month', '==', parseInt(month));
     if (year) q = q.where('year', '==', parseInt(year));
     if (status) q = q.where('status', '==', status);
+    if (paymentStatus) q = q.where('paymentStatus', '==', paymentStatus);
     const snapshot = await q.orderBy('createdAt', 'desc').limit(parseInt(limit)).get();
-    const packs = [];
-    snapshot.forEach(doc => packs.push({ id: doc.id, ...doc.data() }));
+    const packs = []; snapshot.forEach(doc => packs.push({ id: doc.id, ...doc.data() }));
     return { count: packs.length, packs };
   }
 
-  // ─── Update Compliance Checklist ──────────────────────────────────────────
-  async updateCompliance(uid, checklist, user) {
+  async updateCompliance(uid, checklist) {
     const ref = db.collection('station_billing_packs').doc(uid);
-    const doc = await ref.get();
-    if (!doc.exists) throw new NotFoundError('Billing pack not found');
-    await ref.update({
-      complianceChecklist: checklist,
-      updatedAt: new Date().toISOString(),
-      updatedBy: user.uid,
-    });
+    if (!(await ref.get()).exists) throw new NotFoundError('Billing pack not found');
+    await ref.update({ complianceChecklist: checklist, updatedAt: new Date().toISOString() });
     return { message: 'Compliance checklist updated', uid };
   }
 
-  // ─── Submit Pack for Review ───────────────────────────────────────────────
   async submitPack(uid, user) {
     const ref = db.collection('station_billing_packs').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Billing pack not found');
     if (doc.data().status !== 'DRAFT') throw new ValidationError('Only DRAFT packs can be submitted');
-    await ref.update({ status: 'SUBMITTED', submittedBy: user.uid, submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    return { message: 'Billing pack submitted for review', uid };
+
+    const pack = doc.data();
+    const checklist = pack.complianceChecklist || {};
+    const allComplete = Object.values(checklist).every(v => v === true);
+    await ref.update({ status: 'SUBMITTED', submittedBy: user.uid, submittedAt: new Date().toISOString(), autoVerified: allComplete, updatedAt: new Date().toISOString() });
+    return { message: 'Billing pack submitted', uid, autoVerified: allComplete };
   }
 
-  // ─── Approve / Reject Pack ────────────────────────────────────────────────
   async approvePack(uid, user) {
     const ref = db.collection('station_billing_packs').doc(uid);
-    const doc = await ref.get();
-    if (!doc.exists) throw new NotFoundError('Billing pack not found');
-    if (doc.data().status !== 'SUBMITTED') throw new ValidationError('Only SUBMITTED packs can be approved');
+    if (!(await ref.get()).exists) throw new NotFoundError('Billing pack not found');
     await ref.update({ status: 'APPROVED', approvedBy: user.uid, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Billing pack approved', uid };
   }
 
   async rejectPack(uid, reason, user) {
     const ref = db.collection('station_billing_packs').doc(uid);
-    const doc = await ref.get();
-    if (!doc.exists) throw new NotFoundError('Billing pack not found');
+    if (!(await ref.get()).exists) throw new NotFoundError('Billing pack not found');
     if (!reason) throw new ValidationError('Rejection reason is required');
     await ref.update({ status: 'REJECTED', rejectionReason: reason, rejectedBy: user.uid, rejectedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Billing pack rejected', uid };
+  }
+
+  async recordPayment(uid, user, body) {
+    const ref = db.collection('station_billing_packs').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Billing pack not found');
+    if (doc.data().status !== 'APPROVED') throw new ValidationError('Only APPROVED packs can have payments recorded');
+    const { amount, paymentRef, paymentDate } = body;
+    if (!amount || !paymentRef) throw new ValidationError('amount and paymentRef are required');
+    await ref.update({ paymentStatus: amount >= doc.data().totalPayableWithGst ? 'paid' : 'partial', paymentAmount: amount, paymentRef, paymentDate: paymentDate || new Date().toISOString(), paidAt: new Date().toISOString(), paidBy: user.uid, updatedAt: new Date().toISOString() });
+    return { message: 'Payment recorded', uid };
+  }
+
+  async updatePack(uid, data) {
+    const ref = db.collection('station_billing_packs').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Billing pack not found');
+    if (!['DRAFT', 'REJECTED'].includes(doc.data().status)) throw new ValidationError('Only DRAFT or REJECTED packs can be edited');
+    const allowed = ['complianceChecklist', 'attendanceSummary', 'activitySummary', 'scorecardSummary', 'complaintSummary', 'feedbackSummary', 'machineSummary', 'penalties', 'billableAmount'];
+    const updates = { updatedAt: new Date().toISOString() };
+    for (const key of allowed) { if (data[key] !== undefined) updates[key] = data[key]; }
+    await ref.update(updates);
+    return { message: 'Billing pack updated', uid };
+  }
+
+  async deletePack(uid) {
+    const ref = db.collection('station_billing_packs').doc(uid);
+    if (!(await ref.get()).exists) throw new NotFoundError('Billing pack not found');
+    await ref.update({ status: 'DELETED', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    return { message: 'Billing pack deleted' };
+  }
+
+  async returnToDraft(uid, user) {
+    const ref = db.collection('station_billing_packs').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Billing pack not found');
+    if (doc.data().status !== 'REJECTED') throw new ValidationError('Only REJECTED packs can be returned to draft');
+    await ref.update({ status: 'DRAFT', rejectionReason: null, updatedAt: new Date().toISOString(), returnedToDraftBy: user.uid });
+    return { message: 'Billing pack returned to draft', uid };
+  }
+
+  /* ---------------------------------------------------------------
+     Monthly billing auto-generation (Workflow 15.3)
+     --------------------------------------------------------------- */
+
+  async generateMonthlyBillingPacks(month, year, user) {
+    if (!month || !year) throw new ValidationError('month and year are required');
+    const userObj = user || { uid: 'system', fullName: 'System', role: 'SUPER_ADMIN' };
+    const contractsSnap = await db.collection('contracts').where('status', '==', 'ACTIVE').limit(200).get();
+    if (contractsSnap.empty) return { generated: 0, message: 'No active contracts found' };
+
+    const generated = [];
+    const errors = [];
+    const processedStations = new Set();
+
+    for (const contractDoc of contractsSnap.docs) {
+      const contract = contractDoc.data();
+      const contractId = contractDoc.id;
+      let stationsSnap;
+      if (contract.stationId) {
+        const stationDoc = await db.collection('stations').doc(contract.stationId).get();
+        if (stationDoc.exists && stationDoc.data().active !== false) {
+          stationsSnap = [stationDoc];
+        } else continue;
+      } else {
+        stationsSnap = await db.collection('stations').where('active', '==', true).limit(200).get();
+      }
+      const stationList = stationsSnap.docs ? stationsSnap.docs : [stationsSnap];
+      for (const stationDoc of stationList) {
+        if (stationDoc.id && processedStations.has(stationDoc.id)) continue;
+        if (stationDoc.id) processedStations.add(stationDoc.id);
+        const stationId = stationDoc.id;
+        try {
+          const existSnap = await db.collection('station_billing_packs')
+            .where('contractId', '==', contractId).where('stationId', '==', stationId)
+            .where('month', '==', parseInt(month)).where('year', '==', parseInt(year))
+            .where('status', 'in', ['DRAFT', 'SUBMITTED', 'APPROVED']).limit(1).get();
+          if (!existSnap.empty) {
+            errors.push({ contractId, stationId, error: 'Pack already exists for this period' });
+            continue;
+          }
+          const result = await this.generateBillingSupportPack(userObj, { contractId, stationId, month, year });
+          generated.push({ contractId, stationId, packUid: result.uid });
+        } catch (err) {
+          errors.push({ contractId, stationId, error: err.message });
+        }
+      }
+    }
+    return { generated: generated.length, packs: generated, errors };
   }
 }
 

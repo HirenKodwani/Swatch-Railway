@@ -41,10 +41,16 @@ import shiftRoutes from './routes/shift.js';
 import activityRoutes from './routes/activity.js';
 import frequencyRoutes from './routes/frequency.js';
 import materialRoutes from './routes/material.js';
+import machineRoutes from './routes/machine.js';
 import stationFeedbackRoutes from './routes/stationFeedback.js';
 import stationAttendanceRoutes from './routes/stationAttendance.js';
 import dailyActivitiesRoutes from './routes/dailyActivities.js';
 import stationBillingRoutes from './routes/stationBilling.js';
+import supervisorDailyLogRoutes from './routes/supervisorDailyLog.js';
+import stationArchiveRoutes from './routes/stationArchive.js';
+import stationReportRoutes from './routes/stationReport.js';
+import garbageRoutes from './routes/garbage.js';
+import pestControlRoutes from './routes/pestControl.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { metricsMiddleware, metricsHandler } from './middleware/metrics.js';
@@ -93,10 +99,16 @@ app.use(shiftRoutes);                             // /api/shifts/*
 app.use(activityRoutes);                          // /api/activities/*
 app.use(frequencyRoutes);                         // /api/frequencies/*
 app.use(materialRoutes);                          // /api/materials/*
+app.use(machineRoutes);                           // /api/machines/*
 app.use(stationFeedbackRoutes);                   // /api/station-feedback/*
 app.use(stationAttendanceRoutes);                 // /api/station-attendance/*
 app.use(dailyActivitiesRoutes);                   // /api/station-activities/*
 app.use(stationBillingRoutes);                    // /api/station-billing/*
+app.use(supervisorDailyLogRoutes);                // /api/supervisor-logs/*
+app.use(stationArchiveRoutes);                    // /api/station-archives/*
+app.use(stationReportRoutes);                     // /api/station-reports/*
+app.use(garbageRoutes);                             // /api/garbage/*
+app.use(pestControlRoutes);                         // /api/pest-control/*
 
 // Relative-path routes mounted with base prefixes
 app.use('/api/passenger', passengerRoutes);       // /api/passenger/*
