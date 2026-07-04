@@ -14,6 +14,7 @@ import 'package:crm_train/view/common_railways/station_management/station_feedba
 import 'package:crm_train/view/station_cleaning/attendance/station_attendance_screen.dart';
 import 'package:crm_train/view/station_cleaning/activities/daily_activity_list_screen.dart';
 import 'package:crm_train/view/station_cleaning/billing/billing_support_pack_screen.dart';
+import 'package:crm_train/view/station_cleaning/station_cleaning_hub_screen.dart';
 
 
 class StationDashboardScreen extends StatefulWidget {
@@ -419,7 +420,24 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
                 ],
               ),
               isThreeLine: true,
-              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.cleaning_services, color: kSuccessGreen),
+                    tooltip: 'Station Cleaning',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => StationCleaningHubScreen(
+                          stationId: s.uid ?? '', stationName: s.stationName ?? '',
+                          contractId: null,
+                        ),
+                      ));
+                    },
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.grey),
+                ],
+              ),
               onTap: () {
                 Navigator.push(context, MaterialPageRoute(
                   builder: (context) => StationMasterScreen(existingStation: s)
