@@ -53,10 +53,13 @@ class ExecutionService {
       await this._checkShiftConflicts(shiftPlan);
     }
     const ref = db.collection('execution_plans').doc();
+    const allWorkerIds = [];
+    for (const s of ['morning', 'afternoon', 'night']) allWorkerIds.push(...((shiftPlan || {})[s] || []));
     const data = {
       uid: ref.id, contractId, stationId, month, year, status: 'DRAFT', version: 1,
       manpowerPlan: manpowerPlan || {},
       shiftPlan: shiftPlan || { morning: [], afternoon: [], night: [] },
+      workerIds: allWorkerIds,
       machinePlan: body.machinePlan || {},
       materialPlan: body.materialPlan || [],
       garbageDisposalPlan: body.garbageDisposalPlan || {},
@@ -69,11 +72,14 @@ class ExecutionService {
   }
 
   async getPlans(query = {}) {
-    const { contractId, stationId, status, limit = 50, cursor } = query;
+    const { contractId, stationId, status, workerId, month, year, limit = 50, cursor } = query;
     let q = db.collection('execution_plans');
     if (contractId) q = q.where('contractId', '==', contractId);
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
+    if (workerId) q = q.where('workerIds', 'array-contains', workerId);
+    if (month) q = q.where('month', '==', Number(month));
+    if (year) q = q.where('year', '==', Number(year));
     const result = await paginate(q, { limit, cursor, orderBy: 'createdAt', orderDir: 'desc' });
     return { count: result.items.length, plans: result.items, pagination: result.pagination };
   }
@@ -96,6 +102,7 @@ class ExecutionService {
       for (const s of ['morning', 'afternoon', 'night']) allWorkers.push(...(body.shiftPlan[s] || []));
       if (allWorkers.length > 0) await this._validateWorkerIds([...new Set(allWorkers)]);
       await this._checkShiftConflicts(body.shiftPlan);
+      updates.workerIds = allWorkers;
     }
     updates.version = (doc.data().version || 0) + 1;
     updates.updatedAt = new Date().toISOString();

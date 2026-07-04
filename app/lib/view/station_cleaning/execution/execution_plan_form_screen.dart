@@ -1,5 +1,7 @@
 import 'package:crm_train/model/station_cleaning_models.dart';
+import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/repositories/execution_repository.dart';
+import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 
@@ -16,9 +18,11 @@ class ExecutionPlanFormScreen extends StatefulWidget {
 class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _workersLoaded = false;
+
+  List<RailwayWorkerModel> _allWorkers = [];
 
   late TextEditingController _contractIdCtrl;
-  late TextEditingController _manpowerPlanCtrl;
   late TextEditingController _machinePlanCtrl;
   late TextEditingController _garbagePlanCtrl;
   late TextEditingController _materialCtrl;
@@ -27,9 +31,9 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
 
-  bool _morningSelected = false;
-  bool _afternoonSelected = false;
-  bool _nightSelected = false;
+  final Set<String> _morningWorkers = {};
+  final Set<String> _afternoonWorkers = {};
+  final Set<String> _nightWorkers = {};
 
   List<String> _materials = [];
 
@@ -40,7 +44,6 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
     super.initState();
     final p = widget.plan;
     _contractIdCtrl = TextEditingController(text: p?.contractId ?? '');
-    _manpowerPlanCtrl = TextEditingController(text: p != null ? _mapToString(p.manpowerPlan) : '{}');
     _machinePlanCtrl = TextEditingController(text: p != null ? _mapToString(p.machinePlan) : '{}');
     _garbagePlanCtrl = TextEditingController(text: p != null ? _mapToString(p.garbageDisposalPlan) : '{}');
     _materialCtrl = TextEditingController();
@@ -49,17 +52,36 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
     if (p != null) {
       _selectedMonth = p.month;
       _selectedYear = p.year;
-      _morningSelected = p.shiftPlan['morning'] == true || (p.shiftPlan['morning'] is int && (p.shiftPlan['morning'] as int) > 0);
-      _afternoonSelected = p.shiftPlan['afternoon'] == true || (p.shiftPlan['afternoon'] is int && (p.shiftPlan['afternoon'] as int) > 0);
-      _nightSelected = p.shiftPlan['night'] == true || (p.shiftPlan['night'] is int && (p.shiftPlan['night'] as int) > 0);
       _materials = p.materialPlan.map((e) => e.toString()).toList();
+
+      if (p.shiftPlan['morning'] is List) {
+        for (final id in p.shiftPlan['morning']) _morningWorkers.add(id.toString());
+      }
+      if (p.shiftPlan['afternoon'] is List) {
+        for (final id in p.shiftPlan['afternoon']) _afternoonWorkers.add(id.toString());
+      }
+      if (p.shiftPlan['night'] is List) {
+        for (final id in p.shiftPlan['night']) _nightWorkers.add(id.toString());
+      }
     }
+    _loadWorkers();
+  }
+
+  Future<void> _loadWorkers() async {
+    try {
+      final workers = await OBHSRepository.getWorkers();
+      if (mounted) {
+        setState(() {
+          _allWorkers = workers;
+          _workersLoaded = true;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _contractIdCtrl.dispose();
-    _manpowerPlanCtrl.dispose();
     _machinePlanCtrl.dispose();
     _garbagePlanCtrl.dispose();
     _materialCtrl.dispose();
@@ -71,20 +93,46 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
     return map.entries.map((e) => '${e.key}: ${e.value}').join('\n');
   }
 
+  Future<void> _showWorkerPicker(String shift, Set<String> currentSelection) async {
+    final selected = await showDialog<Set<String>>(
+      context: context,
+      builder: (ctx) => _WorkerMultiSelectDialog(
+        title: 'Select $shift Shift Workers',
+        allWorkers: _allWorkers,
+        preSelected: Set.from(currentSelection),
+        shiftWorkers: {
+          'morning': _morningWorkers,
+          'afternoon': _afternoonWorkers,
+          'night': _nightWorkers,
+        },
+        currentShift: shift,
+      ),
+    );
+    if (selected != null) {
+      setState(() {
+        currentSelection.clear();
+        currentSelection.addAll(selected);
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_morningWorkers.isEmpty && _afternoonWorkers.isEmpty && _nightWorkers.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Assign at least one worker to a shift'), backgroundColor: kErrorRed),
+        );
+      }
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final shiftPlan = <String, dynamic>{
-        'morning': _morningSelected,
-        'afternoon': _afternoonSelected,
-        'night': _nightSelected,
+        'morning': _morningWorkers.toList(),
+        'afternoon': _afternoonWorkers.toList(),
+        'night': _nightWorkers.toList(),
       };
-      final manpowerMap = <String, dynamic>{};
-      for (final line in _manpowerPlanCtrl.text.split('\n')) {
-        final parts = line.split(':');
-        if (parts.length == 2) manpowerMap[parts[0].trim()] = parts[1].trim();
-      }
       final machineMap = <String, dynamic>{};
       for (final line in _machinePlanCtrl.text.split('\n')) {
         final parts = line.split(':');
@@ -102,7 +150,6 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
         'month': _selectedMonth,
         'year': _selectedYear,
         'shiftPlan': shiftPlan,
-        'manpowerPlan': manpowerMap,
         'machinePlan': machineMap,
         'materialPlan': _materials,
         'garbageDisposalPlan': garbageMap,
@@ -207,6 +254,54 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
     }
   }
 
+  Widget _buildWorkerChip(String name, VoidCallback onRemove) {
+    return Chip(
+      label: Text(name, style: const TextStyle(fontSize: 13)),
+      deleteIcon: const Icon(Icons.close, size: 16),
+      onDeleted: onRemove,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildShiftCard(String title, Set<String> selectedIds, String shiftKey) {
+    final assigned = _allWorkers.where((w) => selectedIds.contains(w.uid)).toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                Text('${assigned.length} workers', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.person_add, color: kRailwayBlue, size: 20),
+                  onPressed: _workersLoaded ? () => _showWorkerPicker(shiftKey, selectedIds) : null,
+                  tooltip: 'Assign workers',
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            if (assigned.isNotEmpty) ...[
+              const Divider(height: 8),
+              Wrap(
+                spacing: 6, runSpacing: 4,
+                children: assigned.map((w) => _buildWorkerChip(
+                  w.fullName,
+                  () => setState(() => selectedIds.remove(w.uid)),
+                )).toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.plan;
@@ -259,52 +354,18 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Shift Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      CheckboxListTile(
-                        title: const Text('Morning'),
-                        value: _morningSelected,
-                        onChanged: (v) => setState(() => _morningSelected = v ?? false),
-                      ),
-                      CheckboxListTile(
-                        title: const Text('Afternoon'),
-                        value: _afternoonSelected,
-                        onChanged: (v) => setState(() => _afternoonSelected = v ?? false),
-                      ),
-                      CheckboxListTile(
-                        title: const Text('Night'),
-                        value: _nightSelected,
-                        onChanged: (v) => setState(() => _nightSelected = v ?? false),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Manpower Plan (key:value per line)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _manpowerPlanCtrl,
-                        decoration: const InputDecoration(labelText: 'e.g. supervisor:2\\nworker:5', border: OutlineInputBorder()),
-                        maxLines: 4,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const SizedBox(height: 12),
+              Text('Worker Assignment per Shift', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+              const SizedBox(height: 8),
+              if (!_workersLoaded)
+                const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+              else ...[
+                _buildShiftCard('Morning Shift', _morningWorkers, 'morning'),
+                const SizedBox(height: 8),
+                _buildShiftCard('Afternoon Shift', _afternoonWorkers, 'afternoon'),
+                const SizedBox(height: 8),
+                _buildShiftCard('Night Shift', _nightWorkers, 'night'),
+              ],
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -452,6 +513,86 @@ class _ExecutionPlanFormScreenState extends State<ExecutionPlanFormScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _WorkerMultiSelectDialog extends StatefulWidget {
+  final String title;
+  final List<RailwayWorkerModel> allWorkers;
+  final Set<String> preSelected;
+  final Map<String, Set<String>> shiftWorkers;
+  final String currentShift;
+
+  const _WorkerMultiSelectDialog({
+    required this.title,
+    required this.allWorkers,
+    required this.preSelected,
+    required this.shiftWorkers,
+    required this.currentShift,
+  });
+
+  @override
+  State<_WorkerMultiSelectDialog> createState() => _WorkerMultiSelectDialogState();
+}
+
+class _WorkerMultiSelectDialogState extends State<_WorkerMultiSelectDialog> {
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set.from(widget.preSelected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final alreadyAssigned = <String>{};
+    for (final entry in widget.shiftWorkers.entries) {
+      if (entry.key != widget.currentShift) {
+        alreadyAssigned.addAll(entry.value);
+      }
+    }
+
+    final available = widget.allWorkers.where((w) =>
+      _selected.contains(w.uid) || !alreadyAssigned.contains(w.uid)
+    ).toList();
+
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: ListView.builder(
+          itemCount: available.length,
+          itemBuilder: (ctx, i) {
+            final w = available[i];
+            final isAssignedElsewhere = alreadyAssigned.contains(w.uid) && !_selected.contains(w.uid);
+            return CheckboxListTile(
+              title: Text(w.fullName),
+              subtitle: Text('${w.workerType ?? 'Worker'}'),
+              value: _selected.contains(w.uid),
+              enabled: !isAssignedElsewhere,
+              onChanged: (v) {
+                setState(() {
+                  if (v == true) {
+                    _selected.add(w.uid);
+                  } else {
+                    _selected.remove(w.uid);
+                  }
+                });
+              },
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _selected),
+          child: Text('Assign (${_selected.length})'),
+        ),
+      ],
     );
   }
 }

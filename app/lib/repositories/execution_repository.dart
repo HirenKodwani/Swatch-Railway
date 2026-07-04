@@ -27,33 +27,33 @@ class ExecutionRepository {
   }
 
   static Future<ExecutionPlan> getPlan(String uid) async {
-    final res = await http.get(Uri.parse('$baseUrl/api/execution/plans/$uid'), headers: await _headers());
+    final res = await http.get(Uri.parse('$baseUrl/api/execution-plans/$uid'), headers: await _headers());
     if (res.statusCode == 200) return ExecutionPlan.fromJson(jsonDecode(res.body));
     throw Exception('Failed to load plan');
   }
 
   static Future<void> updatePlan(String uid, Map<String, dynamic> data) async {
-    final res = await http.put(Uri.parse('$baseUrl/api/execution/plans/$uid'), headers: await _headers(), body: jsonEncode(data));
+    final res = await http.put(Uri.parse('$baseUrl/api/execution-plans/$uid'), headers: await _headers(), body: jsonEncode(data));
     if (res.statusCode != 200) throw Exception('Failed to update plan');
   }
 
   static Future<void> submitPlan(String uid) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/execution/plans/$uid/submit'), headers: await _headers());
+    final res = await http.post(Uri.parse('$baseUrl/api/execution-plans/$uid/submit'), headers: await _headers());
     if (res.statusCode != 200) throw Exception('Failed to submit plan');
   }
 
   static Future<void> approvePlan(String uid) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/execution/plans/$uid/approve'), headers: await _headers());
+    final res = await http.post(Uri.parse('$baseUrl/api/execution-plans/$uid/approve'), headers: await _headers());
     if (res.statusCode != 200) throw Exception('Failed to approve plan');
   }
 
   static Future<void> rejectPlan(String uid, String reason) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/execution/plans/$uid/reject'), headers: await _headers(), body: jsonEncode({'reason': reason}));
+    final res = await http.post(Uri.parse('$baseUrl/api/execution-plans/$uid/reject'), headers: await _headers(), body: jsonEncode({'reason': reason}));
     if (res.statusCode != 200) throw Exception('Failed to reject plan');
   }
 
   static Future<void> deletePlan(String uid) async {
-    final res = await http.delete(Uri.parse('$baseUrl/api/execution/plans/$uid'), headers: await _headers());
+    final res = await http.delete(Uri.parse('$baseUrl/api/execution-plans/$uid'), headers: await _headers());
     if (res.statusCode != 200) throw Exception('Failed to delete plan');
   }
 
@@ -68,7 +68,7 @@ class ExecutionRepository {
   }
 
   static Future<ExecutionLog> getLog(String uid) async {
-    final res = await http.get(Uri.parse('$baseUrl/api/execution/logs/$uid'), headers: await _headers());
+    final res = await http.get(Uri.parse('$baseUrl/api/execution-logs/$uid'), headers: await _headers());
     if (res.statusCode == 200) return ExecutionLog.fromJson(jsonDecode(res.body));
     throw Exception('Failed to load log');
   }
@@ -79,17 +79,17 @@ class ExecutionRepository {
   }
 
   static Future<void> submitLog(String uid) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/execution/logs/$uid/submit'), headers: await _headers());
+    final res = await http.post(Uri.parse('$baseUrl/api/execution-logs/$uid/submit'), headers: await _headers());
     if (res.statusCode != 200) throw Exception('Failed to submit log');
   }
 
   static Future<void> approveLog(String uid) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/execution/logs/$uid/approve'), headers: await _headers());
+    final res = await http.post(Uri.parse('$baseUrl/api/execution-logs/$uid/approve'), headers: await _headers());
     if (res.statusCode != 200) throw Exception('Failed to approve log');
   }
 
   static Future<void> rejectLog(String uid, String reason) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/execution/logs/$uid/reject'), headers: await _headers(), body: jsonEncode({'reason': reason}));
+    final res = await http.post(Uri.parse('$baseUrl/api/execution-logs/$uid/reject'), headers: await _headers(), body: jsonEncode({'reason': reason}));
     if (res.statusCode != 200) throw Exception('Failed to reject log');
   }
 }

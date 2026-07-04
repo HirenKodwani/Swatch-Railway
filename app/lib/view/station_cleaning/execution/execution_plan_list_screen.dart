@@ -57,10 +57,15 @@ class _ExecutionPlanListScreenState extends State<ExecutionPlanListScreen> {
   }
 
   String _shiftSummary(ExecutionPlan plan) {
-    final m = plan.shiftPlan['morning']?.toString() ?? '0';
-    final a = plan.shiftPlan['afternoon']?.toString() ?? '0';
-    final n = plan.shiftPlan['night']?.toString() ?? '0';
-    return 'M:$m A:$a N:$n';
+    int count(dynamic v) {
+      if (v is List) return v.length;
+      if (v is bool) return v ? 1 : 0;
+      return int.tryParse(v?.toString() ?? '0') ?? 0;
+    }
+    final m = count(plan.shiftPlan['morning']);
+    final a = count(plan.shiftPlan['afternoon']);
+    final n = count(plan.shiftPlan['night']);
+    return 'M:$m A:$a N:$n workers';
   }
 
   @override
