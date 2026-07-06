@@ -98,7 +98,7 @@ class StationArchiveService {
 
   async listArchives(query = {}) {
     const { stationId, archiveType, month, year, contractor, area, user, status, startDate, endDate, limit = 50 } = query;
-    let q = db.collection('station_archives').orderBy('archivedAt', 'desc');
+    let q = db.collection('station_archives');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (archiveType) q = q.where('archiveType', '==', archiveType);
     if (month) q = q.where('month', '==', parseInt(month));
@@ -115,6 +115,7 @@ class StationArchiveService {
         archivedBy: d.archivedBy, archivedAt: d.archivedAt,
       });
     });
+    archives.sort((a, b) => (b.archivedAt || '').localeCompare(a.archivedAt || ''));
     if (contractor) archives = archives.filter(a => a.stationName?.toLowerCase().includes(contractor.toLowerCase()));
     if (area) archives = archives.filter(a => a.archiveType?.toLowerCase().includes(area.toLowerCase()));
     if (user) archives = archives.filter(a => a.archivedBy?.toLowerCase().includes(user.toLowerCase()));

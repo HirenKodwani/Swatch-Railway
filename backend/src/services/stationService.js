@@ -3,7 +3,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../errors/index.j
 
 class StationService {
   async getStations(query = {}) {
-    const { zone, division, category, active, userRole, userZone, userDivision, limit, cursor } = query;
+    const { zone, division, category, active, userRole, userDivision, limit } = query;
     let q = db.collection('stations');
     const role = (userRole || '').toLowerCase();
 
@@ -15,18 +15,12 @@ class StationService {
     if (category) q = q.where('category', '==', category);
     if (active !== undefined) q = q.where('active', '==', active === 'true');
 
-    let snapped;
     const pageSize = Math.min(200, Math.max(1, parseInt(limit) || 200));
-
-    if (cursor) {
-      const cursorDoc = await db.collection('stations').doc(cursor).get();
-      snapped = await q.orderBy('stationName', 'asc').startAfter(cursorDoc).limit(pageSize).get();
-    } else {
-      snapped = await q.orderBy('stationName', 'asc').limit(pageSize).get();
-    }
+    const snapped = await q.limit(pageSize).get();
 
     const stations = [];
     snapped.forEach(doc => stations.push({ id: doc.id, ...doc.data() }));
+    stations.sort((a, b) => (a.stationName || '').localeCompare(b.stationName || ''));
 
     return { count: stations.length, stations };
   }

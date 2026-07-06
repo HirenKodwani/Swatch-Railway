@@ -1,8 +1,10 @@
 import { stationArchiveService } from '../services/stationArchiveService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import logger from '../logger/index.js';
 
 export const triggerArchive = asyncHandler(async (req, res) => {
   const { stationId, archiveType, month, year } = req.body;
+  logger.info('triggerArchive', { stationId, archiveType, month, year, userId: req.user?.uid });
   const result = await stationArchiveService.triggerArchive(stationId, archiveType, month, year, req.user);
   res.status(201).json(result);
 });
