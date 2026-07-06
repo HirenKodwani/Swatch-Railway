@@ -31,7 +31,7 @@ class ApiService {
     }
   }
 
-  static String baseUrl = 'https://swatch-railway-4.onrender.com';
+  static String baseUrl = 'http://localhost:5050';
   static void setBaseUrl(String url) { baseUrl = url; }
 
   static Future<String?> getToken() async {
