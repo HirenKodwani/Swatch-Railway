@@ -693,7 +693,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
                       ),
                       children: children.map((child) {
                         return ListTile(
-                          contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                          contentPadding: const EdgeInsets.only(left: 40),
                           title: Text(
                             child['title'] as String,
                             style: TextStyle(

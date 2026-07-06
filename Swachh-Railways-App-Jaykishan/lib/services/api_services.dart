@@ -31,7 +31,7 @@ class ApiService {
     }
   }
 
-  static const String baseUrl = 'https://backend-railway-opf5.onrender.com';
+  static const String baseUrl = 'https://backend-railway-2-0in8.onrender.com';
 
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
