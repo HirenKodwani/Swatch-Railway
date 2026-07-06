@@ -3625,7 +3625,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.post(
-        Uri.parse('$baseUrl/api/stations'),
+        Uri.parse('$baseUrl/api/stations/create'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode(data),
       );
@@ -3641,7 +3641,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.put(
-        Uri.parse('$baseUrl/api/stations/$uid'),
+        Uri.parse('$baseUrl/api/stations/update/$uid'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode(data),
       );
@@ -3660,7 +3660,7 @@ class ApiService {
       if (division != null) params['division'] = division;
       if (category != null) params['category'] = category;
       if (active != null) params['active'] = active.toString();
-      final uri = Uri.parse('$baseUrl/api/stations').replace(queryParameters: params.isNotEmpty ? params : null);
+      final uri = Uri.parse('$baseUrl/api/stations/list').replace(queryParameters: params.isNotEmpty ? params : null);
       final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -4282,7 +4282,7 @@ class ApiService {
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       body: jsonEncode({'stationId': stationId, 'archiveType': archiveType, 'month': month, 'year': year}),
     );
-    if (response.statusCode == 200) return jsonDecode(response.body);
+    if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
     throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to trigger archive');
   }
 

@@ -6,7 +6,7 @@ import 'package:crm_train/utills/app_colors.dart';
 const _frequencyTypes = [
   'once_per_day', 'twice_per_day', 'three_times_per_day',
   'every_six_hours', 'hourly', 'weekly', 'fortnightly',
-  'monthly', 'as_and_when_required',
+  'monthly', 'as_and_when_required', 'other',
 ];
 
 class FrequencyFormScreen extends StatefulWidget {

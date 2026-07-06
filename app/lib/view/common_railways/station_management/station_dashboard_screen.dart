@@ -2,6 +2,8 @@ import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:crm_train/model/user_entity_model.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/view/common_railways/station_management/station_master_screen.dart';
@@ -33,6 +35,7 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
   bool isDashboardLoading = true;
   bool isStationsLoading = true;
   bool isFormsLoading = true;
+  bool isContractorsLoading = false;
   String? dashboardError;
   String? stationsError;
   String? formsError;
@@ -41,6 +44,14 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
   List<Station> stations = [];
   List<StationCleaningForm> forms = [];
 
+  List<Station> _allStations = [];
+  List<StationCleaningForm> _allForms = [];
+  List<EntityModel> contractors = [];
+
+  DateTimeRange? _selectedDateRange;
+  Station? _selectedStation;
+  EntityModel? _selectedContractor;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +59,7 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
     _loadDashboard();
     _loadStations();
     _loadForms();
+    _loadContractors();
   }
 
   @override
@@ -66,6 +78,48 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
     }
   }
 
+  Future<void> _loadContractors() async {
+    if (mounted) setState(() { isContractorsLoading = true; });
+    try {
+      final data = await ApiService.getApprovedEntity();
+      if (mounted) setState(() { contractors = data; isContractorsLoading = false; });
+    } catch (e) {
+      if (mounted) setState(() { isContractorsLoading = false; });
+    }
+  }
+
+  void _applyFilters() {
+    List<Station> tempStations = List.from(_allStations);
+    List<StationCleaningForm> tempForms = List.from(_allForms);
+
+    if (_selectedStation != null) {
+      tempStations = tempStations.where((s) => s.uid == _selectedStation!.uid).toList();
+      tempForms = tempForms.where((f) => f.stationId == _selectedStation!.uid).toList();
+    }
+
+    if (_selectedContractor != null) {
+      tempForms = tempForms.where((f) => f.entityId == _selectedContractor!.uid).toList();
+    }
+
+    if (_selectedDateRange != null) {
+      tempForms = tempForms.where((f) {
+        if (f.cleaningDate == null || f.cleaningDate!.isEmpty) return false;
+        try {
+          final date = DateTime.parse(f.cleaningDate!);
+          return date.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) &&
+                 date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+    }
+
+    setState(() {
+      stations = tempStations;
+      forms = tempForms;
+    });
+  }
+
   Future<void> _loadStations() async {
     setState(() { isStationsLoading = true; stationsError = null; });
     try {
@@ -77,7 +131,11 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
         if (role == 'Railway Supervisor') {
           all = all.where((s) => s.division == user?.division).toList();
         }
-        setState(() { stations = all; isStationsLoading = false; });
+        setState(() {
+          _allStations = all;
+          isStationsLoading = false;
+          _applyFilters();
+        });
       }
     } catch (e) {
       if (mounted) setState(() { isStationsLoading = false; stationsError = e.toString(); });
@@ -97,11 +155,220 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
         } else if (role == 'Contractor' || role == 'Contractor Master') {
           all = all.where((f) => f.submittedBy == user?.uid).toList();
         }
-        setState(() { forms = all; isFormsLoading = false; });
+        setState(() {
+          _allForms = all;
+          isFormsLoading = false;
+          _applyFilters();
+        });
       }
     } catch (e) {
       if (mounted) setState(() { isFormsLoading = false; formsError = e.toString(); });
     }
+  }
+
+  void _showDateFilterOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Date Filter Options', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.date_range, color: kRailwayBlue),
+              title: const Text('Select Date Range'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  initialDateRange: _selectedDateRange,
+                );
+                if (picked != null) {
+                  setState(() {
+                    _selectedDateRange = picked;
+                    _applyFilters();
+                  });
+                }
+              },
+            ),
+            if (_selectedDateRange != null)
+              ListTile(
+                leading: const Icon(Icons.clear, color: kErrorRed),
+                title: const Text('Clear Filter', style: TextStyle(color: kErrorRed)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _selectedDateRange = null;
+                    _applyFilters();
+                  });
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showStationFilterOptions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        String searchQuery = "";
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredStationsList = _allStations.where((s) =>
+              s.stationName.toLowerCase().contains(searchQuery.toLowerCase()) ||
+              s.stationCode.toLowerCase().contains(searchQuery.toLowerCase())
+            ).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text('Select Station', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search Station...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onChanged: (val) {
+                      setModalState(() {
+                        searchQuery = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (_selectedStation != null)
+                    ListTile(
+                      leading: const Icon(Icons.clear, color: kErrorRed),
+                      title: const Text('Clear Filter', style: TextStyle(color: kErrorRed, fontWeight: FontWeight.bold)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _selectedStation = null;
+                          _applyFilters();
+                        });
+                      },
+                    ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filteredStationsList.length,
+                      itemBuilder: (context, index) {
+                        final station = filteredStationsList[index];
+                        final isSelected = _selectedStation?.uid == station.uid;
+                        return ListTile(
+                          title: Text(station.stationName, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          subtitle: Text(station.stationCode),
+                          trailing: isSelected ? const Icon(Icons.check, color: kSuccessGreen) : null,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _selectedStation = station;
+                              _applyFilters();
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
+  void _showContractorFilterOptions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        String searchQuery = "";
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredContractorsList = contractors.where((c) =>
+              (c.contractorName ?? '').toLowerCase().contains(searchQuery.toLowerCase())
+            ).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text('Select Contractor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search Contractor...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onChanged: (val) {
+                      setModalState(() {
+                        searchQuery = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (_selectedContractor != null)
+                    ListTile(
+                      leading: const Icon(Icons.clear, color: kErrorRed),
+                      title: const Text('Clear Filter', style: TextStyle(color: kErrorRed, fontWeight: FontWeight.bold)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _selectedContractor = null;
+                          _applyFilters();
+                        });
+                      },
+                    ),
+                  isContractorsLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Expanded(
+                          child: ListView.builder(
+                            itemCount: filteredContractorsList.length,
+                            itemBuilder: (context, index) {
+                              final contractor = filteredContractorsList[index];
+                              final isSelected = _selectedContractor?.uid == contractor.uid;
+                              return ListTile(
+                                title: Text(contractor.contractorName ?? '', style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                                subtitle: Text(contractor.email ?? ''),
+                                trailing: isSelected ? const Icon(Icons.check, color: kSuccessGreen) : null,
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  setState(() {
+                                    _selectedContractor = contractor;
+                                    _applyFilters();
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   Color _statusColor(StationFormStatus status) {
@@ -161,6 +428,26 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
     final d = dashboard;
     if (d == null) return const Center(child: Text('No data'));
 
+    // Dynamic stats calculations based on filters
+    double avgScore = d.averageScore;
+    int pendingFormsCount = d.pendingReview;
+    int totalStationsCount = d.totalStations;
+    int activeStationsCount = d.activeStations;
+
+    if (_selectedStation != null || _selectedContractor != null || _selectedDateRange != null) {
+      totalStationsCount = stations.length;
+      activeStationsCount = stations.where((s) => s.active).length;
+      pendingFormsCount = forms.where((f) => f.status == StationFormStatus.submitted).length;
+      
+      final scoredForms = forms.where((f) => f.status == StationFormStatus.scored || f.status == StationFormStatus.locked).toList();
+      if (scoredForms.isNotEmpty) {
+        final totalScore = scoredForms.fold<double>(0.0, (sum, f) => sum + (f.score ?? 0.0));
+        avgScore = totalScore / scoredForms.length;
+      } else {
+        avgScore = 0.0;
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -175,12 +462,12 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
             crossAxisSpacing: 8,
             childAspectRatio: 1.5,
             children: [
-              _summaryCard('Total Stations', '${d.totalStations}', kRailwayBlue, Icons.train),
-              _summaryCard('Active Stations', '${d.activeStations}', kSuccessGreen, Icons.check_circle),
+              _summaryCard('Total Stations', '$totalStationsCount', kRailwayBlue, Icons.train),
+              _summaryCard('Active Stations', '$activeStationsCount', kSuccessGreen, Icons.check_circle),
               _summaryCard('Areas', '${d.totalAreas}', Colors.teal, Icons.layers),
               _summaryCard('Zones', '${d.totalZones}', kWarningOrange, Icons.map),
-              _summaryCard('Pending Forms', '${d.pendingReview}', kErrorRed, Icons.pending_actions),
-              _summaryCard('Avg Score', '${d.averageScore.toStringAsFixed(1)}%', Colors.purple, Icons.score),
+              _summaryCard('Pending Forms', '$pendingFormsCount', kErrorRed, Icons.pending_actions),
+              _summaryCard('Avg Score', '${avgScore.toStringAsFixed(1)}%', Colors.purple, Icons.score),
             ],
           ),
           const SizedBox(height: 20),
@@ -191,15 +478,32 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: _filterChip(Icons.calendar_today, 'Date', () {}),
+                  child: _filterChip(
+                    Icons.calendar_today,
+                    _selectedDateRange != null
+                        ? "${DateFormat('dd/MM').format(_selectedDateRange!.start)}-${DateFormat('dd/MM').format(_selectedDateRange!.end)}"
+                        : 'Date',
+                    _showDateFilterOptions,
+                    isActive: _selectedDateRange != null,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _filterChip(Icons.train, 'Station', () {}),
+                  child: _filterChip(
+                    Icons.train,
+                    _selectedStation != null ? _selectedStation!.stationName : 'Station',
+                    _showStationFilterOptions,
+                    isActive: _selectedStation != null,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _filterChip(Icons.person, 'Contractor', () {}),
+                  child: _filterChip(
+                    Icons.person,
+                    _selectedContractor?.contractorName ?? 'Contractor',
+                    _showContractorFilterOptions,
+                    isActive: _selectedContractor != null,
+                  ),
                 ),
               ],
             ),
@@ -447,24 +751,35 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
     );
   }
 
-  Widget _filterChip(IconData icon, String label, VoidCallback onTap) {
+  Widget _filterChip(IconData icon, String label, VoidCallback onTap, {bool isActive = false}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isActive ? kRailwayBlue.withOpacity(0.05) : Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: isActive ? kRailwayBlue : Colors.grey.shade300, width: isActive ? 1.5 : 1),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 16, color: Colors.grey[600]),
-            const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500)),
+            Icon(icon, size: 16, color: isActive ? kRailwayBlue : Colors.grey[600]),
             const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey[400]),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isActive ? kRailwayBlue : Colors.grey[700],
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.arrow_drop_down, size: 18, color: isActive ? kRailwayBlue : Colors.grey[400]),
           ],
         ),
       ),

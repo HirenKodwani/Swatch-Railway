@@ -29,12 +29,13 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
     'drain_cleaning', 'water_booth_cleaning', 'garbage_collection',
     'garbage_disposal', 'cobweb_removal', 'stain_removal', 'pest_control',
     'rodent_control', 'deep_cleaning', 'consumable_refill', 'inspection_closure',
+    'other',
   ];
 
   static const _frequencies = [
     'once_per_day', 'twice_per_day', 'three_times_per_day',
     'every_six_hours', 'hourly', 'weekly', 'fortnightly',
-    'monthly', 'as_and_when_required',
+    'monthly', 'as_and_when_required', 'other',
   ];
 
   @override

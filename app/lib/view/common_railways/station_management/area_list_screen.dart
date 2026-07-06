@@ -79,7 +79,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
     );
     if (confirmed != true) return;
     try {
-      await ApiService.deleteStationArea(area.uid);
+      await ApiService.deleteStationArea(area.uid!);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Area deleted'), backgroundColor: kSuccessGreen));
         _loadAreas();

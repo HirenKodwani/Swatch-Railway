@@ -96,7 +96,7 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
-      final body = {
+      final Map<String, dynamic> body = {
         'machineName': _nameCtrl.text.trim(),
         'machineType': _type,
         'serialNumber': _serialCtrl.text.trim(),

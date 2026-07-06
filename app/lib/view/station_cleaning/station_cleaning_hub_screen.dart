@@ -102,7 +102,7 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.inventory_2, 'Materials', Colors.blueGrey, () => _openMaterials(context)),         // 18
     ];
 
-    final cards = [];
+    final cards = <Widget>[];
     for (var i = 0; i < allCards.length; i++) {
       if (visible.contains(i)) cards.add(allCards[i]);
     }

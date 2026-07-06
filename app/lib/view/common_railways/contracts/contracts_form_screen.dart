@@ -221,7 +221,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                         const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
                         const SizedBox(height: 4),
                         _stationsLoading
-                            ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(stripWidth: 2)))
+                            ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                             : AbsorbPointer(
                                 absorbing: isEditMode,
                                 child: Opacity(

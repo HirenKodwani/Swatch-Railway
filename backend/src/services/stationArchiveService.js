@@ -109,7 +109,7 @@ class StationArchiveService {
     snapshot.forEach(doc => {
       const d = doc.data();
       archives.push({
-        uid: d.uid, stationId, stationName: d.stationName,
+        uid: d.uid, stationId: d.stationId, stationName: d.stationName,
         archiveType: d.archiveType, month: d.month, year: d.year,
         recordCount: d.recordCount, status: d.status,
         archivedBy: d.archivedBy, archivedAt: d.archivedAt,
