@@ -68,11 +68,15 @@ class _ActivityRecordFormScreenState extends State<ActivityRecordFormScreen> {
   }
 
   Future<void> _loadAreas() async {
+    _areas = [];
+    if (mounted) setState(() {});
     try {
       _areas = await ApiService.getStationAreas(widget.stationId);
       if (_areas.isNotEmpty && _selectedArea.isEmpty) _selectedArea = _areas.first.name;
-      if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('_loadAreas error: $e');
+    }
+    if (mounted) setState(() {});
   }
 
   Future<String?> _getToken() async {
@@ -243,7 +247,7 @@ class _ActivityRecordFormScreenState extends State<ActivityRecordFormScreen> {
                           decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
                           items: _areas.isNotEmpty
                               ? _areas.map((a) => DropdownMenuItem(value: a.name, child: Text(a.name))).toList()
-                              : [const DropdownMenuItem(value: '', child: Text('Loading...'))],
+                              : [const DropdownMenuItem(value: '', child: Text('No areas configured', style: TextStyle(color: Colors.grey)))],
                           onChanged: (v) { if (v != null) setState(() => _selectedArea = v); },
                           validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
                         ),
