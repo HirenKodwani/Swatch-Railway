@@ -12,17 +12,18 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
-  if (err.code === 'FAILED_PRECONDITION') {
+  const code = (err.code || '').toLowerCase();
+  if (code === 'failed_precondition' || code === 'failed-precondition') {
     logger.error('ErrorHandler', 'Firestore index missing', err);
     return res.status(400).json({
       success: false,
-      error: 'Database index missing',
+      error: 'Database index missing. Create the required Firestore composite index.',
       code: 'INDEX_MISSING',
       details: err.message
     });
   }
 
-  if (err.name === 'ValidationError') {
+  if (err.name === 'ValidationError' || err.code === 'VALIDATION_ERROR') {
     return res.status(400).json({
       success: false,
       error: err.message,
@@ -30,7 +31,7 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
-  logger.error('ErrorHandler', 'Unhandled error', err);
+  logger.error('ErrorHandler', 'Unhandled error', { message: err.message, code: err.code, stack: err.stack?.split('\n').slice(0, 5).join('\n') });
   return res.status(500).json({
     success: false,
     error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
