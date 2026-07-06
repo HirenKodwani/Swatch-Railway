@@ -3,8 +3,7 @@ export async function paginate(query, options = {}) {
   const orderBy = options.orderBy || 'createdAt';
   const orderDir = options.orderDir || 'desc';
 
-  let q = query.orderBy(orderBy, orderDir);
-
+  let q = options.cursor ? query.orderBy(orderBy, orderDir) : query;
   if (options.cursor) {
     q = q.startAfter(options.cursor);
   }
@@ -19,6 +18,15 @@ export async function paginate(query, options = {}) {
       items.push({ id: doc.id, ...doc.data() });
     }
   });
+
+  if (!options.cursor) {
+    const dir = orderDir === 'desc' ? -1 : 1;
+    items.sort((a, b) => {
+      const va = a[orderBy] || '';
+      const vb = b[orderBy] || '';
+      return va < vb ? -dir : va > vb ? dir : 0;
+    });
+  }
 
   const hasNext = count > pageSize;
   const lastItem = items.length > 0 ? items[items.length - 1] : null;

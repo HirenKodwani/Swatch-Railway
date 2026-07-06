@@ -129,7 +129,7 @@ class DailyActivityService {
   }
 
   async listActivities(query = {}) {
-    const { stationId, areaId, activityId, date, shift, status, assignedWorker, limit = 100, cursor } = query;
+    const { stationId, areaId, activityId, date, shift, status, assignedWorker, limit = 100 } = query;
     let q = db.collection('station_daily_activities');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (areaId) q = q.where('areaId', '==', areaId);
@@ -137,8 +137,12 @@ class DailyActivityService {
     if (date) q = q.where('date', '==', date);
     if (shift && shift !== 'all') q = q.where('shift', '==', shift.toLowerCase());
     if (status) q = q.where('status', '==', status);
-    const result = await paginate(q, { limit, cursor, orderBy: 'createdAt', orderDir: 'desc' });
-    return { count: result.items.length, activities: result.items, pagination: result.pagination };
+    const pageSize = Math.min(200, Math.max(1, parseInt(limit) || 100));
+    const snapshot = await q.limit(pageSize).get();
+    const items = [];
+    snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+    items.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
+    return { count: items.length, activities: items };
   }
 
   async getById(uid) {
