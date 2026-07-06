@@ -21,7 +21,10 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _areasLoading = false;
+  bool _zonesLoading = false;
   List<StationArea> _areas = [];
+  List<StationZone> _zones = [];
 
   late TextEditingController _manpowerCtrl;
   late TextEditingController _machineCtrl;
@@ -31,6 +34,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
   late TextEditingController _remarksCtrl;
 
   String? _selectedArea;
+  String? _selectedZone;
   String _selectedShift = 'morning';
   DateTime _selectedDate = DateTime.now();
   String _startTime = '';
@@ -69,6 +73,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
     _remarksCtrl = TextEditingController(text: _form?.remarks ?? '');
     if (_form != null) {
       _selectedArea = _form!.areaName;
+      _selectedZone = _form!.zoneName;
       _selectedShift = _form!.shift;
       if (_form!.cleaningDate.isNotEmpty) _selectedDate = DateTime.tryParse(_form!.cleaningDate) ?? DateTime.now();
       _startTime = _form!.startTime;
@@ -100,10 +105,36 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
   }
 
   Future<void> _loadAreas() async {
+    _areas = [];
+    _zones = [];
+    _selectedArea = null;
+    _selectedZone = null;
+    _areasLoading = true;
+    if (mounted) setState(() {});
     try {
       _areas = await ApiService.getStationAreas(widget.stationId);
-      if (mounted) setState(() {});
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('_loadAreas error: $e');
+    }
+    _areasLoading = false;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadZones() async {
+    _zones = [];
+    _selectedZone = null;
+    _zonesLoading = true;
+    if (mounted) setState(() {});
+    try {
+      final area = _areas.firstWhere((a) => a.name == _selectedArea, orElse: () => StationArea(stationId: '', name: ''));
+      if (area.uid != null && area.uid!.isNotEmpty) {
+        _zones = await ApiService.getStationZones(widget.stationId, areaId: area.uid);
+      }
+    } catch (e) {
+      debugPrint('_loadZones error: $e');
+    }
+    _zonesLoading = false;
+    if (mounted) setState(() {});
   }
 
   Future<String?> _getToken() async {
@@ -256,6 +287,8 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
       'stationName': widget.stationName,
       'areaId': _areas.firstWhere((a) => a.name == _selectedArea, orElse: () => StationArea(stationId: '', name: '')).uid ?? '',
       'areaName': _selectedArea ?? '',
+      'zoneId': _zones.firstWhere((z) => z.name == _selectedZone, orElse: () => StationZone(name: '', stationId: '')).uid ?? '',
+      'zoneName': _selectedZone ?? '',
       'cleaningDate': dateStr,
       'shift': _selectedShift,
       'startTime': _startTime,
@@ -367,17 +400,39 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
   Widget _buildScheduleSection() {
     return Column(
       children: [
+        if (isEditable && _areasLoading)
+          const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
         if (isEditable)
           DropdownButtonFormField<String>(
             value: _selectedArea,
             decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
-            items: _areas.map((a) => DropdownMenuItem(value: a.name, child: Text(a.name))).toList(),
-            onChanged: (v) { if (v != null) setState(() => _selectedArea = v); },
-            validator: (v) => v == null ? 'Required' : null,
+            items: _areas.isNotEmpty
+                ? _areas.map((a) => DropdownMenuItem(value: a.name, child: Text(a.name))).toList()
+                : [const DropdownMenuItem(value: '', child: Text('No areas available', style: TextStyle(color: Colors.grey)))],
+            onChanged: (v) {
+              if (v != null && v.isNotEmpty) {
+                setState(() => _selectedArea = v);
+                _loadZones();
+              }
+            },
+            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
           )
         else
           TextFormField(initialValue: _selectedArea ?? '', decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder()), readOnly: true),
         const SizedBox(height: 12),
+        if (isEditable && _selectedArea != null && _selectedArea!.isNotEmpty) ...[
+          if (_zonesLoading)
+            const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
+          DropdownButtonFormField<String>(
+            value: _selectedZone,
+            decoration: const InputDecoration(labelText: 'Zone', border: OutlineInputBorder()),
+            items: _zones.isNotEmpty
+                ? _zones.map((z) => DropdownMenuItem(value: z.name, child: Text(z.name))).toList()
+                : [const DropdownMenuItem(value: '', child: Text('No zones', style: TextStyle(color: Colors.grey)))],
+            onChanged: (v) { if (v != null && v.isNotEmpty) setState(() => _selectedZone = v); },
+          ),
+          const SizedBox(height: 12),
+        ],
         Row(children: [
           Expanded(
             child: InkWell(
