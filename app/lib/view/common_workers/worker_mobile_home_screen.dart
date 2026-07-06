@@ -794,6 +794,12 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           'subtitle': 'Disposal records',
           'color': Colors.green,
         },
+        {
+          'icon': Icons.history,
+          'title': 'Audit Trail',
+          'subtitle': 'My activity log',
+          'color': Colors.brown,
+        },
       ];
 
       return Column(
@@ -837,6 +843,8 @@ class WorkerMobileHomeScreen extends StatelessWidget {
                         page = const WorkerMachineScreen();
                       } else if (title == 'Garbage') {
                         page = const WorkerGarbageScreen();
+                      } else if (title == 'Audit Trail') {
+                        page = const WorkerAuditScreen();
                       } else {
                         page = const WorkerTaskScreen();
                       }

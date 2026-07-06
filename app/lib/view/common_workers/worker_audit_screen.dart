@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../utills/app_colors.dart';
+import '../../services/api_services.dart';
 
 class WorkerAuditScreen extends StatefulWidget {
   const WorkerAuditScreen({super.key});
@@ -17,6 +20,11 @@ class _WorkerAuditScreenState extends State<WorkerAuditScreen> {
 
   final _types = ['All', 'Attendance', 'Task', 'Cleaning', 'Complaint', 'Feedback', 'Pest Control', 'Garbage', 'Machine'];
 
+  Future<String?> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -26,7 +34,27 @@ class _WorkerAuditScreenState extends State<WorkerAuditScreen> {
   Future<void> _loadLogs() async {
     setState(() { _isLoading = true; _error = null; });
     try {
-      setState(() { _logs = []; _isLoading = false; });
+      final token = await _getAuthToken();
+      if (token == null) {
+        setState(() { _logs = []; _isLoading = false; });
+        return;
+      }
+      String url = '${ApiService.baseUrl}/api/audit-logs';
+      if (_selectedType != 'All') {
+        url += '?type=${Uri.encodeComponent(_selectedType)}';
+      }
+      final resp = await http.get(
+        Uri.parse(url),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (mounted) {
+        if (resp.statusCode == 200) {
+          final data = json.decode(resp.body);
+          setState(() { _logs = data['data'] ?? []; _isLoading = false; });
+        } else {
+          setState(() { _error = 'Failed to load: ${resp.statusCode}'; _isLoading = false; });
+        }
+      }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
     }
@@ -68,7 +96,7 @@ class _WorkerAuditScreenState extends State<WorkerAuditScreen> {
                   child: ChoiceChip(
                     label: Text(t),
                     selected: _selectedType == t,
-                    onSelected: (v) => setState(() { _selectedType = t; }),
+                    onSelected: (v) => setState(() { _selectedType = t; _loadLogs(); }),
                     selectedColor: kRailwayBlue,
                     labelStyle: TextStyle(color: _selectedType == t ? Colors.white : Colors.black87),
                   ),
@@ -99,7 +127,7 @@ class _WorkerAuditScreenState extends State<WorkerAuditScreen> {
                           return Card(
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: kRailwayBlue.withOpacity(0.1),
+                                backgroundColor: kRailwayBlue.withValues(alpha: 0.1),
                                 child: Icon(_iconFor(log['type'] ?? ''), color: kRailwayBlue),
                               ),
                               title: Text(log['action'] ?? 'Activity'),

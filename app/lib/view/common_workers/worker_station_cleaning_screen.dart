@@ -3,6 +3,9 @@ import 'package:intl/intl.dart';
 import '../../model/station_run_model.dart';
 import '../../repositories/station_run_repository.dart';
 import '../../utills/app_colors.dart';
+import 'worker_pest_control_screen.dart';
+import 'worker_garbage_screen.dart';
+import 'worker_machine_screen.dart';
 
 class WorkerStationCleaningScreen extends StatefulWidget {
   const WorkerStationCleaningScreen({super.key});
@@ -426,6 +429,47 @@ class _WorkerStationRunDetailScreenState extends State<WorkerStationRunDetailScr
                   const Text('Your Platform Assignments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                   const SizedBox(height: 12),
                   ...widget.run.platforms.map((platform) => _buildPlatformCard(platform)),
+                  const SizedBox(height: 24),
+                  // ─── Quick Actions ──────────────────────────────────
+                  const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _quickActionCard(
+                        icon: Icons.bug_report,
+                        label: 'Pest Control',
+                        color: Colors.brown,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => WorkerPestControlScreen(
+                            stationId: widget.run.stationId,
+                            stationName: widget.run.stationName,
+                          ),
+                        )),
+                      )),
+                      const SizedBox(width: 10),
+                      Expanded(child: _quickActionCard(
+                        icon: Icons.delete,
+                        label: 'Garbage',
+                        color: const Color(0xFF4CAF50),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => WorkerGarbageScreen(
+                            stationId: widget.run.stationId,
+                            stationName: widget.run.stationName,
+                          ),
+                        )),
+                      )),
+                      Expanded(child: _quickActionCard(
+                        icon: Icons.precision_manufacturing,
+                        label: 'Machines',
+                        color: Colors.indigo,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => WorkerMachineScreen(
+                            stationId: widget.run.stationId,
+                          ),
+                        )),
+                      )),
+                    ],
+                  ),
                   const SizedBox(height: 20),
                 ],
               ),
@@ -533,6 +577,32 @@ class _WorkerStationRunDetailScreenState extends State<WorkerStationRunDetailScr
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _quickActionCard({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            children: [
+              CircleAvatar(backgroundColor: color.withOpacity(0.15), radius: 22, child: Icon(icon, color: color, size: 24)),
+              const SizedBox(height: 8),
+              Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[800]), textAlign: TextAlign.center),
+            ],
+          ),
         ),
       ),
     );

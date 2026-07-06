@@ -1,10 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../utills/app_colors.dart';
 import '../../services/api_services.dart';
 
 class WorkerMachineScreen extends StatefulWidget {
-  const WorkerMachineScreen({super.key});
+  final String? stationId;
+
+  const WorkerMachineScreen({super.key, this.stationId});
 
   @override
   State<WorkerMachineScreen> createState() => _WorkerMachineScreenState();
@@ -15,6 +20,11 @@ class _WorkerMachineScreenState extends State<WorkerMachineScreen> {
   List _machines = [];
   String? _error;
 
+  Future<String?> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -24,7 +34,23 @@ class _WorkerMachineScreenState extends State<WorkerMachineScreen> {
   Future<void> _loadMachines() async {
     setState(() { _isLoading = true; _error = null; });
     try {
-      setState(() { _machines = []; _isLoading = false; });
+      final token = await _getAuthToken();
+      if (token == null) {
+        setState(() { _machines = []; _isLoading = false; });
+        return;
+      }
+      final resp = await http.get(
+        Uri.parse('${ApiService.baseUrl}/api/machines/station/${widget.stationId ?? "current"}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (mounted) {
+        if (resp.statusCode == 200) {
+          final data = json.decode(resp.body);
+          setState(() { _machines = data['data'] ?? []; _isLoading = false; });
+        } else {
+          setState(() { _error = 'Failed to load: ${resp.statusCode}'; _isLoading = false; });
+        }
+      }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
     }

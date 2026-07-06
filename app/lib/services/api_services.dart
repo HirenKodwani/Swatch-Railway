@@ -4179,6 +4179,95 @@ class ApiService {
     throw Exception('Failed to load machines');
   }
 
+  // ─── MACHINE MASTER API ─────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> createMachine(Map<String, dynamic> data) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/machines'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to create machine');
+  }
+
+  static Future<List> getMachines({String? stationId, String? status}) async {
+    final token = await getToken();
+    final params = <String, String>{};
+    if (stationId != null) params['stationId'] = stationId;
+    if (status != null) params['status'] = status;
+    final uri = Uri.parse('$baseUrl/api/machines').replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) return jsonDecode(response.body)['machines'] ?? [];
+    throw Exception('Failed to load machines');
+  }
+
+  static Future<Map<String, dynamic>> getMachineById(String uid) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/machines/$uid'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception('Failed to load machine');
+  }
+
+  static Future<Map<String, dynamic>> updateMachine(String uid, Map<String, dynamic> data) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/machines/$uid'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update machine');
+  }
+
+  static Future<void> deleteMachine(String uid) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/machines/$uid'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) throw Exception('Failed to delete machine');
+  }
+
+  // ─── STATION ARCHIVE API ──────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> triggerArchive(String stationId, String archiveType, int month, int year) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/station-archives/trigger'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'stationId': stationId, 'archiveType': archiveType, 'month': month, 'year': year}),
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to trigger archive');
+  }
+
+  static Future<Map<String, dynamic>> listArchives({String? stationId, String? archiveType, int? month, int? year, int limit = 50}) async {
+    final token = await getToken();
+    final params = <String, String>{};
+    if (stationId != null) params['stationId'] = stationId;
+    if (archiveType != null) params['archiveType'] = archiveType;
+    if (month != null) params['month'] = month.toString();
+    if (year != null) params['year'] = year.toString();
+    if (limit != 50) params['limit'] = limit.toString();
+    final uri = Uri.parse('$baseUrl/api/station-archives').replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception('Failed to load archives');
+  }
+
+  static Future<Map<String, dynamic>> getArchiveById(String uid) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/station-archives/$uid'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception('Failed to load archive');
+  }
+
   // ─── GARBAGE DISPOSAL API ────────────────────────────────────────────────
   static Future<Map<String, dynamic>> recordGarbageDisposal(Map<String, dynamic> data) async {
     final token = await getToken();

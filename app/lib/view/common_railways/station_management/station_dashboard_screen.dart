@@ -11,9 +11,12 @@ import 'package:crm_train/view/common_railways/station_management/activity_list_
 import 'package:crm_train/view/common_railways/station_management/frequency_list_screen.dart';
 import 'package:crm_train/view/common_railways/station_management/material_list_screen.dart';
 import 'package:crm_train/view/common_railways/station_management/station_feedback_list_screen.dart';
+import 'package:crm_train/view/common_railways/station_management/area_list_screen.dart';
 import 'package:crm_train/view/station_cleaning/attendance/station_attendance_screen.dart';
 import 'package:crm_train/view/station_cleaning/activities/daily_activity_list_screen.dart';
 import 'package:crm_train/view/station_cleaning/billing/billing_support_pack_screen.dart';
+import 'package:crm_train/view/common_railways/station_management/machine_master_list_screen.dart';
+import 'package:crm_train/view/common_railways/station_management/archive_list_screen.dart';
 import 'package:crm_train/view/station_cleaning/station_cleaning_hub_screen.dart';
 
 
@@ -182,6 +185,27 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
           ),
           const SizedBox(height: 20),
 
+          // Filters
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _filterChip(Icons.calendar_today, 'Date', () {}),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _filterChip(Icons.train, 'Station', () {}),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _filterChip(Icons.person, 'Contractor', () {}),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // Quick Actions
           const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
@@ -281,40 +305,61 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
           const Text('Master Data', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           GridView.count(
-            crossAxisCount: 2,
+            crossAxisCount: 4,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.2,
             children: [
               _actionCard(
                 icon: Icons.cleaning_services,
                 title: 'Activities',
-                subtitle: 'Manage activity types',
+                subtitle: 'Activity types',
                 color: kRailwayBlue,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ActivityListScreen())),
               ),
               _actionCard(
                 icon: Icons.schedule,
                 title: 'Frequencies',
-                subtitle: 'Manage cleaning frequencies',
+                subtitle: 'Cleaning frequencies',
                 color: Colors.teal,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FrequencyListScreen())),
               ),
               _actionCard(
+                icon: Icons.map,
+                title: 'Areas',
+                subtitle: 'Station areas',
+                color: Colors.brown,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AreaListScreen())),
+              ),
+              _actionCard(
                 icon: Icons.inventory_2,
                 title: 'Materials',
-                subtitle: 'Manage stock & tracking',
+                subtitle: 'Stock & tracking',
                 color: kWarningOrange,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MaterialListScreen())),
               ),
               _actionCard(
                 icon: Icons.feedback,
                 title: 'Feedback',
-                subtitle: 'View passenger feedback',
+                subtitle: 'Passenger feedback',
                 color: Colors.purple,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationFeedbackListScreen())),
+              ),
+              _actionCard(
+                icon: Icons.precision_manufacturing,
+                title: 'Machines',
+                subtitle: 'Equipment master',
+                color: Colors.indigo,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MachineMasterListScreen())),
+              ),
+              _actionCard(
+                icon: Icons.archive,
+                title: 'Archives',
+                subtitle: 'Monthly archives',
+                color: Colors.brown,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ArchiveListScreen())),
               ),
             ],
           ),
@@ -364,6 +409,30 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
             Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13), textAlign: TextAlign.center),
             const SizedBox(height: 4),
             Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade700), textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: Colors.grey[600]),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500)),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey[400]),
           ],
         ),
       ),

@@ -1,10 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../utills/app_colors.dart';
 import '../../services/api_services.dart';
 
 class WorkerPestControlScreen extends StatefulWidget {
-  const WorkerPestControlScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+
+  const WorkerPestControlScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<WorkerPestControlScreen> createState() => _WorkerPestControlScreenState();
@@ -39,23 +45,42 @@ class _WorkerPestControlScreenState extends State<WorkerPestControlScreen> {
   Future<void> _loadRecords() async {
     setState(() { _isLoading = true; _error = null; });
     try {
-      final token = _getToken();
-      // For demo, show empty list; real impl would fetch via API
-      setState(() { _records = []; _isLoading = false; });
+      final token = await _getAuthToken();
+      if (token == null) {
+        setState(() { _records = []; _isLoading = false; });
+        return;
+      }
+      final resp = await http.get(
+        Uri.parse('${ApiService.baseUrl}/api/station-pest-control/records'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (mounted) {
+        if (resp.statusCode == 200) {
+          final data = json.decode(resp.body);
+          setState(() { _records = data['data'] ?? []; _isLoading = false; });
+        } else {
+          setState(() { _error = 'Failed to load: ${resp.statusCode}'; _isLoading = false; });
+        }
+      }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
     }
   }
 
-  String? _getToken() => null; // Placeholder - real impl uses SharedPreferences
+  Future<String?> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
 
   Future<void> _submitRecord() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isRecording = true);
     try {
+      final token = await _getAuthToken();
+      if (token == null) throw Exception('Not logged in');
       final body = {
-        'stationId': 'current_station_id',
-        'stationName': 'Current Station',
+        'stationId': widget.stationId ?? 'current_station_id',
+        'stationName': widget.stationName ?? 'Current Station',
         'area': _areaCtrl.text,
         'zone': _zoneCtrl.text,
         'pestType': _pestType,
@@ -64,10 +89,19 @@ class _WorkerPestControlScreenState extends State<WorkerPestControlScreen> {
         'chemicalsUsed': _chemicalsCtrl.text.isNotEmpty ? _chemicalsCtrl.text.split(',').map((e) => e.trim()).toList() : [],
         'notes': _notesCtrl.text,
       };
-      // await ApiService.post('/api/station-pest-control/record', body);
+      final resp = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/station-pest-control/record'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: json.encode(body),
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pest control record submitted'), backgroundColor: Colors.green));
-        Navigator.pop(context);
+        if (resp.statusCode == 201 || resp.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pest control record submitted'), backgroundColor: Colors.green));
+          Navigator.pop(context);
+          _loadRecords();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${resp.body}'), backgroundColor: Colors.red));
+        }
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
@@ -81,7 +115,7 @@ class _WorkerPestControlScreenState extends State<WorkerPestControlScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Pest / Rodent Control', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(widget.stationName != null ? 'Pest Control - ${widget.stationName}' : 'Pest / Rodent Control', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
