@@ -12,8 +12,18 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
-  const code = (err.code || '').toLowerCase();
-  if (code === 'failed_precondition' || code === 'failed-precondition') {
+  // JWT errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError' || err.name === 'NotBeforeError') {
+    return res.status(401).json({ success: false, error: err.message, code: 'AUTHENTICATION_ERROR' });
+  }
+
+  // Firestore FAILED_PRECONDITION errors (missing composite index)
+  // SDK returns code as number 9 (gRPC status) or as string 'FAILED_PRECONDITION'/'failed-precondition'
+  if (
+    err.code === 9 ||
+    (typeof err.code === 'string' && ['failed_precondition', 'failed-precondition', 'FAILED_PRECONDITION'].includes(err.code)) ||
+    (typeof err.message === 'string' && err.message.includes('FAILED_PRECONDITION') && err.message.includes('index'))
+  ) {
     logger.error('ErrorHandler', 'Firestore index missing', err);
     return res.status(400).json({
       success: false,
@@ -31,7 +41,7 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
-  logger.error('ErrorHandler', 'Unhandled error', { message: err.message, code: err.code, stack: err.stack?.split('\n').slice(0, 5).join('\n') });
+  logger.error('ErrorHandler', 'Unhandled error', { message: err.message, code: err.code, type: typeof err.code, stack: err.stack?.split('\n').slice(0, 5).join('\n') });
   return res.status(500).json({
     success: false,
     error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
