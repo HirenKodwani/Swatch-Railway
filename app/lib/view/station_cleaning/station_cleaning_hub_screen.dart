@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/utills/app_colors.dart';
+import 'package:crm_train/view/common_railways/station_management/station_feedback_list_screen.dart';
+import 'package:crm_train/view/common_railways/station_management/material_list_screen.dart';
 import 'dashboard/station_dashboard_kpi_screen.dart';
 import 'attendance/station_attendance_screen.dart';
 import 'activities/daily_activity_list_screen.dart';
@@ -14,6 +18,10 @@ import 'pest_control/pest_control_list_screen.dart';
 import 'machine/machine_tracking_screen.dart';
 import 'garbage/garbage_management_screen.dart';
 import 'reporting/report_list_screen.dart';
+import 'reporting/audit_report_list_screen.dart';
+import 'feedback/feedback_qr_screen.dart';
+import 'cleaning_form/station_cleaning_form_list_screen.dart';
+import 'schedule/station_schedule_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
   final String stationId;
@@ -27,37 +35,94 @@ class StationCleaningHubScreen extends StatelessWidget {
     this.contractId,
   });
 
+  bool _isRailway(String role) {
+    final r = role.toUpperCase();
+    return r.contains('RAILWAY') || r.contains('ADMIN') || r.contains('MASTER') || r == 'SUPER_ADMIN';
+  }
+
+  bool _isContractor(String role) {
+    return role.toUpperCase().contains('CONTRACTOR');
+  }
+
+  bool _isWorker(String role) {
+    final r = role.toUpperCase();
+    return ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r);
+  }
+
+  bool _isMasterOrAdmin(String role) {
+    final r = role.toUpperCase();
+    return ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r);
+  }
+
+  // Each role has a permission set defining which card indices are visible
+  Set<int> _visibleCards(String role) {
+    final r = role.toUpperCase();
+    if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+    }
+    if (r == 'RAILWAY_SUPERVISOR') {
+      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20};
+    }
+    if (r == 'CONTRACTOR_ADMIN') {
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20};
+    }
+    if (r == 'CONTRACTOR_SUPERVISOR') {
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20};
+    }
+    if (['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r)) {
+      return {0, 1, 2};
+    }
+    return {};
+  }
+
   @override
   Widget build(BuildContext context) {
+    final role = Provider.of<AuthProvider>(context).currentUser?.role ?? '';
+    final visible = _visibleCards(role);
+
+    final allCards = <Widget>[
+      _moduleCard(context, Icons.dashboard, 'Dashboard', kRailwayBlue, () => _openDashboard(context)),             // 0
+      _moduleCard(context, Icons.people, 'Attendance', Colors.teal, () => _openAttendance(context)),               // 1
+      _moduleCard(context, Icons.assignment, 'Activities', Colors.orange, () => _openActivities(context)),         // 2
+      _moduleCard(context, Icons.cleaning_services, 'Cleaning\nForm', Colors.lightBlue, () => _openCleaningForm(context)), // 3
+      _moduleCard(context, Icons.calendar_month, 'Execution\nPlan', Colors.indigo, () => _openExecution(context)),  // 4
+      _moduleCard(context, Icons.camera_alt, 'Evidence', Colors.brown, () => _openEvidence(context)),               // 5
+      _moduleCard(context, Icons.description, 'Sup. Log', Colors.cyan, () => _openSupervisorLog(context)),          // 6
+      _moduleCard(context, Icons.search, 'Inspection', Colors.deepPurple, () => _openInspection(context)),          // 7
+      _moduleCard(context, Icons.star, 'Scorecard', Colors.pink, () => _openScorecard(context)),                    // 8
+      _moduleCard(context, Icons.report, 'Complaints', Colors.red, () => _openComplaint(context)),                  // 9
+      _moduleCard(context, Icons.bug_report, 'Pest\nControl', Colors.green, () => _openPestControl(context)),       // 10
+      _moduleCard(context, Icons.precision_manufacturing, 'Machines', Colors.blueGrey, () => _openMachine(context)),// 11
+      _moduleCard(context, Icons.delete, 'Garbage', Colors.brown.shade700, () => _openGarbage(context)),            // 12
+      _moduleCard(context, Icons.receipt, 'Billing', Colors.deepOrange, () => _openBilling(context)),               // 13
+      _moduleCard(context, Icons.assessment, 'Reports', Colors.purple, () => _openReports(context)),                // 14
+      _moduleCard(context, Icons.security, 'Audit\nReports', Colors.indigo, () => _openAuditReports(context)),      // 15
+      _moduleCard(context, Icons.feedback, 'Feedback', Colors.amber.shade700, () => _openFeedback(context)),        // 16
+      _moduleCard(context, Icons.schedule, 'Schedule', Colors.teal, () => _openSchedule(context)),                  // 17
+      _moduleCard(context, Icons.inventory_2, 'Materials', Colors.blueGrey, () => _openMaterials(context)),         // 18
+    ];
+
+    final cards = [];
+    for (var i = 0; i < allCards.length; i++) {
+      if (visible.contains(i)) cards.add(allCards[i]);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(stationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: GridView.count(
-        crossAxisCount: 3,
-        padding: const EdgeInsets.all(12),
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.9,
-        children: [
-          _moduleCard(context, Icons.dashboard, 'Dashboard', kRailwayBlue, () => _openDashboard(context)),
-          _moduleCard(context, Icons.people, 'Attendance', Colors.teal, () => _openAttendance(context)),
-          _moduleCard(context, Icons.assignment, 'Activities', Colors.orange, () => _openActivities(context)),
-          _moduleCard(context, Icons.calendar_month, 'Execution\nPlan', Colors.indigo, () => _openExecution(context)),
-          _moduleCard(context, Icons.camera_alt, 'Evidence', Colors.brown, () => _openEvidence(context)),
-          _moduleCard(context, Icons.description, 'Sup. Log', Colors.cyan, () => _openSupervisorLog(context)),
-          _moduleCard(context, Icons.search, 'Inspection', Colors.deepPurple, () => _openInspection(context)),
-          _moduleCard(context, Icons.star, 'Scorecard', Colors.pink, () => _openScorecard(context)),
-          _moduleCard(context, Icons.report, 'Complaints', Colors.red, () => _openComplaint(context)),
-          _moduleCard(context, Icons.bug_report, 'Pest\nControl', Colors.green, () => _openPestControl(context)),
-          _moduleCard(context, Icons.precision_manufacturing, 'Machines', Colors.blueGrey, () => _openMachine(context)),
-          _moduleCard(context, Icons.delete, 'Garbage', Colors.brown.shade700, () => _openGarbage(context)),
-          _moduleCard(context, Icons.receipt, 'Billing', Colors.deepOrange, () => _openBilling(context)),
-          _moduleCard(context, Icons.assessment, 'Reports', Colors.purple, () => _openReports(context)),
-        ],
-      ),
+      body: cards.isEmpty
+          ? const Center(child: Text('No modules available for your role'))
+          : GridView.count(
+              crossAxisCount: 3,
+              padding: const EdgeInsets.all(12),
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.9,
+              children: cards,
+            ),
     );
   }
 
@@ -138,5 +203,55 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openReports(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => ReportListScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openAuditReports(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AuditReportListScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openFeedback(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(padding: EdgeInsets.all(16), child: Text('Feedback Options', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.qr_code, color: Colors.white)),
+              title: const Text('Generate QR Code'),
+              subtitle: const Text('Print & display for passenger feedback'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => FeedbackQrScreen(stationId: stationId, stationName: stationName)));
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(backgroundColor: Colors.teal, child: Icon(Icons.list, color: Colors.white)),
+              title: const Text('View Feedback'),
+              subtitle: const Text('Browse submitted passenger feedback'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => StationFeedbackListScreen(stationId: stationId)));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openCleaningForm(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationCleaningFormListScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openSchedule(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationScheduleScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openMaterials(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => MaterialListScreen(stationId: stationId, stationName: stationName)));
   }
 }

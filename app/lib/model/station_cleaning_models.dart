@@ -632,13 +632,14 @@ class PestTreatment {
 
   factory PestTreatment.fromJson(Map<String, dynamic> json) => PestTreatment(
     uid: json['uid'] ?? '', stationId: json['stationId'] ?? '',
-    treatmentType: json['treatmentType'] ?? '',
+    treatmentType: json['treatmentMethod'] ?? json['treatmentType'] ?? '',
     scheduledDate: json['scheduledDate'] != null ? DateTime.parse(json['scheduledDate']) : DateTime.now(),
-    chemicalUsed: json['chemicalUsed'], quantityUsed: json['quantityUsed'],
+    chemicalUsed: json['chemicalUsed'] ?? (json['chemicalIds'] is List ? (json['chemicalIds'] as List).join(', ') : null),
+    quantityUsed: json['quantityUsed'],
     frequency: json['frequency'], nextDueDate: json['nextDueDate'] != null ? DateTime.parse(json['nextDueDate']) : null,
     status: json['status'] ?? '',
     createdBy: json['createdBy'] ?? '',
-    reviewedBy: json['reviewedBy'], reviewRemarks: json['reviewRemarks'],
+    reviewedBy: json['reviewedBy'], reviewRemarks: json['reviewNotes'] ?? json['reviewRemarks'],
     createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
   );
 }

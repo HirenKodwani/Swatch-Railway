@@ -33,7 +33,7 @@ class _PestControlListScreenState extends State<PestControlListScreen> {
     try {
       final query = <String, String>{'stationId': widget.stationId};
       if (_filterStatus != null) query['status'] = _filterStatus!;
-      if (_filterType != null) query['treatmentType'] = _filterType!;
+      if (_filterType != null) query['treatmentMethod'] = _filterType!;
       final list = await PestControlRepository.listPlans(query);
       setState(() => _plans = list);
     } catch (e) {

@@ -69,10 +69,11 @@ class PestControlService {
   }
 
   async listTreatmentPlans(query = {}) {
-    const { stationId, pestType, status, severity, startDate, endDate, limit = 50, cursor } = query;
+    const { stationId, pestType, treatmentMethod, status, severity, startDate, endDate, limit = 50, cursor } = query;
     let q = db.collection('pest_treatment_plans');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (pestType) q = q.where('pestType', '==', pestType);
+    if (treatmentMethod) q = q.where('treatmentMethod', '==', treatmentMethod);
     if (status) q = q.where('status', '==', status);
     if (severity) q = q.where('severity', '==', severity);
     if (startDate) q = q.where('scheduledDate', '>=', startDate);

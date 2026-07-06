@@ -26,7 +26,7 @@ class PestControlRepository {
   }
 
   static Future<void> reviewPlan(String uid, String status, String remarks) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/pest-control/plans/$uid/review'), headers: await _headers(), body: jsonEncode({'status': status, 'remarks': remarks}));
+    final res = await http.post(Uri.parse('$baseUrl/api/pest-control/plans/$uid/review'), headers: await _headers(), body: jsonEncode({'status': status, 'reviewNotes': remarks}));
     if (res.statusCode != 200) throw Exception('Failed to review plan');
   }
 

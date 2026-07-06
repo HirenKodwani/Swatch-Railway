@@ -209,159 +209,191 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
           // Quick Actions
           const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _actionCard(
-                  icon: Icons.add_location_alt,
-                  title: 'Add Station',
-                  subtitle: 'Register new station',
-                  color: kRailwayBlue,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationMasterScreen())),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.add_location_alt,
+                    title: 'Add Station',
+                    subtitle: 'Register new station',
+                    color: kRailwayBlue,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationMasterScreen())),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _actionCard(
-                  icon: Icons.post_add,
-                  title: 'New Cleaning Form',
-                  subtitle: 'Create cleaning form',
-                  color: kSuccessGreen,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationCleaningFormScreen())),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.post_add,
+                    title: 'New Cleaning Form',
+                    subtitle: 'Create cleaning form',
+                    color: kSuccessGreen,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationCleaningFormScreen())),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _actionCard(
-                  icon: Icons.visibility,
-                  title: 'View All',
-                  subtitle: 'See all stations',
-                  color: kWarningOrange,
-                  onTap: () => _tabController.animateTo(1),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.visibility,
+                    title: 'View All',
+                    subtitle: 'See all stations',
+                    color: kWarningOrange,
+                    onTap: () => _tabController.animateTo(1),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _actionCard(
-                  icon: Icons.people,
-                  title: 'Attendance',
-                  subtitle: 'Mark daily attendance',
-                  color: Colors.indigo,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const StationAttendanceScreen(
-                        stationId: 'ADI',
-                        stationName: 'Ahmedabad Junction',
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.people,
+                    title: 'Attendance',
+                    subtitle: 'Mark daily attendance',
+                    color: Colors.indigo,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StationAttendanceScreen(
+                          stationId: 'ADI',
+                          stationName: 'Ahmedabad Junction',
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _actionCard(
-                  icon: Icons.assignment_turned_in,
-                  title: 'Daily Activities',
-                  subtitle: 'Record cleaning tasks',
-                  color: Colors.teal,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DailyActivityListScreen(
-                        stationId: 'ADI',
-                        stationName: 'Ahmedabad Junction',
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.assignment_turned_in,
+                    title: 'Daily Activities',
+                    subtitle: 'Record cleaning tasks',
+                    color: Colors.teal,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DailyActivityListScreen(
+                          stationId: 'ADI',
+                          stationName: 'Ahmedabad Junction',
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _actionCard(
-                  icon: Icons.receipt_long,
-                  title: 'Billing Packs',
-                  subtitle: 'Monthly billing packs',
-                  color: Colors.purple,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BillingSupportPackScreen(
-                        contractId: 'CON-123456',
-                        stationId: 'ADI',
-                        stationName: 'Ahmedabad Junction',
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.receipt_long,
+                    title: 'Billing Packs',
+                    subtitle: 'Monthly billing packs',
+                    color: Colors.purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const BillingSupportPackScreen(
+                          contractId: 'CON-123456',
+                          stationId: 'ADI',
+                          stationName: 'Ahmedabad Junction',
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 20),
           const Text('Master Data', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 4,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 1.2,
-            children: [
-              _actionCard(
-                icon: Icons.cleaning_services,
-                title: 'Activities',
-                subtitle: 'Activity types',
-                color: kRailwayBlue,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ActivityListScreen())),
-              ),
-              _actionCard(
-                icon: Icons.schedule,
-                title: 'Frequencies',
-                subtitle: 'Cleaning frequencies',
-                color: Colors.teal,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FrequencyListScreen())),
-              ),
-              _actionCard(
-                icon: Icons.map,
-                title: 'Areas',
-                subtitle: 'Station areas',
-                color: Colors.brown,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AreaListScreen())),
-              ),
-              _actionCard(
-                icon: Icons.inventory_2,
-                title: 'Materials',
-                subtitle: 'Stock & tracking',
-                color: kWarningOrange,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MaterialListScreen())),
-              ),
-              _actionCard(
-                icon: Icons.feedback,
-                title: 'Feedback',
-                subtitle: 'Passenger feedback',
-                color: Colors.purple,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationFeedbackListScreen())),
-              ),
-              _actionCard(
-                icon: Icons.precision_manufacturing,
-                title: 'Machines',
-                subtitle: 'Equipment master',
-                color: Colors.indigo,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MachineMasterListScreen())),
-              ),
-              _actionCard(
-                icon: Icons.archive,
-                title: 'Archives',
-                subtitle: 'Monthly archives',
-                color: Colors.brown,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ArchiveListScreen())),
-              ),
-            ],
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.cleaning_services,
+                    title: 'Activities',
+                    subtitle: 'Activity types',
+                    color: kRailwayBlue,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ActivityListScreen())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.schedule,
+                    title: 'Frequencies',
+                    subtitle: 'Cleaning frequencies',
+                    color: Colors.teal,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FrequencyListScreen())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.map,
+                    title: 'Areas',
+                    subtitle: 'Station areas',
+                    color: Colors.brown,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AreaListScreen())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.inventory_2,
+                    title: 'Materials',
+                    subtitle: 'Stock & tracking',
+                    color: kWarningOrange,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MaterialListScreen())),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.feedback,
+                    title: 'Feedback',
+                    subtitle: 'Passenger feedback',
+                    color: Colors.purple,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationFeedbackListScreen())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.precision_manufacturing,
+                    title: 'Machines',
+                    subtitle: 'Equipment master',
+                    color: Colors.indigo,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MachineMasterListScreen())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionCard(
+                    icon: Icons.archive,
+                    title: 'Archives',
+                    subtitle: 'Monthly archives',
+                    color: Colors.brown,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ArchiveListScreen())),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(child: SizedBox.shrink()),
+              ],
+            ),
           ),
         ],
       ),

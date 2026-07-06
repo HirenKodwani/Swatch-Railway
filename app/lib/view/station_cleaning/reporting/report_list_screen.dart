@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/repositories/station_report_repository.dart';
+import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ReportListScreen extends StatefulWidget {
   final String stationId;
@@ -30,6 +34,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
     'daily_feedback', 'daily_supervisor_log', 'missed_activity',
     'monthly_attendance', 'monthly_cleaning', 'monthly_scorecard',
     'monthly_complaint', 'monthly_feedback', 'monthly_billing', 'monthly_penalty',
+    'monthly_performance',
   ];
 
   @override
@@ -382,11 +387,30 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
 }
 
 class AutoEmailService {
-  static void dispatchDailyReport(String reportId, String stationId) {
-    throw UnimplementedError('AutoEmailService.dispatchDailyReport not implemented');
+  static Future<void> dispatchDailyReport(String reportId, String stationId) async {
+    try {
+      final token = await _getToken();
+      await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/station-reports/auto-email/daily'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'reportId': reportId, 'stationId': stationId}),
+      );
+    } catch (_) {}
   }
 
-  static void dispatchMonthlyReport(String reportId, String stationId) {
-    throw UnimplementedError('AutoEmailService.dispatchMonthlyReport not implemented');
+  static Future<void> dispatchMonthlyReport(String reportId, String stationId) async {
+    try {
+      final token = await _getToken();
+      await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/station-reports/auto-email/monthly'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'reportId': reportId, 'stationId': stationId}),
+      );
+    } catch (_) {}
+  }
+
+  static Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
   }
 }

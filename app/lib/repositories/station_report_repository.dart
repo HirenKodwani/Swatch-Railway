@@ -51,4 +51,11 @@ class StationReportRepository {
     if (res.statusCode == 200) return jsonDecode(res.body);
     throw Exception('Failed to load score trend');
   }
+
+  static Future<Map<String, dynamic>> generateAuditReport(String type, Map<String, String> query) async {
+    final uri = Uri.parse('$baseUrl/api/station-reports/audit/$type').replace(queryParameters: query.isNotEmpty ? query : null);
+    final res = await http.get(uri, headers: await _headers());
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to generate audit report');
+  }
 }

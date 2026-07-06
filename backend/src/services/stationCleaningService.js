@@ -3,6 +3,34 @@ import { NotFoundError, ValidationError } from '../errors/index.js';
 import { paginate } from '../utils/paginate.js';
 
 class StationCleaningService {
+  _resolveStationId(requestedStationId, user) {
+    if (user.stationId && (user.role || '').toUpperCase() === 'RAILWAY_SUPERVISOR') {
+      return user.stationId;
+    }
+    return requestedStationId;
+  }
+
+  _isMasterOrAdmin(user) {
+    const role = (user.role || '').toUpperCase();
+    return ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes(role);
+  }
+
+  _scopeByEntity(query, user) {
+    if (user.userType === 'contractor' && user.entityId) {
+      return query.where('entityId', '==', user.entityId);
+    }
+    return query;
+  }
+
+  _scopeByDivision(query, user, divisionField = 'division') {
+    const role = (user.role || '').toUpperCase();
+    if (this._isMasterOrAdmin(user)) return query;
+    if (user.division) {
+      return query.where(divisionField, '==', user.division);
+    }
+    return query;
+  }
+
   async generateStationFormId(stationCode) {
     const prefix = 'SF';
     const code = (stationCode || 'STN').substring(0, 4).toUpperCase();
@@ -25,12 +53,34 @@ class StationCleaningService {
     return { message: 'Area created', uid: ref.id, area };
   }
 
-  async listStationAreas(stationId) {
-    const snapshot = await db.collection('stationAreas').where('stationId', '==', stationId).limit(200).get();
+  async listStationAreas(stationId, user) {
+    const resolvedId = this._resolveStationId(stationId, user);
+    const snapshot = await db.collection('stationAreas').where('stationId', '==', resolvedId).limit(200).get();
     const areas = [];
     snapshot.forEach(doc => areas.push(doc.data()));
     areas.sort((a, b) => (a.order || 0) - (b.order || 0));
     return { count: areas.length, areas };
+  }
+
+  async updateStationArea(uid, data) {
+    const ref = db.collection('stationAreas').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station area not found');
+    const allowed = ['name', 'order', 'description', 'active'];
+    const updates = { updatedAt: new Date().toISOString() };
+    for (const key of allowed) {
+      if (data[key] !== undefined) updates[key] = data[key];
+    }
+    await ref.update(updates);
+    return { message: 'Area updated', uid };
+  }
+
+  async deleteStationArea(uid) {
+    const ref = db.collection('stationAreas').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station area not found');
+    await ref.update({ active: false, deletedAt: new Date().toISOString() });
+    return { message: 'Area deactivated' };
   }
 
   async createStationZone(data) {
@@ -42,8 +92,9 @@ class StationCleaningService {
     return { message: 'Zone created', uid: ref.id, zone };
   }
 
-  async listStationZones(stationId, areaId) {
-    const snapshot = await db.collection('stationZones').where('stationId', '==', stationId).limit(200).get();
+  async listStationZones(stationId, areaId, user) {
+    const resolvedId = this._resolveStationId(stationId, user);
+    const snapshot = await db.collection('stationZones').where('stationId', '==', resolvedId).limit(200).get();
     const zones = [];
     snapshot.forEach(doc => zones.push(doc.data()));
     const filtered = areaId ? zones.filter(z => z.areaId === areaId) : zones;
@@ -59,8 +110,11 @@ class StationCleaningService {
     return { message: 'Contractor mapped', uid: ref.id };
   }
 
-  async listContractorMappings(stationId) {
-    const snapshot = await db.collection('stationContractors').where('stationId', '==', stationId).limit(200).get();
+  async listContractorMappings(stationId, user) {
+    const resolvedId = this._resolveStationId(stationId, user);
+    let q = db.collection('stationContractors').where('stationId', '==', resolvedId);
+    q = this._scopeByEntity(q, user);
+    const snapshot = await q.limit(200).get();
     const mappings = [];
     snapshot.forEach(doc => mappings.push(doc.data()));
     return { count: mappings.length, mappings };
@@ -75,8 +129,11 @@ class StationCleaningService {
     return { message: 'Schedule created', uid: ref.id };
   }
 
-  async listSchedules(stationId) {
-    const snapshot = await db.collection('stationSchedules').where('stationId', '==', stationId).limit(200).get();
+  async listSchedules(stationId, user) {
+    const resolvedId = this._resolveStationId(stationId, user);
+    let q = db.collection('stationSchedules').where('stationId', '==', resolvedId);
+    q = this._scopeByEntity(q, user);
+    const snapshot = await q.limit(200).get();
     const schedules = [];
     snapshot.forEach(doc => schedules.push(doc.data()));
     return { count: schedules.length, schedules };
@@ -95,9 +152,13 @@ class StationCleaningService {
     return { success: true, message: 'Station Run created successfully', data };
   }
 
-  async listStationRuns(query = {}) {
+  async listStationRuns(query = {}, user) {
     let q = db.collection('StationCleaningRuns');
-    if (query.stationId) q = q.where('stationId', '==', query.stationId);
+    if (query.stationId) q = q.where('stationId', '==', this._resolveStationId(query.stationId, user));
+    q = this._scopeByDivision(q, user);
+    if (user.userType === 'contractor' && user.entityId) {
+      q = q.where('entityId', '==', user.entityId);
+    }
     const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const runs = [];
     snapshot.forEach(doc => runs.push({ id: doc.id, ...doc.data() }));
@@ -366,8 +427,9 @@ class StationCleaningService {
     return { uid: ref.id, data: record };
   }
 
-  async listPestControl(stationId, query) {
-    let q = db.collection('pestControlRecords').where('stationId', '==', stationId);
+  async listPestControl(stationId, query, user) {
+    const resolvedId = this._resolveStationId(stationId, user);
+    let q = db.collection('pestControlRecords').where('stationId', '==', resolvedId);
     if (query.status) q = q.where('status', '==', query.status);
     if (query.pestType) q = q.where('pestType', '==', query.pestType);
     const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
@@ -429,11 +491,14 @@ class StationCleaningService {
     return { uid: ref.id, data: record };
   }
 
-  async listMachines(query) {
+  async listMachines(query, user) {
     let q = db.collection('machineDeployments');
-    if (query.stationId) q = q.where('stationId', '==', query.stationId);
+    if (query.stationId) q = q.where('stationId', '==', this._resolveStationId(query.stationId, user));
     if (query.status) q = q.where('status', '==', query.status);
     if (query.machineType) q = q.where('machineType', '==', query.machineType);
+    if (user.userType === 'contractor' && user.entityId) {
+      q = q.where('deployedBy', '==', user.uid);
+    }
     const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const items = [];
     snapshot.forEach(doc => items.push(doc.data()));
@@ -489,9 +554,12 @@ class StationCleaningService {
     return { uid: ref.id, data: record };
   }
 
-  async listGarbageRecords(query) {
+  async listGarbageRecords(query, user) {
     let q = db.collection('garbageDisposalRecords');
-    if (query.stationId) q = q.where('stationId', '==', query.stationId);
+    if (query.stationId) q = q.where('stationId', '==', this._resolveStationId(query.stationId, user));
+    if (user.userType === 'contractor' && user.entityId) {
+      q = q.where('recordedBy', '==', user.uid);
+    }
     const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const records = [];
     snapshot.forEach(doc => records.push(doc.data()));

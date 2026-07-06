@@ -52,12 +52,43 @@ class _AreaListScreenState extends State<AreaListScreen> {
     }
   }
 
-  Future<void> _openForm() async {
+  Future<void> _openForm({Map<String, dynamic>? existing}) async {
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => AreaFormScreen(stationId: _selectedStation!.uid ?? _selectedStation!.stationCode)),
+      MaterialPageRoute(
+        builder: (_) => AreaFormScreen(
+          stationId: _selectedStation!.uid ?? _selectedStation!.stationCode,
+          existingArea: existing,
+        ),
+      ),
     );
     if (result == true) _loadAreas();
+  }
+
+  Future<void> _deleteArea(StationArea area) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Area'),
+        content: Text('Delete "${area.name}"? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: kErrorRed), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiService.deleteStationArea(area.uid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Area deleted'), backgroundColor: kSuccessGreen));
+        _loadAreas();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: kErrorRed));
+      }
+    }
   }
 
   @override
@@ -137,7 +168,20 @@ class _AreaListScreenState extends State<AreaListScreen> {
                                           ),
                                           title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                                           subtitle: Text(a.description.isNotEmpty ? a.description : 'No description'),
-                                          trailing: Icon(a.active ? Icons.check_circle : Icons.cancel, color: a.active ? kSuccessGreen : Colors.grey),
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(a.active ? Icons.check_circle : Icons.cancel, color: a.active ? kSuccessGreen : Colors.grey, size: 20),
+                                              IconButton(
+                                                icon: const Icon(Icons.edit, size: 18, color: kRailwayBlue),
+                                                onPressed: () => _openForm(existing: a.toJson()),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete, size: 18, color: kErrorRed),
+                                                onPressed: () => _deleteArea(a),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       );
                                     },
@@ -148,7 +192,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
                 ),
       floatingActionButton: _selectedStation != null
           ? FloatingActionButton(
-              onPressed: _openForm,
+              onPressed: () => _openForm(),
               backgroundColor: kRailwayBlue,
               child: const Icon(Icons.add, color: Colors.white),
             )

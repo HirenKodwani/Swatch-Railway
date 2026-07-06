@@ -25,6 +25,7 @@ class _StationMasterScreenState extends State<StationMasterScreen> {
 
   StationCategory _category = StationCategory.b;
   StationType _type = StationType.regular;
+  bool _active = true;
 
   bool get isEdit => widget.existingStation != null;
 
@@ -42,6 +43,7 @@ class _StationMasterScreenState extends State<StationMasterScreen> {
     if (s != null) {
       _category = s.category;
       _type = s.stationType;
+      _active = s.active;
     }
   }
 
@@ -73,6 +75,7 @@ class _StationMasterScreenState extends State<StationMasterScreen> {
         'division': _divisionCtrl.text.trim(),
         'category': _category.name,
         'stationType': _type.name,
+        'active': _active,
         'latitude': double.tryParse(_latCtrl.text) ?? 0,
         'longitude': double.tryParse(_lngCtrl.text) ?? 0,
         'address': _addrCtrl.text.trim(),
@@ -191,6 +194,15 @@ class _StationMasterScreenState extends State<StationMasterScreen> {
                         decoration: const InputDecoration(labelText: 'Station Type *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.account_balance)),
                         items: StationType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.name[0].toUpperCase() + t.name.substring(1)))).toList(),
                         onChanged: (v) { if (v != null) setState(() => _type = v); },
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        title: const Text('Active'),
+                        subtitle: Text(_active ? 'Station is operational' : 'Station is disabled'),
+                        value: _active,
+                        onChanged: (v) => setState(() => _active = v),
+                        activeColor: kSuccessGreen,
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ],
                   ),

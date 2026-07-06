@@ -1,9 +1,14 @@
+import 'dart:convert';
 import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/repositories/station_attendance_repository.dart';
 import 'package:crm_train/repositories/obhs_repository.dart';
+import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StationAttendanceScreen extends StatefulWidget {
   final String stationId;
@@ -14,7 +19,8 @@ class StationAttendanceScreen extends StatefulWidget {
   State<StationAttendanceScreen> createState() => _StationAttendanceScreenState();
 }
 
-class _StationAttendanceScreenState extends State<StationAttendanceScreen> {
+class _StationAttendanceScreenState extends State<StationAttendanceScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabCtrl;
   final _formKey = GlobalKey<FormState>();
   String _selectedShift = 'morning';
   DateTime _selectedDate = DateTime.now();
@@ -22,11 +28,24 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> {
   List<RailwayWorkerModel> _workers = [];
   final Map<String, AttendanceStatus> _attendanceStates = {};
   final Map<String, String> _reasons = {};
+  final Map<String, String> _photoUrls = {};
 
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
     _loadWorkers();
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token') ?? prefs.getString('token');
   }
 
   Future<void> _loadWorkers() async {
@@ -51,6 +70,29 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> {
     }
   }
 
+  Future<String?> _captureWorkerPhoto(String workerId) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+    if (picked == null) return _photoUrls[workerId];
+    try {
+      final bytes = await picked.readAsBytes();
+      final token = await _getToken();
+      if (token == null) return null;
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/evidence/upload/base64'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({
+          'image': base64Encode(bytes),
+          'fileName': 'attendance_${workerId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['url'] ?? data['imageUrl'] ?? '';
+      }
+    } catch (_) {}
+    return null;
+  }
 
   Future<void> _submitAttendance() async {
     setState(() => _isLoading = true);
@@ -66,7 +108,8 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> {
             'workerId': uid,
             'workerName': w.fullName,
             'status': _attendanceStates[uid]?.name ?? 'present',
-            'captureMode': 'manual',
+            'captureMode': _photoUrls[uid] != null ? 'photo' : 'manual',
+            'photoUrl': _photoUrls[uid] ?? '',
             'reason': _reasons[uid] ?? '',
           };
         }).toList(),
@@ -89,142 +132,338 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Mark Attendance - ${widget.stationName}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text('Attendance - ${widget.stationName}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
+        bottom: TabBar(
+          controller: _tabCtrl,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(text: 'Mark Attendance'),
+            Tab(text: 'Planned vs Actual'),
+          ],
+        ),
       ),
       body: _isLoading && _workers.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  Card(
-                    margin: const EdgeInsets.all(16),
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _selectedShift,
-                              decoration: const InputDecoration(labelText: 'Shift', border: OutlineInputBorder()),
-                              items: const [
-                                DropdownMenuItem(value: 'morning', child: Text('Morning (06:00 - 14:00)')),
-                                DropdownMenuItem(value: 'afternoon', child: Text('Afternoon (14:00 - 22:00)')),
-                                DropdownMenuItem(value: 'night', child: Text('Night (22:00 - 06:00)')),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedShift = val);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          IconButton(
-                            icon: const Icon(Icons.calendar_today, color: kRailwayBlue),
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: _selectedDate,
-                                firstDate: DateTime.now().subtract(const Duration(days: 7)),
-                                lastDate: DateTime.now(),
-                              );
-                              if (picked != null) {
-                                setState(() => _selectedDate = picked);
-                              }
-                            },
-                          ),
-                          Text(
-                            "${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _workers.length,
-                      itemBuilder: (context, idx) {
-                        final w = _workers[idx];
-                        final uid = w.uid;
-                        final name = w.fullName;
-                        final designation = w.designation ?? 'Field Staff';
+          : TabBarView(
+              controller: _tabCtrl,
+              children: [
+                _buildMarkAttendanceTab(),
+                _buildPlannedVsActualTab(),
+              ],
+            ),
+    );
+  }
 
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: kRailwayBlue.withOpacity(0.1),
-                                    child: const Icon(Icons.person, color: kRailwayBlue),
-                                  ),
-                                  title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text(designation),
-                                  trailing: DropdownButton<AttendanceStatus>(
-                                    value: _attendanceStates[uid],
-                                    items: AttendanceStatus.values.map((status) {
-                                      return DropdownMenuItem(
-                                        value: status,
-                                        child: Text(status.name.toUpperCase()),
-                                      );
-                                    }).toList(),
-                                    onChanged: (status) {
-                                      if (status != null) {
-                                        setState(() {
-                                          _attendanceStates[uid] = status;
-                                        });
-                                      }
-                                    },
-                                  ),
-                                ),
-                                if (_attendanceStates[uid] != AttendanceStatus.present)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                    child: TextFormField(
-                                      decoration: const InputDecoration(
-                                        labelText: 'Reason for absence/late',
-                                        border: UnderlineInputBorder(),
-                                      ),
-                                      onChanged: (val) => _reasons[uid] = val,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
+  Widget _buildMarkAttendanceTab() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          Card(
+            margin: const EdgeInsets.all(16),
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedShift,
+                      decoration: const InputDecoration(labelText: 'Shift', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                      items: const [
+                        DropdownMenuItem(value: 'morning', child: Text('Morning', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'afternoon', child: Text('Afternoon', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'night', child: Text('Night', style: TextStyle(fontSize: 13))),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedShift = val);
                       },
                     ),
                   ),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _submitAttendance,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kRailwayBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(width: 12),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 7)),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setState(() => _selectedDate = picked);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_today, color: kRailwayBlue, size: 18),
+                          const SizedBox(width: 6),
+                          Text("${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ],
                       ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('Submit Attendance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _workers.length,
+              itemBuilder: (context, idx) {
+                final w = _workers[idx];
+                final uid = w.uid;
+                final name = w.fullName;
+                final designation = w.designation ?? 'Field Staff';
+                final hasPhoto = _photoUrls[uid] != null && _photoUrls[uid]!.isNotEmpty;
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () async {
+                                final url = await _captureWorkerPhoto(uid);
+                                if (url != null) setState(() => _photoUrls[uid] = url);
+                              },
+                              child: Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: kRailwayBlue.withOpacity(0.1),
+                                    backgroundImage: hasPhoto ? NetworkImage(_photoUrls[uid]!) : null,
+                                    child: hasPhoto ? null : const Icon(Icons.person, color: kRailwayBlue),
+                                  ),
+                                  Positioned(
+                                    bottom: 0, right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(color: hasPhoto ? kSuccessGreen : Colors.grey, shape: BoxShape.circle),
+                                      child: Icon(hasPhoto ? Icons.check : Icons.camera_alt, size: 12, color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  Text(designation, style: const TextStyle(color: kTextSecondary, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            DropdownButton<AttendanceStatus>(
+                              value: _attendanceStates[uid],
+                              items: AttendanceStatus.values.map((status) {
+                                return DropdownMenuItem(value: status, child: Text(status.name.toUpperCase(), style: const TextStyle(fontSize: 13)));
+                              }).toList(),
+                              onChanged: (status) {
+                                if (status != null) setState(() => _attendanceStates[uid] = status);
+                              },
+                            ),
+                          ],
+                        ),
+                        if (_attendanceStates[uid] != AttendanceStatus.present)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TextFormField(
+                              decoration: const InputDecoration(
+                                labelText: 'Reason for absence/late',
+                                border: UnderlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (val) => _reasons[uid] = val,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _submitAttendance,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kRailwayBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('Submit Attendance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlannedVsActualTab() {
+    return PlannedVsActualView(stationId: widget.stationId);
+  }
+}
+
+class PlannedVsActualView extends StatefulWidget {
+  final String stationId;
+  const PlannedVsActualView({super.key, required this.stationId});
+
+  @override
+  State<PlannedVsActualView> createState() => _PlannedVsActualViewState();
+}
+
+class _PlannedVsActualViewState extends State<PlannedVsActualView> {
+  String _shift = 'morning';
+  DateTime _date = DateTime.now();
+  Map<String, dynamic>? _data;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      final formattedDate = "${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}";
+      _data = await StationAttendanceRepository.getPlannedVsActual(widget.stationId, formattedDate, _shift);
+    } catch (_) {
+      _data = null;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Card(
+          margin: const EdgeInsets.all(16),
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _shift,
+                    decoration: const InputDecoration(labelText: 'Shift', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                    items: const [
+                      DropdownMenuItem(value: 'morning', child: Text('Morning', style: TextStyle(fontSize: 13))),
+                      DropdownMenuItem(value: 'afternoon', child: Text('Afternoon', style: TextStyle(fontSize: 13))),
+                      DropdownMenuItem(value: 'night', child: Text('Night', style: TextStyle(fontSize: 13))),
+                    ],
+                    onChanged: (v) { if (v != null) setState(() => _shift = v); },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now());
+                    if (picked != null) setState(() => _date = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(8)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, color: kRailwayBlue, size: 18),
+                        const SizedBox(width: 6),
+                        Text("${_date.day}/${_date.month}/${_date.year}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _load,
+                  style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16)),
+                  child: const Text('Load'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (_data == null)
+          const Center(child: Text('No data available'))
+        else
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const Text('Manpower Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Divider(),
+                        _statRow('Planned Manpower', '${_data!['plannedManpower'] ?? _data!['planned'] ?? '-'}', kRailwayBlue),
+                        _statRow('Actual Manpower', '${_data!['actualManpower'] ?? _data!['actual'] ?? '-'}', kSuccessGreen),
+                        _statRow('Variance', '${_data!['variance'] ?? '-'}', (_data!['variance'] is int && _data!['variance'] > 0) ? kErrorRed : kSuccessGreen),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_data!['workers'] != null)
+                  ...(_data!['workers'] as List).map((w) => Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: w['status'] == 'present' ? kSuccessGreen.withOpacity(0.1) : kErrorRed.withOpacity(0.1),
+                        child: Icon(w['status'] == 'present' ? Icons.check_circle : Icons.cancel, color: w['status'] == 'present' ? kSuccessGreen : kErrorRed),
+                      ),
+                      title: Text(w['workerName'] ?? ''),
+                      subtitle: Text('Status: ${w['status'] ?? 'unknown'}'),
+                      trailing: w['photoUrl'] != null && (w['photoUrl'] as String).isNotEmpty
+                          ? CircleAvatar(radius: 18, backgroundImage: NetworkImage(w['photoUrl']))
+                          : null,
+                    ),
+                  )),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _statRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 14)),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
     );
   }
 }

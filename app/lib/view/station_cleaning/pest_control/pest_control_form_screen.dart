@@ -73,10 +73,9 @@ class _PestControlFormScreenState extends State<PestControlFormScreen> {
     try {
       final payload = {
         'stationId': widget.stationId,
-        'treatmentType': _treatmentType,
+        'treatmentMethod': _treatmentType,
         'scheduledDate': _scheduledDate.toIso8601String(),
-        'chemicalUsed': _chemicalUsedCtrl.text.trim(),
-        'quantityUsed': double.tryParse(_quantityUsedCtrl.text.trim()) ?? 0,
+        'chemicalIds': _chemicalUsedCtrl.text.trim().isEmpty ? [] : [_chemicalUsedCtrl.text.trim()],
         'frequency': _frequency,
       };
       await PestControlRepository.createPlan(payload);

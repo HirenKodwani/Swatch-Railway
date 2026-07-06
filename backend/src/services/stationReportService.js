@@ -22,7 +22,8 @@ const DAILY_REPORT_TYPES = [
 ];
 const MONTHLY_REPORT_TYPES = [
   'monthly_attendance', 'monthly_cleaning', 'monthly_scorecard',
-  'monthly_complaint', 'monthly_feedback', 'monthly_billing', 'monthly_penalty'
+  'monthly_complaint', 'monthly_feedback', 'monthly_billing', 'monthly_penalty',
+  'monthly_performance'
 ];
 const AUDIT_REPORT_TYPES = [
   'audit_user_activity', 'audit_image_archive', 'audit_rejected_forms',
@@ -422,6 +423,39 @@ class StationReportService {
     return report;
   }
 
+  async generateMonthlyPerformanceReport(stationId, month, year, user) {
+    const stationName = await this._getStationName(stationId);
+    const monthPad = String(month).padStart(2, '0');
+    const startDate = `${year}-${monthPad}-01`;
+    const endDate = `${year}-${monthPad}-31`;
+    const [attSnap, actSnap, scoreSnap, compSnap, feedSnap] = await Promise.all([
+      db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get(),
+      db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get(),
+      db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(200).get(),
+      db.collection('complaints').where('stationId', '==', stationId).get(),
+      db.collection('station_feedback').where('stationId', '==', stationId).get(),
+    ]);
+    const attRecords = []; attSnap.forEach(d => attRecords.push(d.data()));
+    const actRecords = []; actSnap.forEach(d => actRecords.push(d.data()));
+    const scoreRecords = []; scoreSnap.forEach(d => scoreRecords.push(d.data()));
+    const compRecords = []; compSnap.forEach(d => compRecords.push(d.data()));
+    const feedRecords = []; feedSnap.forEach(d => feedRecords.push(d.data()));
+    const inMonthComps = compRecords.filter(r => { const c = r.createdAt || ''; return c >= startDate && c <= endDate + 'T23:59:59'; });
+    const inMonthFeed = feedRecords.filter(r => { const c = r.createdAt || ''; return c.startsWith(year) && c.includes(monthPad); });
+    const presentLate = attRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+    const attPct = attRecords.length > 0 ? Math.round(presentLate / attRecords.length * 100) : 0;
+    const completedActs = actRecords.filter(a => a.status === 'COMPLETED' || a.status === 'APPROVED').length;
+    const completionRate = actRecords.length > 0 ? Math.round(completedActs / actRecords.length * 100) : 0;
+    const avgScore = scoreRecords.length > 0 ? Math.round(scoreRecords.reduce((s, r) => s + (r.overallStationScore || 0), 0) / scoreRecords.length) : 0;
+    const ratings = inMonthFeed.filter(r => r.rating).map(r => r.rating);
+    const report = await this._storeReport({
+      stationId, stationName, reportType: 'monthly_performance', month, year, date: startDate,
+      summary: { attendanceRate: attPct, totalManpowerEntries: attRecords.length, activityCompletionRate: completionRate, totalActivities: actRecords.length, averageScorecardScore: avgScore, scorecardDays: scoreRecords.length, totalComplaints: inMonthComps.length, resolvedComplaints: inMonthComps.filter(r => ['CLOSED', 'RESOLVED', 'RAILWAY_VERIFIED'].includes(r.status)).length, totalFeedback: inMonthFeed.length, averageFeedbackRating: ratings.length > 0 ? (ratings.reduce((s, v) => s + v, 0) / ratings.length).toFixed(1) : 'N/A', overallPerformanceIndex: avgScore > 0 ? Math.round((attPct + completionRate + avgScore) / 3) : 0 },
+      generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
+    });
+    return report;
+  }
+
   /* ==================================================================
      5. AUDIT REPORTS (Section 10.3)
      ================================================================== */
@@ -584,7 +618,7 @@ class StationReportService {
           await this[fnMap[schedule.reportType]](params.stationId, params.date, user);
           await autoEmailService.dispatchDailyReport(schedule.reportType, params.stationId, params.date);
         } else if (schedule.reportType.startsWith('monthly_')) {
-          const fnMap = { monthly_attendance: 'generateMonthlyAttendanceSummary', monthly_cleaning: 'generateMonthlyCleaningSummary', monthly_scorecard: 'generateMonthlyScorecardReport', monthly_complaint: 'generateMonthlyComplaintSummary', monthly_feedback: 'generateMonthlyFeedbackSummary', monthly_billing: 'generateMonthlyBillingReport', monthly_penalty: 'generateMonthlyPenaltyReport' };
+          const fnMap = { monthly_attendance: 'generateMonthlyAttendanceSummary', monthly_cleaning: 'generateMonthlyCleaningSummary', monthly_scorecard: 'generateMonthlyScorecardReport', monthly_complaint: 'generateMonthlyComplaintSummary', monthly_feedback: 'generateMonthlyFeedbackSummary', monthly_billing: 'generateMonthlyBillingReport', monthly_penalty: 'generateMonthlyPenaltyReport', monthly_performance: 'generateMonthlyPerformanceReport' };
           await this[fnMap[schedule.reportType]](params.stationId, params.month, params.year, user);
           await autoEmailService.dispatchMonthlyReport(schedule.reportType, params.stationId, params.month, params.year);
         } else if (schedule.reportType.startsWith('audit_')) {

@@ -52,6 +52,26 @@ class InspectionRepository {
     if (res.statusCode != 200) throw Exception('Failed to close deficiency');
   }
 
+  static Future<void> approveInspection(String uid, {String remarks = ''}) async {
+    final res = await http.post(Uri.parse('$baseUrl/api/inspections/$uid/approve'), headers: await _headers(), body: jsonEncode({'remarks': remarks}));
+    if (res.statusCode != 200) throw Exception('Failed to approve inspection');
+  }
+
+  static Future<void> rejectInspection(String uid, String reason) async {
+    final res = await http.post(Uri.parse('$baseUrl/api/inspections/$uid/reject'), headers: await _headers(), body: jsonEncode({'reason': reason}));
+    if (res.statusCode != 200) throw Exception('Failed to reject inspection');
+  }
+
+  static Future<void> resubmitInspection(String uid, {String remarks = ''}) async {
+    final res = await http.post(Uri.parse('$baseUrl/api/inspections/$uid/resubmit'), headers: await _headers(), body: jsonEncode({'remarks': remarks}));
+    if (res.statusCode != 200) throw Exception('Failed to resubmit inspection');
+  }
+
+  static Future<void> verifyDeficiency(String uid, String defId) async {
+    final res = await http.post(Uri.parse('$baseUrl/api/inspections/$uid/deficiencies/$defId/verify'), headers: await _headers());
+    if (res.statusCode != 200) throw Exception('Failed to verify deficiency');
+  }
+
   static Future<List<Map<String, dynamic>>> listTemplates() async {
     final res = await http.get(Uri.parse('$baseUrl/api/inspections/templates'), headers: await _headers());
     if (res.statusCode == 200) {

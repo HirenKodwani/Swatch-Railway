@@ -2,7 +2,7 @@ import { db, admin } from '../database/index.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
 import logger from '../logger/index.js';
 
-const ARCHIVE_TYPES = ['cleaning_forms', 'attendance', 'daily_activities', 'scorecards', 'complaints', 'inspections', 'execution_logs'];
+const ARCHIVE_TYPES = ['cleaning_forms', 'attendance', 'daily_activities', 'scorecards', 'complaints', 'inspections', 'execution_logs', 'billing_packs', 'passenger_feedback', 'reports', 'audit_trails', 'rejection_history'];
 const RETENTION_MONTHS = 12;
 
 class StationArchiveService {
@@ -29,6 +29,11 @@ class StationArchiveService {
       complaints: 'complaints',
       inspections: 'inspections',
       execution_logs: 'execution_logs',
+      billing_packs: 'station_billing_packs',
+      passenger_feedback: 'station_feedback',
+      reports: 'station_reports',
+      audit_trails: 'audit_logs',
+      rejection_history: 'station_daily_activities',
     };
 
     const collectionName = collectionMap[archiveType];
@@ -48,6 +53,16 @@ class StationArchiveService {
       sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
     } else if (archiveType === 'execution_logs') {
       sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'billing_packs') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'passenger_feedback') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'reports') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'audit_trails') {
+      sourceQuery = sourceQuery.where('action', 'in', ['UPDATE', 'DELETE', 'CREATE', 'DATA_MODIFICATION']).where('timestamp', '>=', startDate).where('timestamp', '<=', endDate + 'T23:59:59');
+    } else if (archiveType === 'rejection_history') {
+      sourceQuery = sourceQuery.where('stationId', '==', stationId).where('status', '==', 'REJECTED').where('date', '>=', startDate).where('date', '<=', endDate);
     }
 
     const snapshot = await sourceQuery.limit(500).get();
@@ -82,14 +97,15 @@ class StationArchiveService {
   }
 
   async listArchives(query = {}) {
-    const { stationId, archiveType, month, year, limit = 50 } = query;
+    const { stationId, archiveType, month, year, contractor, area, user, status, startDate, endDate, limit = 50 } = query;
     let q = db.collection('station_archives').orderBy('archivedAt', 'desc');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (archiveType) q = q.where('archiveType', '==', archiveType);
     if (month) q = q.where('month', '==', parseInt(month));
     if (year) q = q.where('year', '==', parseInt(year));
+    if (status) q = q.where('status', '==', status);
     const snapshot = await q.limit(parseInt(limit)).get();
-    const archives = [];
+    let archives = [];
     snapshot.forEach(doc => {
       const d = doc.data();
       archives.push({
@@ -99,6 +115,11 @@ class StationArchiveService {
         archivedBy: d.archivedBy, archivedAt: d.archivedAt,
       });
     });
+    if (contractor) archives = archives.filter(a => a.stationName?.toLowerCase().includes(contractor.toLowerCase()));
+    if (area) archives = archives.filter(a => a.archiveType?.toLowerCase().includes(area.toLowerCase()));
+    if (user) archives = archives.filter(a => a.archivedBy?.toLowerCase().includes(user.toLowerCase()));
+    if (startDate) archives = archives.filter(a => a.archivedAt >= startDate);
+    if (endDate) archives = archives.filter(a => a.archivedAt <= endDate + 'T23:59:59');
     return { count: archives.length, archives };
   }
 

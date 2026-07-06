@@ -592,8 +592,12 @@ class ApiService {
     required String zone,
     String? division,
     String? depot,
+    List<String>? stationIds,
     required String startDate,
     required String endDate,
+    double contractValue = 0,
+    String? billingCycle,
+    bool scoringApplicability = true,
     required String? workCategories,
     String? remarks,
     required String status,
@@ -619,8 +623,12 @@ class ApiService {
           'entityId': entityId,
           'division': division,
           'depot': depot,
+          if (stationIds != null) 'stationIds': stationIds,
           'startDate': startDate,
           'endDate': endDate,
+          'contractValue': contractValue,
+          if (billingCycle != null) 'billingCycle': billingCycle,
+          'scoringApplicability': scoringApplicability,
           'remarks': remarks,
           'workCategories': workCategories,
           'status': status,
@@ -647,6 +655,9 @@ class ApiService {
   static Future<Map<String, dynamic>> updateContract({
     required String contractId,
     required String status,
+    double? contractValue,
+    String? billingCycle,
+    bool? scoringApplicability,
     required String repName,
     required String repDesignation,
     required String repMobile,
@@ -664,6 +675,9 @@ class ApiService {
         },
         body: jsonEncode({
           'status': status,
+          if (contractValue != null) 'contractValue': contractValue,
+          if (billingCycle != null) 'billingCycle': billingCycle,
+          if (scoringApplicability != null) 'scoringApplicability': scoringApplicability,
           'repName': repName,
           'repDesignation': repDesignation,
           'repMobile': repMobile,
@@ -3690,6 +3704,34 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> updateStationArea(String uid, Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/station-area/update/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to update area');
+    } catch (e) {
+      throw Exception('Error updating area: $e');
+    }
+  }
+
+  static Future<void> deleteStationArea(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/station-area/delete/$uid'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200 && response.statusCode != 204) throw Exception('Failed to delete area');
+    } catch (e) {
+      throw Exception('Error deleting area: $e');
+    }
+  }
+
   static Future<Map<String, dynamic>> createStationZone(Map<String, dynamic> data) async {
     try {
       final token = await getToken();
@@ -4244,13 +4286,19 @@ class ApiService {
     throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to trigger archive');
   }
 
-  static Future<Map<String, dynamic>> listArchives({String? stationId, String? archiveType, int? month, int? year, int limit = 50}) async {
+  static Future<Map<String, dynamic>> listArchives({String? stationId, String? archiveType, int? month, int? year, String? contractor, String? area, String? user, String? status, String? startDate, String? endDate, int limit = 50}) async {
     final token = await getToken();
     final params = <String, String>{};
     if (stationId != null) params['stationId'] = stationId;
     if (archiveType != null) params['archiveType'] = archiveType;
     if (month != null) params['month'] = month.toString();
     if (year != null) params['year'] = year.toString();
+    if (contractor != null) params['contractor'] = contractor;
+    if (area != null) params['area'] = area;
+    if (user != null) params['user'] = user;
+    if (status != null) params['status'] = status;
+    if (startDate != null) params['startDate'] = startDate;
+    if (endDate != null) params['endDate'] = endDate;
     if (limit != 50) params['limit'] = limit.toString();
     final uri = Uri.parse('$baseUrl/api/station-archives').replace(queryParameters: params.isNotEmpty ? params : null);
     final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});

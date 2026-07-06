@@ -28,7 +28,13 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
     'sweeping', 'mopping', 'washing', 'rag_picking', 'toilet_cleaning',
     'drain_cleaning', 'water_booth_cleaning', 'garbage_collection',
     'garbage_disposal', 'cobweb_removal', 'stain_removal', 'pest_control',
-    'rodent_control', 'deep_cleaning', 'consumable_refill', 'inspection_closure', 'other',
+    'rodent_control', 'deep_cleaning', 'consumable_refill', 'inspection_closure',
+  ];
+
+  static const _frequencies = [
+    'once_per_day', 'twice_per_day', 'three_times_per_day',
+    'every_six_hours', 'hourly', 'weekly', 'fortnightly',
+    'monthly', 'as_and_when_required',
   ];
 
   @override
@@ -134,6 +140,13 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                       TextFormField(
                         controller: _unitCtrl,
                         decoration: const InputDecoration(labelText: 'Unit (e.g., sqm, nos)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.straighten)),
+                      ),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        value: _freq.isNotEmpty ? _freq : null,
+                        decoration: const InputDecoration(labelText: 'Default Frequency', border: OutlineInputBorder(), prefixIcon: Icon(Icons.schedule)),
+                        items: _frequencies.map((f) => DropdownMenuItem(value: f, child: Text(f.replaceAll('_', ' ')))).toList(),
+                        onChanged: (v) { if (v != null) setState(() => _freq = v); },
                       ),
                       const SizedBox(height: 14),
                       TextFormField(

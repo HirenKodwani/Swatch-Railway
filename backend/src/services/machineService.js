@@ -105,6 +105,16 @@ class MachineService {
     return { message: 'Downtime resolved' };
   }
 
+  async listDowntime(query = {}) {
+    const { machineId, status, limit = 50 } = query;
+    let q = db.collection('machine_downtime');
+    if (machineId) q = q.where('machineId', '==', machineId);
+    if (status) q = q.where('status', '==', status);
+    const snapshot = await q.orderBy('startTime', 'desc').limit(parseInt(limit)).get();
+    const records = []; snapshot.forEach(d => records.push(d.data()));
+    return { count: records.length, downtimeRecords: records };
+  }
+
   async getDowntimeReport(query = {}) {
     const { stationId, machineId, startDate, endDate, limit = 100 } = query;
     let q = db.collection('machine_downtime');

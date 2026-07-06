@@ -6,8 +6,18 @@ export const createStationArea = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+export const updateStationArea = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.updateStationArea(req.params.uid, req.body);
+  res.status(200).json(result);
+});
+
+export const deleteStationArea = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.deleteStationArea(req.params.uid);
+  res.status(200).json(result);
+});
+
 export const listStationAreas = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listStationAreas(req.params.stationId);
+  const result = await stationCleaningService.listStationAreas(req.params.stationId, req.user);
   res.status(200).json(result);
 });
 
@@ -17,7 +27,7 @@ export const createStationZone = asyncHandler(async (req, res) => {
 });
 
 export const listStationZones = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listStationZones(req.params.stationId, req.query.areaId);
+  const result = await stationCleaningService.listStationZones(req.params.stationId, req.query.areaId, req.user);
   res.status(200).json(result);
 });
 
@@ -27,7 +37,7 @@ export const mapContractor = asyncHandler(async (req, res) => {
 });
 
 export const listContractorMappings = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listContractorMappings(req.params.stationId);
+  const result = await stationCleaningService.listContractorMappings(req.params.stationId, req.user);
   res.status(200).json(result);
 });
 
@@ -37,7 +47,7 @@ export const createSchedule = asyncHandler(async (req, res) => {
 });
 
 export const listSchedules = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listSchedules(req.params.stationId);
+  const result = await stationCleaningService.listSchedules(req.params.stationId, req.user);
   res.status(200).json(result);
 });
 
@@ -47,7 +57,7 @@ export const createStationRun = asyncHandler(async (req, res) => {
 });
 
 export const listStationRuns = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listStationRuns(req.query);
+  const result = await stationCleaningService.listStationRuns(req.query, req.user);
   res.status(200).json(result);
 });
 
@@ -129,7 +139,7 @@ export const recordPestControl = asyncHandler(async (req, res) => {
 });
 
 export const listPestControl = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listPestControl(req.params.stationId, req.query);
+  const result = await stationCleaningService.listPestControl(req.params.stationId, req.query, req.user);
   res.status(200).json({ success: true, count: result.length, data: result });
 });
 
@@ -155,7 +165,7 @@ export const deployMachine = asyncHandler(async (req, res) => {
 });
 
 export const listMachines = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listMachines(req.query);
+  const result = await stationCleaningService.listMachines(req.query, req.user);
   res.status(200).json({ success: true, count: result.length, data: result });
 });
 
@@ -181,7 +191,7 @@ export const recordGarbageDisposal = asyncHandler(async (req, res) => {
 });
 
 export const listGarbageRecords = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.listGarbageRecords(req.query);
+  const result = await stationCleaningService.listGarbageRecords(req.query, req.user);
   res.status(200).json({ success: true, count: result.length, data: result });
 });
 

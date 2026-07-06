@@ -61,6 +61,77 @@ class _DailyActivityListScreenState extends State<DailyActivityListScreen> {
     }
   }
 
+  Widget _buildGroupedList() {
+    final grouped = <String, List<DailyActivityRecord>>{};
+    for (final act in _activities) {
+      final area = act.areaName.isNotEmpty ? act.areaName : 'Unassigned';
+      grouped.putIfAbsent(area, () => []);
+      grouped[area]!.add(act);
+    }
+    final sortedAreas = grouped.keys.toList()..sort();
+    return ListView(
+      children: [
+        for (final area in sortedAreas) ...[
+          _buildAreaHeader(area, grouped[area]!),
+          for (final act in grouped[area]!)
+            Card(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: ListTile(
+                dense: true,
+                title: Text(act.activityName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: Text('Shift: ${act.shift.toUpperCase()}', style: const TextStyle(fontSize: 12)),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _statusColor(act.status).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _statusColor(act.status)),
+                  ),
+                  child: Text(act.status.name.toUpperCase(), style: TextStyle(color: _statusColor(act.status), fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => ActivityRecordFormScreen(activityRecord: act, stationId: widget.stationId, stationName: widget.stationName),
+                  )).then((_) => _loadActivities());
+                },
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAreaHeader(String areaName, List<DailyActivityRecord> activities) {
+    final total = activities.length;
+    final completed = activities.where((a) => a.status == DailyActivityStatus.completed || a.status == DailyActivityStatus.approved).length;
+    final pending = activities.where((a) => a.status == DailyActivityStatus.pending || a.status == DailyActivityStatus.inProgress).length;
+    final rejected = activities.where((a) => a.status == DailyActivityStatus.rejected).length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: Row(children: [
+        Expanded(
+          child: Text(areaName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: completed == total ? kSuccessGreen.withOpacity(0.1) : kWarningOrange.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text('$completed/$total completed', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: completed == total ? kSuccessGreen : kWarningOrange)),
+        ),
+        if (rejected > 0) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: kErrorRed.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            child: Text('$rejected rejected', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kErrorRed)),
+          ),
+        ],
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,42 +217,9 @@ class _DailyActivityListScreenState extends State<DailyActivityListScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _activities.isEmpty
                     ? const Center(child: Text('No daily activities configured/recorded for this date.'))
-                    : ListView.builder(
-                        itemCount: _activities.length,
-                        itemBuilder: (context, idx) {
-                          final act = _activities[idx];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            child: ListTile(
-                              title: Text(act.activityName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Area: ${act.areaName} | Shift: ${act.shift.toUpperCase()}'),
-                              trailing: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: _statusColor(act.status).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: _statusColor(act.status)),
-                                ),
-                                child: Text(
-                                  act.status.name.toUpperCase(),
-                                  style: TextStyle(color: _statusColor(act.status), fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ActivityRecordFormScreen(
-                                      activityRecord: act,
-                                      stationId: widget.stationId,
-                                      stationName: widget.stationName,
-                                    ),
-                                  ),
-                                ).then((_) => _loadActivities());
-                              },
-                            ),
-                          );
-                        },
+                    : RefreshIndicator(
+                        onRefresh: _loadActivities,
+                        child: _buildGroupedList(),
                       ),
           ),
         ],

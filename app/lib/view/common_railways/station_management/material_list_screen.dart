@@ -5,7 +5,9 @@ import 'package:crm_train/utills/app_colors.dart';
 import 'material_form_screen.dart';
 
 class MaterialListScreen extends StatefulWidget {
-  const MaterialListScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const MaterialListScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<MaterialListScreen> createState() => _MaterialListScreenState();
@@ -45,7 +47,7 @@ class _MaterialListScreenState extends State<MaterialListScreen> with SingleTick
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      _all = await MaterialRepository.getAll();
+      _all = await MaterialRepository.getAll(stationId: widget.stationId);
       _applyFilter();
     } catch (e) {
       if (e.toString().contains('AUTH_ERROR')) {
@@ -60,14 +62,14 @@ class _MaterialListScreenState extends State<MaterialListScreen> with SingleTick
 
   Future<void> _loadAlerts() async {
     try {
-      _alerts = await MaterialRepository.getAlerts();
+      _alerts = await MaterialRepository.getAlerts(stationId: widget.stationId);
       if (mounted) setState(() {});
     } catch (_) {}
   }
 
   Future<void> _loadLogs() async {
     try {
-      _logs = await MaterialRepository.getLogs();
+      _logs = await MaterialRepository.getLogs(stationId: widget.stationId);
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -121,6 +123,16 @@ class _MaterialListScreenState extends State<MaterialListScreen> with SingleTick
                     if (m.unitPrice > 0) ...[const SizedBox(width: 8), _infoChip('₹/unit', m.unitPrice.toStringAsFixed(0), kSuccessGreen)],
                   ],
                 ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (m.monthlyRequirement > 0) _infoChip('Monthly Req.', m.monthlyRequirement.toString(), Colors.teal),
+                    if (m.monthlyRequirement > 0) const SizedBox(width: 8),
+                    if (m.issuedQuantity > 0) _infoChip('Issued', m.issuedQuantity.toString(), Colors.indigo),
+                    if (m.issuedQuantity > 0) const SizedBox(width: 8),
+                    if (m.usedQuantity > 0) _infoChip('Used', m.usedQuantity.toString(), Colors.purple),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -142,7 +154,7 @@ class _MaterialListScreenState extends State<MaterialListScreen> with SingleTick
                       onPressed: () async {
                         final r = await Navigator.push<bool>(
                           context,
-                          MaterialPageRoute(builder: (_) => MaterialFormScreen(existing: m)),
+                          MaterialPageRoute(builder: (_) => MaterialFormScreen(existing: m, stationId: widget.stationId)),
                         );
                         if (r == true) _load();
                       },
@@ -333,7 +345,7 @@ class _MaterialListScreenState extends State<MaterialListScreen> with SingleTick
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Materials', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(widget.stationName != null ? 'Materials - ${widget.stationName}' : 'Materials', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
         bottom: TabBar(
@@ -394,7 +406,7 @@ class _MaterialListScreenState extends State<MaterialListScreen> with SingleTick
         backgroundColor: kRailwayBlue,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () async {
-          final r = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const MaterialFormScreen()));
+          final r = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => MaterialFormScreen(stationId: widget.stationId)));
           if (r == true) _load();
         },
       ),

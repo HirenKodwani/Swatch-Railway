@@ -34,7 +34,7 @@ class MachineTrackingRepository {
     final uri = Uri.parse('$baseUrl/api/machines/downtime').replace(queryParameters: query);
     final res = await http.get(uri, headers: await _headers());
     if (res.statusCode == 200) {
-      final list = jsonDecode(res.body)['downtimeRecords'] ?? [];
+      final list = jsonDecode(res.body)['downtimeRecords'] ?? jsonDecode(res.body)['records'] ?? [];
       return list.map((e) => MachineDowntime.fromJson(e)).toList();
     }
     throw Exception('Failed to load downtime');
@@ -54,7 +54,7 @@ class MachineTrackingRepository {
     final uri = Uri.parse('$baseUrl/api/machines/maintenance').replace(queryParameters: query);
     final res = await http.get(uri, headers: await _headers());
     if (res.statusCode == 200) {
-      final list = jsonDecode(res.body)['maintenanceRecords'] ?? [];
+      final list = jsonDecode(res.body)['schedules'] ?? [];
       return list.map((e) => MachineMaintenance.fromJson(e)).toList();
     }
     throw Exception('Failed to load maintenance');

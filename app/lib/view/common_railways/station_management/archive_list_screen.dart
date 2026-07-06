@@ -11,14 +11,30 @@ class ArchiveListScreen extends StatefulWidget {
 }
 
 class _ArchiveListScreenState extends State<ArchiveListScreen> {
+  @override
+  void dispose() {
+    _filterContractorCtrl.dispose();
+    _filterAreaCtrl.dispose();
+    _filterUserCtrl.dispose();
+    super.dispose();
+  }
+
   bool _isLoading = false;
   List _archives = [];
   String? _error;
   String _selectedType = 'All';
+  final _filterContractorCtrl = TextEditingController();
+  final _filterAreaCtrl = TextEditingController();
+  final _filterUserCtrl = TextEditingController();
+  String? _filterStatus;
+  DateTime? _filterStartDate;
+  DateTime? _filterEndDate;
+  bool _showFilters = false;
 
   final _types = [
     'All', 'cleaning_forms', 'attendance', 'daily_activities',
-    'scorecards', 'complaints', 'inspections', 'execution_logs'
+    'scorecards', 'complaints', 'inspections', 'execution_logs', 'billing_packs',
+    'passenger_feedback', 'reports', 'audit_trails', 'rejection_history'
   ];
 
   @override
@@ -32,6 +48,12 @@ class _ArchiveListScreenState extends State<ArchiveListScreen> {
     try {
       final data = await ApiService.listArchives(
         archiveType: _selectedType == 'All' ? null : _selectedType,
+        contractor: _filterContractorCtrl.text.trim().isEmpty ? null : _filterContractorCtrl.text.trim(),
+        area: _filterAreaCtrl.text.trim().isEmpty ? null : _filterAreaCtrl.text.trim(),
+        user: _filterUserCtrl.text.trim().isEmpty ? null : _filterUserCtrl.text.trim(),
+        status: _filterStatus,
+        startDate: _filterStartDate?.toIso8601String().substring(0, 10),
+        endDate: _filterEndDate?.toIso8601String().substring(0, 10),
       );
       if (mounted) {
         setState(() { _archives = data['archives'] ?? []; _isLoading = false; });
@@ -50,6 +72,11 @@ class _ArchiveListScreenState extends State<ArchiveListScreen> {
       case 'complaints': return 'Complaints';
       case 'inspections': return 'Inspections';
       case 'execution_logs': return 'Execution Logs';
+      case 'billing_packs': return 'Billing Packs';
+      case 'passenger_feedback': return 'Passenger Feedback';
+      case 'reports': return 'Reports';
+      case 'audit_trails': return 'Audit Trails';
+      case 'rejection_history': return 'Rejection History';
       default: return t;
     }
   }
@@ -63,6 +90,11 @@ class _ArchiveListScreenState extends State<ArchiveListScreen> {
       case 'complaints': return Icons.report_problem;
       case 'inspections': return Icons.visibility;
       case 'execution_logs': return Icons.list_alt;
+      case 'billing_packs': return Icons.receipt_long;
+      case 'passenger_feedback': return Icons.feedback;
+      case 'reports': return Icons.assessment;
+      case 'audit_trails': return Icons.history;
+      case 'rejection_history': return Icons.cancel;
       default: return Icons.archive;
     }
   }
@@ -76,6 +108,11 @@ class _ArchiveListScreenState extends State<ArchiveListScreen> {
       case 'complaints': return kErrorRed;
       case 'inspections': return kWarningOrange;
       case 'execution_logs': return Colors.brown;
+      case 'billing_packs': return Colors.green;
+      case 'passenger_feedback': return Colors.orange;
+      case 'reports': return Colors.cyan;
+      case 'audit_trails': return Colors.deepPurple;
+      case 'rejection_history': return kErrorRed;
       default: return Colors.grey;
     }
   }
@@ -112,20 +149,108 @@ class _ArchiveListScreenState extends State<ArchiveListScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _types.map((t) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(_typeLabel(t)),
-                    selected: _selectedType == t,
-                    onSelected: (v) => setState(() { _selectedType = t; _loadArchives(); }),
-                    selectedColor: _typeColor(t),
-                    labelStyle: TextStyle(color: _selectedType == t ? Colors.white : Colors.black87, fontSize: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _types.map((t) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(_typeLabel(t)),
+                        selected: _selectedType == t,
+                        onSelected: (v) => setState(() { _selectedType = t; _loadArchives(); }),
+                        selectedColor: _typeColor(t),
+                        labelStyle: TextStyle(color: _selectedType == t ? Colors.white : Colors.black87, fontSize: 12),
+                      ),
+                    )).toList(),
                   ),
-                )).toList(),
-              ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => setState(() => _showFilters = !_showFilters),
+                      icon: Icon(_showFilters ? Icons.expand_less : Icons.expand_more, size: 16),
+                      label: Text(_showFilters ? 'Hide Filters' : 'More Filters', style: const TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(foregroundColor: Colors.brown[700]),
+                    ),
+                    if (_showFilters) ...[
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          _filterContractorCtrl.clear();
+                          _filterAreaCtrl.clear();
+                          _filterUserCtrl.clear();
+                          setState(() { _filterStatus = null; _filterStartDate = null; _filterEndDate = null; });
+                          _loadArchives();
+                        },
+                        child: const Text('Clear', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_showFilters) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      SizedBox(width: 140, child: TextField(
+                        controller: _filterContractorCtrl,
+                        decoration: const InputDecoration(labelText: 'Contractor', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setState(() {}),
+                      )),
+                      SizedBox(width: 140, child: TextField(
+                        controller: _filterAreaCtrl,
+                        decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setState(() {}),
+                      )),
+                      SizedBox(width: 140, child: TextField(
+                        controller: _filterUserCtrl,
+                        decoration: const InputDecoration(labelText: 'User', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setState(() {}),
+                      )),
+                      SizedBox(width: 120, child: DropdownButtonFormField<String>(
+                        value: _filterStatus,
+                        decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                        items: const [DropdownMenuItem(value: null, child: Text('All', style: TextStyle(fontSize: 12))), DropdownMenuItem(value: 'archived', child: Text('Archived', style: TextStyle(fontSize: 12)))],
+                        onChanged: (v) => setState(() => _filterStatus = v),
+                        style: const TextStyle(fontSize: 12),
+                      )),
+                      InkWell(
+                        onTap: () async {
+                          final d = await showDatePicker(context: context, initialDate: _filterStartDate ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
+                          if (d != null) setState(() => _filterStartDate = d);
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(labelText: 'From', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                          child: Text(_filterStartDate?.toIso8601String().substring(0, 10) ?? '', style: const TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () async {
+                          final d = await showDatePicker(context: context, initialDate: _filterEndDate ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
+                          if (d != null) setState(() => _filterEndDate = d);
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(labelText: 'To', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                          child: Text(_filterEndDate?.toIso8601String().substring(0, 10) ?? '', style: const TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _loadArchives,
+                        style: TextButton.styleFrom(backgroundColor: Colors.brown[100]),
+                        child: const Text('Apply', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
           Expanded(
@@ -243,7 +368,8 @@ class _ArchiveTriggerDialogState extends State<_ArchiveTriggerDialog> {
 
   final _types = [
     'cleaning_forms', 'attendance', 'daily_activities',
-    'scorecards', 'complaints', 'inspections', 'execution_logs'
+    'scorecards', 'complaints', 'inspections', 'execution_logs',
+    'billing_packs', 'passenger_feedback', 'reports', 'audit_trails', 'rejection_history'
   ];
 
   @override

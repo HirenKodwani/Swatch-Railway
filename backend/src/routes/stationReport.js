@@ -28,6 +28,7 @@ router.post('/api/station-reports/monthly/complaint', verifyToken, ctrl.generate
 router.post('/api/station-reports/monthly/feedback', verifyToken, ctrl.generateMonthlyFeedbackSummary);
 router.post('/api/station-reports/monthly/billing', verifyToken, ctrl.generateMonthlyBillingReport);
 router.post('/api/station-reports/monthly/penalty', verifyToken, ctrl.generateMonthlyPenaltyReport);
+router.post('/api/station-reports/monthly/performance', verifyToken, ctrl.generateMonthlyPerformanceReport);
 
 // 10.3 Audit Reports
 router.get('/api/station-reports/audit/user-activity', verifyToken, ctrl.generateUserActivityAudit);

@@ -7,11 +7,17 @@ class ContractModel {
   String? zone;
   String? division;
   String? depot;
+  List<String> stationIds;
+  List<String> stationNames;
   String? startDate;
   String? endDate;
+  String? contractDuration;
+  double contractValue;
   String? workCategories;
   String? remarks;
   String? status;
+  String? billingCycle;
+  bool scoringApplicability;
 
   String? repName;
   String? repDesignation;
@@ -38,11 +44,17 @@ class ContractModel {
     this.zone,
     this.division,
     this.depot,
+    this.stationIds = const [],
+    this.stationNames = const [],
     this.startDate,
     this.endDate,
+    this.contractDuration,
+    this.contractValue = 0,
     this.workCategories,
     this.remarks,
     this.status,
+    this.billingCycle,
+    this.scoringApplicability = true,
     this.repName,
     this.repDesignation,
     this.repMobile,
@@ -82,6 +94,9 @@ class ContractModel {
     final statusValue = (json['status'] ?? '').toString().toLowerCase();
     final bool isActiveValue = statusValue == 'active';
 
+    final stations = (json['stationIds'] as List?)?.cast<String>() ?? [];
+    final stNames = (json['stationNames'] as List?)?.cast<String>() ?? [];
+
     return ContractModel(
       uid: json['uid'] ?? '',
       contractNumber: json['contractNumber'],
@@ -91,11 +106,17 @@ class ContractModel {
       zone: json['zone'],
       division: json['division'],
       depot: json['depot'],
+      stationIds: stations,
+      stationNames: stNames,
       startDate: json['startDate'],
       endDate: json['endDate'],
+      contractDuration: json['contractDuration'],
+      contractValue: (json['contractValue'] ?? 0).toDouble(),
       workCategories: json['workCategories'],
       remarks: json['remarks'],
       status: json['status'],
+      billingCycle: json['billingCycle'],
+      scoringApplicability: json['scoringApplicability'] ?? true,
 
       repName: json['repName'] ?? rep['name'],
       repDesignation: json['repDesignation'] ?? rep['designation'],
@@ -125,11 +146,17 @@ class ContractModel {
       'zone': zone,
       'division': division,
       'depot': depot,
+      'stationIds': stationIds,
+      'stationNames': stationNames,
       'startDate': startDate,
       'endDate': endDate,
+      'contractDuration': contractDuration,
+      'contractValue': contractValue,
       'workCategories': workCategories,
       'remarks': remarks,
       'status': status,
+      'billingCycle': billingCycle,
+      'scoringApplicability': scoringApplicability,
 
       'repName': repName,
       'repDesignation': repDesignation,

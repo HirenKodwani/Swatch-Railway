@@ -20,15 +20,21 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
   late TextEditingController _serialCtrl;
   late TextEditingController _locationCtrl;
   late TextEditingController _remarksCtrl;
+  late TextEditingController _downtimeDateCtrl;
+  late TextEditingController _downtimeReasonCtrl;
+  late TextEditingController _estRepairDateCtrl;
+  late TextEditingController _actualRepairDateCtrl;
 
   String _type = 'scrubber';
   String _workingStatus = 'working';
+  String _replacementStatus = 'none';
   String? _stationId;
 
   bool get _isEdit => widget.machine != null;
 
   final _types = ['scrubber', 'sweeper', 'vacuum', 'pressure_washer', 'generator', 'blower', 'other'];
-  final _statuses = ['working', 'under_maintenance', 'broken'];
+  final _statuses = ['working', 'under_maintenance', 'broken', 'retired'];
+  final _replacementStatuses = ['none', 'requested', 'approved', 'replaced'];
 
   @override
   void initState() {
@@ -38,9 +44,14 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
     _serialCtrl = TextEditingController(text: m?['serialNumber'] ?? '');
     _locationCtrl = TextEditingController(text: m?['location'] ?? '');
     _remarksCtrl = TextEditingController(text: m?['remarks'] ?? '');
+    _downtimeReasonCtrl = TextEditingController(text: m?['downtimeEntry']?['downtimeReason'] ?? '');
+    _downtimeDateCtrl = TextEditingController(text: m?['downtimeEntry']?['downtimeDate'] ?? '');
+    _estRepairDateCtrl = TextEditingController(text: m?['downtimeEntry']?['estimatedRepairDate'] ?? '');
+    _actualRepairDateCtrl = TextEditingController(text: m?['downtimeEntry']?['actualRepairDate'] ?? '');
     if (m != null) {
       _type = m['machineType'] ?? 'scrubber';
       _workingStatus = m['workingStatus'] ?? 'working';
+      _replacementStatus = m['replacementStatus'] ?? 'none';
       _stationId = m['stationId'];
     }
     _loadStations();
@@ -62,7 +73,23 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
     _serialCtrl.dispose();
     _locationCtrl.dispose();
     _remarksCtrl.dispose();
+    _downtimeDateCtrl.dispose();
+    _downtimeReasonCtrl.dispose();
+    _estRepairDateCtrl.dispose();
+    _actualRepairDateCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate(TextEditingController ctrl) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (date != null) {
+      ctrl.text = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    }
   }
 
   Future<void> _save() async {
@@ -76,8 +103,16 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
         'stationId': _stationId ?? '',
         'location': _locationCtrl.text.trim(),
         'workingStatus': _workingStatus,
+        'replacementStatus': _replacementStatus,
         'remarks': _remarksCtrl.text.trim(),
       };
+      final dtEntry = <String, dynamic>{};
+      if (_downtimeDateCtrl.text.isNotEmpty) dtEntry['downtimeDate'] = _downtimeDateCtrl.text;
+      if (_downtimeReasonCtrl.text.isNotEmpty) dtEntry['downtimeReason'] = _downtimeReasonCtrl.text;
+      if (_estRepairDateCtrl.text.isNotEmpty) dtEntry['estimatedRepairDate'] = _estRepairDateCtrl.text;
+      if (_actualRepairDateCtrl.text.isNotEmpty) dtEntry['actualRepairDate'] = _actualRepairDateCtrl.text;
+      if (dtEntry.isNotEmpty) body['downtimeEntry'] = dtEntry;
+
       if (_isEdit) {
         await ApiService.updateMachine(widget.machine!['uid'], body);
       } else {
@@ -144,7 +179,7 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _locationCtrl,
-                decoration: const InputDecoration(labelText: 'Location', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
+                decoration: const InputDecoration(labelText: 'Location / Area', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -152,6 +187,81 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
                 decoration: const InputDecoration(labelText: 'Working Status', border: OutlineInputBorder(), prefixIcon: Icon(Icons.check_circle)),
                 items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s.replaceAll('_', ' ').toUpperCase()))).toList(),
                 onChanged: (v) => setState(() => _workingStatus = v!),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _replacementStatus,
+                decoration: const InputDecoration(labelText: 'Replacement / Repair Status', border: OutlineInputBorder(), prefixIcon: Icon(Icons.build)),
+                items: _replacementStatuses.map((s) => DropdownMenuItem(value: s, child: Text(s[0].toUpperCase() + s.substring(1)))).toList(),
+                onChanged: (v) => setState(() => _replacementStatus = v!),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kWarningOrange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: kWarningOrange.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.download, size: 18, color: kWarningOrange),
+                      const SizedBox(width: 8),
+                      const Text('Downtime Entry', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ]),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _downtimeDateCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Downtime Date',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.calendar_today, size: 20),
+                        suffixIcon: Icon(Icons.date_range),
+                      ),
+                      readOnly: true,
+                      onTap: () => _pickDate(_downtimeDateCtrl),
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _downtimeReasonCtrl,
+                      decoration: const InputDecoration(labelText: 'Downtime Reason', border: OutlineInputBorder(), prefixIcon: Icon(Icons.report_problem, size: 20)),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _estRepairDateCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Est. Repair Date',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.schedule, size: 20),
+                              suffixIcon: Icon(Icons.date_range, size: 18),
+                            ),
+                            readOnly: true,
+                            onTap: () => _pickDate(_estRepairDateCtrl),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _actualRepairDateCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Actual Repair Date',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.check_circle, size: 20),
+                              suffixIcon: Icon(Icons.date_range, size: 18),
+                            ),
+                            readOnly: true,
+                            onTap: () => _pickDate(_actualRepairDateCtrl),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               TextFormField(

@@ -89,35 +89,50 @@ class WorkerProfileScreen extends StatelessWidget {
                       color: Colors.black87),
                 ),
                 const SizedBox(height: 12),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.4,
-                  children: [
-                    _buildStatCard(
-                        controller.tasksCompleted.value.toString(),
-                        'Tasks Completed',
-                        Icons.task_alt,
-                        Colors.blue),
-                    _buildStatCard(
-                        '${controller.attendancePercentage.value}%',
-                        'Attendance',
-                        Icons.calendar_today,
-                        kSuccessGreen),
-                    _buildStatCard(
-                        controller.complaintsRaised.value.toString(),
-                        'Complaints Raised',
-                        Icons.report_problem,
-                        kWarningOrange),
-                    _buildStatCard(
-                        '${controller.averageRating.value}/5',
-                        'Average Rating',
-                        Icons.star,
-                        Colors.amber),
-                  ],
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                            controller.tasksCompleted.value.toString(),
+                            'Tasks Completed',
+                            Icons.task_alt,
+                            Colors.blue),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                            '${controller.attendancePercentage.value}%',
+                            'Attendance',
+                            Icons.calendar_today,
+                            kSuccessGreen),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                            controller.complaintsRaised.value.toString(),
+                            'Complaints Raised',
+                            Icons.report_problem,
+                            kWarningOrange),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                            '${controller.averageRating.value}/5',
+                            'Average Rating',
+                            Icons.star,
+                            Colors.amber),
+                      ),
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 20),

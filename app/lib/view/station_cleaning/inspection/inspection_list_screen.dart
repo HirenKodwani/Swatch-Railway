@@ -47,17 +47,21 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
   }
 
   Color _statusColor(String status) {
-    switch (InspectionStatus.values.firstWhere((e) => e.name == status, orElse: () => InspectionStatus.scheduled)) {
-      case InspectionStatus.scheduled:
+    switch (status) {
+      case 'SCHEDULED':
         return Colors.grey;
-      case InspectionStatus.inProgress:
+      case 'IN_PROGRESS':
         return Colors.blue;
-      case InspectionStatus.completed:
+      case 'COMPLETED':
         return Colors.teal;
-      case InspectionStatus.approved:
+      case 'APPROVED':
         return kSuccessGreen;
-      case InspectionStatus.rejected:
+      case 'REJECTED':
         return kErrorRed;
+      case 'RESUBMITTED':
+        return kWarningOrange;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -130,10 +134,6 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
                           itemCount: _inspections.length,
                           itemBuilder: (context, idx) {
                             final insp = _inspections[idx];
-                            final statusEnum = InspectionStatus.values.firstWhere(
-                              (e) => e.name == insp.status,
-                              orElse: () => InspectionStatus.scheduled,
-                            );
                             return Card(
                               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               child: ListTile(
@@ -144,20 +144,45 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
                                     Text('Inspector: ${insp.inspectorName}'),
                                     Text('Date: ${insp.scheduledDate}'),
                                     Text('Deficiencies: ${insp.deficiencies.length}', style: const TextStyle(color: kErrorRed, fontSize: 12)),
+                                    if (insp.deficiencies.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      ...insp.deficiencies.where((d) => d.closureStatus != DeficiencyStatus.railwayVerified).map((d) => Text(
+                                        '${d.area}: ${d.description.length > 20 ? '${d.description.substring(0, 20)}...' : d.description}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: d.closureStatus == DeficiencyStatus.closed ? Colors.blue : kWarningOrange,
+                                        ),
+                                      )),
+                                    ],
                                   ],
                                 ),
-                                isThreeLine: true,
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: _statusColor(insp.status).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: _statusColor(insp.status)),
-                                  ),
-                                  child: Text(
-                                    statusEnum.name.toUpperCase(),
-                                    style: TextStyle(color: _statusColor(insp.status), fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
+                                isThreeLine: insp.deficiencies.isEmpty,
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _statusColor(insp.status).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: _statusColor(insp.status)),
+                                      ),
+                                      child: Text(
+                                        insp.status,
+                                        style: TextStyle(color: _statusColor(insp.status), fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    if (insp.deficiencies.any((d) => d.closureStatus == DeficiencyStatus.closed))
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text('Verify needed', style: TextStyle(fontSize: 9, color: Colors.blue[700])),
+                                      ),
+                                    if (insp.status == 'REJECTED')
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text('Resubmit available', style: TextStyle(fontSize: 9, color: kWarningOrange)),
+                                      ),
+                                  ],
                                 ),
                                 onTap: () {
                                   Navigator.push(

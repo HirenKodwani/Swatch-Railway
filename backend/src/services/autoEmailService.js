@@ -22,6 +22,7 @@ const MONTHLY_RECIPIENT_MAP = {
   monthly_feedback: ['DIVISION_ADMIN'],
   monthly_billing: ['DIVISION_ADMIN', 'COMMERCIAL_USER', 'BILLING_USER'],
   monthly_penalty: ['DIVISION_ADMIN', 'COMMERCIAL_USER'],
+  monthly_performance: ['DIVISION_ADMIN', 'SR_DCM'],
 };
 
 const REPORT_TYPE_TITLES = {
@@ -39,6 +40,7 @@ const REPORT_TYPE_TITLES = {
   monthly_feedback: 'Monthly Passenger Feedback Summary',
   monthly_billing: 'Monthly Billing Support Pack',
   monthly_penalty: 'Monthly Penalty / Deduction Report',
+  monthly_performance: 'Monthly Performance Summary',
 };
 
 class AutoEmailService {
@@ -188,6 +190,7 @@ class AutoEmailService {
       monthly_scorecard: 'generateMonthlyScorecardReport', monthly_complaint: 'generateMonthlyComplaintSummary',
       monthly_feedback: 'generateMonthlyFeedbackSummary', monthly_billing: 'generateMonthlyBillingReport',
       monthly_penalty: 'generateMonthlyPenaltyReport',
+      monthly_performance: 'generateMonthlyPerformanceReport',
     };
     let reportData;
     try {

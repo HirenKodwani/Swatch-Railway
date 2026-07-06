@@ -5,7 +5,8 @@ import 'package:crm_train/utills/app_colors.dart';
 
 class MaterialFormScreen extends StatefulWidget {
   final MaterialItem? existing;
-  const MaterialFormScreen({super.key, this.existing});
+  final String? stationId;
+  const MaterialFormScreen({super.key, this.existing, this.stationId});
 
   @override
   State<MaterialFormScreen> createState() => _MaterialFormScreenState();
@@ -20,6 +21,8 @@ class _MaterialFormScreenState extends State<MaterialFormScreen> {
   late TextEditingController _openCtrl;
   late TextEditingController _reorderCtrl;
   late TextEditingController _priceCtrl;
+  late TextEditingController _monthlyReqCtrl;
+  late TextEditingController _remarksCtrl;
 
   String _type = 'consumable';
 
@@ -36,6 +39,8 @@ class _MaterialFormScreenState extends State<MaterialFormScreen> {
     _openCtrl = TextEditingController(text: e?.openingBalance.toString() ?? '');
     _reorderCtrl = TextEditingController(text: e?.reorderLevel.toString() ?? '');
     _priceCtrl = TextEditingController(text: e?.unitPrice.toString() ?? '');
+    _monthlyReqCtrl = TextEditingController(text: e?.monthlyRequirement.toString() ?? '');
+    _remarksCtrl = TextEditingController(text: e?.remarks ?? '');
     if (e != null) _type = e.materialType;
   }
 
@@ -46,6 +51,8 @@ class _MaterialFormScreenState extends State<MaterialFormScreen> {
     _openCtrl.dispose();
     _reorderCtrl.dispose();
     _priceCtrl.dispose();
+    _monthlyReqCtrl.dispose();
+    _remarksCtrl.dispose();
     super.dispose();
   }
 
@@ -60,6 +67,9 @@ class _MaterialFormScreenState extends State<MaterialFormScreen> {
         'openingBalance': double.tryParse(_openCtrl.text) ?? 0,
         'reorderLevel': double.tryParse(_reorderCtrl.text) ?? 0,
         'unitPrice': double.tryParse(_priceCtrl.text) ?? 0,
+        'monthlyRequirement': double.tryParse(_monthlyReqCtrl.text) ?? 0,
+        'remarks': _remarksCtrl.text.trim(),
+        if (widget.stationId != null) 'stationId': widget.stationId,
       };
       if (_isEdit) {
         await MaterialRepository.update(widget.existing!.uid!, body);
@@ -181,6 +191,18 @@ class _MaterialFormScreenState extends State<MaterialFormScreen> {
                         controller: _priceCtrl,
                         decoration: const InputDecoration(labelText: 'Unit Price (₹)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.currency_rupee)),
                         keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _monthlyReqCtrl,
+                        decoration: const InputDecoration(labelText: 'Monthly Requirement', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_month)),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _remarksCtrl,
+                        decoration: const InputDecoration(labelText: 'Remarks', border: OutlineInputBorder(), prefixIcon: Icon(Icons.notes)),
+                        maxLines: 2,
                       ),
                     ],
                   ),

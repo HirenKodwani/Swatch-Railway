@@ -1,4 +1,5 @@
 import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/model/station_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/services.dart';
@@ -32,6 +33,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
   TextEditingController repMobileController = TextEditingController();
   TextEditingController repEmailController = TextEditingController();
   TextEditingController repIdNumberController = TextEditingController();
+  TextEditingController contractValueController = TextEditingController();
 
   String? selectedEntity;
   String? selectedZone;
@@ -40,6 +42,13 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
   String? selectedStatus;
   String? selectedIDType;
   List<String> selectedWorkCategories = [];
+  List<String> selectedStationIds = [];
+  List<String> selectedStationNames = [];
+  List<Station> _availableStations = [];
+  bool _stationsLoading = false;
+  String? selectedBillingCycle;
+  double contractValue = 0;
+  bool scoringApplicability = true;
 
   DateTime? startDate;
   DateTime? endDate;
@@ -64,7 +73,16 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           selectedDepot = user?.depot;
         });
       }
+      _loadStations();
     });
+  }
+
+  Future<void> _loadStations() async {
+    setState(() => _stationsLoading = true);
+    try {
+      _availableStations = await ApiService.getStations(active: true);
+    } catch (_) {}
+    if (mounted) setState(() => _stationsLoading = false);
   }
 
   void _loadContractData() {
@@ -199,6 +217,69 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                         _buildDateField("End Date *", endDate, (date) {
                           if (!isEditMode) setState(() => endDate = date);
                         }, enabled: !isEditMode),
+                        const SizedBox(height: 12),
+                        const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        _stationsLoading
+                            ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(stripWidth: 2)))
+                            : AbsorbPointer(
+                                absorbing: isEditMode,
+                                child: Opacity(
+                                  opacity: isEditMode ? 0.5 : 1.0,
+                                  child: _buildMultiSelectDropdown(
+                                    "Stations",
+                                    "Select stations",
+                                    _availableStations.map((s) => '${s.stationCode} - ${s.stationName}').toList(),
+                                    selectedStationNames,
+                                    (values) {
+                                      setState(() {
+                                        selectedStationNames = values;
+                                        selectedStationIds = values.map((v) {
+                                          final match = _availableStations.firstWhere(
+                                            (s) => '${s.stationCode} - ${s.stationName}' == v,
+                                            orElse: () => _availableStations.first,
+                                          );
+                                          return match.uid ?? match.stationCode;
+                                        }).toList();
+                                      });
+                                    },
+                                    enabled: !isEditMode,
+                                  ),
+                                ),
+                              ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildTextField(
+                                "Contract Value (₹)",
+                                "Enter value",
+                                contractValueController,
+                                enabled: !isEditMode,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildDropdown(
+                                'Billing Cycle',
+                                'Select cycle',
+                                ['Monthly', 'Quarterly', 'Half Yearly', 'Yearly'],
+                                selectedBillingCycle,
+                                (v) => setState(() => selectedBillingCycle = v),
+                                enabled: !isEditMode,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          title: const Text('Enable Scoring'),
+                          subtitle: Text(scoringApplicability ? 'Scorecards will be generated' : 'Scoring disabled'),
+                          value: scoringApplicability,
+                          onChanged: !isEditMode ? (v) => setState(() => scoringApplicability = v) : null,
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: Colors.blue,
+                        ),
                         _buildMultiSelectDropdown(
                           "Work Categories *",
                           "Select Categories",
@@ -763,6 +844,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         _showErrorSnackBar("Please select a zone");
         return;
       }
+      if (selectedStationIds.isEmpty) {
+        _showErrorSnackBar("Please select at least one station");
+        return;
+      }
       if (startDate == null || endDate == null) {
         _showErrorSnackBar("Please select start and end dates");
         return;
@@ -782,6 +867,9 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         response = await ApiService.updateContract(
           contractId: widget.contract!.uid,
           status: selectedStatus!,
+          contractValue: double.tryParse(contractValueController.text),
+          billingCycle: selectedBillingCycle,
+          scoringApplicability: scoringApplicability,
           repName: repNameController.text,
           repDesignation: repDesignationController.text,
           repMobile: repMobileController.text,
@@ -801,8 +889,12 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           zone: selectedZone!,
           division: selectedDivision,
           depot: selectedDepot,
+          stationIds: selectedStationIds.isNotEmpty ? selectedStationIds : null,
           startDate: formattedStartDate,
           endDate: formattedEndDate,
+          contractValue: double.tryParse(contractValueController.text) ?? 0,
+          billingCycle: selectedBillingCycle,
+          scoringApplicability: scoringApplicability,
           workCategories: workCategoriesString,
           remarks: remarksController.text.isEmpty ? null : remarksController.text,
           status: selectedStatus ?? 'Active',

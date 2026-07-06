@@ -16,6 +16,7 @@ router.delete('/api/machines/:uid', verifyToken, requirePermission(PERMISSIONS.M
 router.post('/api/machines/deploy', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.deploy);
 router.post('/api/machines/deployments/:uid/return', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.returnMachine);
 router.get('/api/machines/deployments', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.listDeployments);
+router.get('/api/machines/downtime', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.listDowntime);
 router.post('/api/machines/downtime', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.logDowntime);
 router.post('/api/machines/downtime/:uid/resolve', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.resolveDowntime);
 router.get('/api/machines/downtime/report', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.downtimeReport);

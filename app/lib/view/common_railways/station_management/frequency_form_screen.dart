@@ -3,6 +3,12 @@ import 'package:crm_train/model/frequency_model.dart';
 import 'package:crm_train/repositories/frequency_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
+const _frequencyTypes = [
+  'once_per_day', 'twice_per_day', 'three_times_per_day',
+  'every_six_hours', 'hourly', 'weekly', 'fortnightly',
+  'monthly', 'as_and_when_required',
+];
+
 class FrequencyFormScreen extends StatefulWidget {
   final Frequency? existing;
   const FrequencyFormScreen({super.key, this.existing});
@@ -19,6 +25,7 @@ class _FrequencyFormScreenState extends State<FrequencyFormScreen> {
   late TextEditingController _descCtrl;
   late TextEditingController _timesCtrl;
   late TextEditingController _daysCtrl;
+  String _frequencyType = 'once_per_day';
 
   bool get _isEdit => widget.existing != null;
 
@@ -30,6 +37,7 @@ class _FrequencyFormScreenState extends State<FrequencyFormScreen> {
     _descCtrl = TextEditingController(text: e?.description ?? '');
     _timesCtrl = TextEditingController(text: e?.timesPerDay.toString() ?? '');
     _daysCtrl = TextEditingController(text: e?.daysBetween.toString() ?? '');
+    if (e != null) _frequencyType = e.frequencyType;
   }
 
   @override
@@ -47,6 +55,7 @@ class _FrequencyFormScreenState extends State<FrequencyFormScreen> {
     try {
       final body = {
         'frequencyName': _nameCtrl.text.trim(),
+        'frequencyType': _frequencyType,
         'timesPerDay': int.tryParse(_timesCtrl.text) ?? 0,
         'daysBetween': int.tryParse(_daysCtrl.text) ?? 0,
         'description': _descCtrl.text.trim(),
@@ -106,10 +115,16 @@ class _FrequencyFormScreenState extends State<FrequencyFormScreen> {
                         const Text('Frequency Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                       ]),
                       const Divider(height: 20),
+                      DropdownButtonFormField<String>(
+                        value: _frequencyType,
+                        decoration: const InputDecoration(labelText: 'Frequency Type *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.schedule)),
+                        items: _frequencyTypes.map((f) => DropdownMenuItem(value: f, child: Text(f.replaceAll('_', ' ')))).toList(),
+                        onChanged: (v) { if (v != null) setState(() => _frequencyType = v); },
+                      ),
+                      const SizedBox(height: 14),
                       TextFormField(
                         controller: _nameCtrl,
-                        decoration: const InputDecoration(labelText: 'Frequency Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.label)),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        decoration: const InputDecoration(labelText: 'Label / Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.label)),
                       ),
                       const SizedBox(height: 14),
                       Row(

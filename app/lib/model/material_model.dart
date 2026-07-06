@@ -8,6 +8,10 @@ class MaterialItem {
   final double currentStock;
   final double reorderLevel;
   final double unitPrice;
+  final double monthlyRequirement;
+  final double issuedQuantity;
+  final double usedQuantity;
+  final String remarks;
   final String status;
 
   MaterialItem({
@@ -20,6 +24,10 @@ class MaterialItem {
     this.currentStock = 0,
     this.reorderLevel = 0,
     this.unitPrice = 0,
+    this.monthlyRequirement = 0,
+    this.issuedQuantity = 0,
+    this.usedQuantity = 0,
+    this.remarks = '',
     this.status = 'active',
   });
 
@@ -33,6 +41,10 @@ class MaterialItem {
     currentStock: (json['currentStock'] ?? 0).toDouble(),
     reorderLevel: (json['reorderLevel'] ?? 0).toDouble(),
     unitPrice: (json['unitPrice'] ?? 0).toDouble(),
+    monthlyRequirement: (json['monthlyRequirement'] ?? 0).toDouble(),
+    issuedQuantity: (json['issuedQuantity'] ?? 0).toDouble(),
+    usedQuantity: (json['usedQuantity'] ?? 0).toDouble(),
+    remarks: json['remarks'] ?? '',
     status: json['status'] ?? 'active',
   );
 
@@ -46,6 +58,10 @@ class MaterialItem {
     'currentStock': currentStock,
     'reorderLevel': reorderLevel,
     'unitPrice': unitPrice,
+    'monthlyRequirement': monthlyRequirement,
+    'issuedQuantity': issuedQuantity,
+    'usedQuantity': usedQuantity,
+    'remarks': remarks,
     'status': status,
   };
 }
