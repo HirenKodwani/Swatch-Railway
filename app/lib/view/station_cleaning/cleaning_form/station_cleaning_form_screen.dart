@@ -287,7 +287,7 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
       'stationName': widget.stationName,
       'areaId': _areas.firstWhere((a) => a.name == _selectedArea, orElse: () => StationArea(stationId: '', name: '')).uid ?? '',
       'areaName': _selectedArea ?? '',
-      'zoneId': _zones.firstWhere((z) => z.name == _selectedZone, orElse: () => StationZone(name: '', stationId: '')).uid ?? '',
+      'zoneId': _zones.firstWhere((z) => z.name == _selectedZone, orElse: () => StationZone(stationId: '', areaId: '', name: '')).uid ?? '',
       'zoneName': _selectedZone ?? '',
       'cleaningDate': dateStr,
       'shift': _selectedShift,
