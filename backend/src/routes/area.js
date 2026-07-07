@@ -16,6 +16,7 @@ router.get('/api/areas/by-station/:stationId', verifyToken, requirePermission(PE
 router.get('/api/areas/by-platform/:platformId', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), areaController.getByPlatform);
 router.get('/api/areas/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), areaController.getById);
 router.put('/api/areas/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), areaController.update);
+router.put('/api/areas/:uid/configure', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), areaController.update);
 router.delete('/api/areas/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), areaController.remove);
 
 export default router;

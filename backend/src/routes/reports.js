@@ -19,7 +19,9 @@ router.get('/api/reports/premises-data', verifyToken, reportController.getPremis
 router.get('/api/reports/cts-data', verifyToken, reportController.getCtsData);
 router.get('/api/reports/cts-stats', verifyToken, reportController.getCtsStats);
 router.get('/api/reports/coach-stats', verifyToken, reportController.getCoachStats);
+router.get('/api/reports/coach-statistics', verifyToken, reportController.getCoachStats);
 router.get('/api/reports/premises-stats', verifyToken, reportController.getPremisesStats);
+router.get('/api/reports/premises-statistics', verifyToken, reportController.getPremisesStats);
 router.get('/api/reports/train-performance', verifyToken, reportController.getTrainPerformance);
 router.get('/api/billing/invoice-pdf/:uid', verifyToken, reportController.getInvoicePdf);
 

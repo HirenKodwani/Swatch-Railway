@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { verifyToken } from '../middleware/auth.js';
 import { requirePermission, requireEntityAccess, requireStationAccess, requirePlatformAccess } from '../middleware/authorization.js';
 import { PERMISSIONS } from '../permissions/roles.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { stationCleaningService } from '../services/stationCleaningService.js';
 import * as stationCleaning from '../controllers/stationCleaningController.js';
 
 const router = Router();
@@ -67,6 +69,10 @@ router.get('/api/station-dashboard', verifyToken, requirePermission(PERMISSIONS.
 router.post('/api/station-pest-control/record', verifyToken, requirePermission(PERMISSIONS.MANAGE_PEST_CONTROL), requireEntityAccess, stationCleaning.recordPestControl);
 router.get('/api/station-pest-control/list/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_PEST_CONTROL), stationCleaning.listPestControl);
 router.get('/api/station-pest-control/all', verifyToken, requirePermission(PERMISSIONS.VIEW_PEST_CONTROL), stationCleaning.listAllPestControl);
+router.get('/api/station-pest-control/records', verifyToken, requirePermission(PERMISSIONS.VIEW_PEST_CONTROL), asyncHandler(async (req, res) => {
+  const records = await stationCleaningService.listAllPestControl(req.query);
+  res.json({ data: records || [] });
+}));
 router.put('/api/station-pest-control/:uid/review', verifyToken, requirePermission(PERMISSIONS.MANAGE_PEST_CONTROL), stationCleaning.reviewPestControl);
 router.get('/api/station-pest-control/report', verifyToken, requirePermission(PERMISSIONS.VIEW_PEST_CONTROL), stationCleaning.pestControlReport);
 
