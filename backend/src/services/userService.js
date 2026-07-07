@@ -671,18 +671,21 @@ class UserService {
     const userRole = (role || '').toLowerCase();
     const isMaster = userRole.includes('master');
 
-    if (!zone) {
-      throw new ValidationError("Your user profile is missing Zone.");
-    }
-
     let query = db.collection('users')
       .where('role', '==', 'Railway Supervisor')
       .where('status', '==', 'APPROVED');
 
     if (isMaster) {
-      query = query.where('zone', '==', zone);
-      console.log(`(GetSupervisors) Master access: Fetching entire Zone ${zone}`);
+      if (zone) {
+        query = query.where('zone', '==', zone);
+        console.log(`(GetSupervisors) Master access: Fetching entire Zone ${zone}`);
+      } else {
+        console.log('(GetSupervisors) Master access: No zone set, fetching all supervisors');
+      }
     } else {
+      if (!zone) {
+        throw new ValidationError("Your user profile is missing Zone.");
+      }
       if (!division) {
         throw new ValidationError("Your user profile is missing Division.");
       }
