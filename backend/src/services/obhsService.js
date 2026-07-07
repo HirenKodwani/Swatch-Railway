@@ -318,9 +318,10 @@ class ObhsService {
       .where('runInstanceId', '==', runInstanceId);
     if (workerId) query = query.where('workerId', '==', workerId);
     if (status) query = query.where('status', '==', status);
-    const snapshot = await query.orderBy('scheduledTime').limit(200).get();
+    const snapshot = await query.limit(200).get();
     const tasks = [];
     snapshot.forEach(doc => tasks.push(doc.data()));
+    tasks.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
     return { success: true, count: tasks.length, tasks };
   }
 
@@ -361,10 +362,10 @@ class ObhsService {
     if (!runInstanceId) throw new ValidationError('runInstanceId query parameter is required.');
     const snapshot = await db.collection('water_checks')
       .where('runInstanceId', '==', runInstanceId)
-      .orderBy('checkTime')
       .limit(200).get();
     const checks = [];
     snapshot.forEach(doc => checks.push(doc.data()));
+    checks.sort((a, b) => (a.checkTime || '').localeCompare(b.checkTime || ''));
     return { success: true, count: checks.length, checks };
   }
 
@@ -408,10 +409,10 @@ class ObhsService {
     if (!runInstanceId) throw new ValidationError('runInstanceId query parameter is required.');
     const snapshot = await db.collection('safety_checks')
       .where('runInstanceId', '==', runInstanceId)
-      .orderBy('scheduledTime')
       .limit(200).get();
     const checks = [];
     snapshot.forEach(doc => checks.push(doc.data()));
+    checks.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
     return { success: true, count: checks.length, checks };
   }
 
@@ -460,10 +461,10 @@ class ObhsService {
     if (!runInstanceId) throw new ValidationError('runInstanceId query parameter is required.');
     const snapshot = await db.collection('petty_repairs')
       .where('runInstanceId', '==', runInstanceId)
-      .orderBy('inspectionTime')
       .limit(200).get();
     const repairs = [];
     snapshot.forEach(doc => repairs.push(doc.data()));
+    repairs.sort((a, b) => (a.inspectionTime || '').localeCompare(b.inspectionTime || ''));
     return { success: true, count: repairs.length, repairs };
   }
 
@@ -774,23 +775,27 @@ class ObhsService {
   // ─── WORKER ACTIVE RUN ───────────────────────────────────────────────────
 
   async getWorkerActiveRun(uid) {
-    const allRuns = await db.collection('RunInstance')
+    const snapshot = await db.collection('RunInstance')
       .where('status', 'in', ['ALLOCATED', 'ACTIVE', 'Active', 'active', 'READY', 'ready', 'Running', 'running'])
-      .orderBy('createdAt', 'desc')
       .limit(200).get();
 
+    const runs = [];
+    snapshot.forEach(doc => runs.push({ id: doc.id, ...doc.data() }));
+    runs.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
+
     let runDoc = null;
-    allRuns.forEach(doc => {
-      const coaches = doc.data().coaches || [];
+    for (const r of runs) {
+      const coaches = r.coaches || [];
       if (coaches.some(c => c.workerId === uid)) {
-        runDoc = doc;
+        runDoc = r;
+        break;
       }
-    });
+    }
 
     if (!runDoc) {
       return { success: true, hasAssignment: false, run: null };
     }
-    const runData = { id: runDoc.id, ...runDoc.data() };
+    const runData = runDoc;
     const myCoaches = (runData.coaches || []).filter(c => c.workerId === uid);
 
     return {

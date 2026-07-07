@@ -6,8 +6,15 @@ import config from '../config/index.js';
 import logger from '../logger/index.js';
 
 export class StorageService {
-  constructor(bucket) {
-    this.bucket = bucket;
+  constructor() {
+    this._bucket = null;
+  }
+
+  get bucket() {
+    if (!this._bucket) {
+      this._bucket = db.getBucket();
+    }
+    return this._bucket;
   }
 
   async uploadFile(buffer, destination, options = {}) {

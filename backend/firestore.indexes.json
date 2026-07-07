@@ -1,0 +1,81 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "RunInstance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "platforms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "platformNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "water_checks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "runInstanceId", "order": "ASCENDING" },
+        { "fieldPath": "checkTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "garbage_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "runInstanceId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "petty_repairs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "runInstanceId", "order": "ASCENDING" },
+        { "fieldPath": "inspectionTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "safety_checks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "runInstanceId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "station_attendance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "shift", "order": "ASCENDING" },
+        { "fieldPath": "stationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "station_attendance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stationId", "order": "ASCENDING" },
+        { "fieldPath": "workerId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "StationCleaningRuns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "division", "order": "ASCENDING" },
+        { "fieldPath": "stationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}

@@ -275,20 +275,20 @@ class RunInstanceService {
   async getRunInstancesByDivision(division, status) {
     let query = db.collection('RunInstance').where('division', '==', division);
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.orderBy('createdAt', 'desc').limit(200).get();
-    if (snapshot.empty) { return { success: true, count: 0, data: [] }; }
+    const snapshot = await query.limit(200).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
+    instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
     return { success: true, count: instances.length, data: instances };
   }
 
   async getRunInstancesByZone(zone, status) {
     let query = db.collection('RunInstance').where('zone', '==', zone);
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.orderBy('createdAt', 'desc').limit(200).get();
-    if (snapshot.empty) { return { success: true, count: 0, data: [] }; }
+    const snapshot = await query.limit(200).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
+    instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
     return { success: true, count: instances.length, data: instances };
   }
 
@@ -307,10 +307,10 @@ class RunInstanceService {
     if (!date) {
       throw new ValidationError('date is required (YYYY-MM-DD).');
     }
-    const snapshot = await db.collection('RunInstance').where('departureDate', '==', date).orderBy('createdAt', 'desc').limit(200).get();
-    if (snapshot.empty) { return { success: true, count: 0, data: [] }; }
+    const snapshot = await db.collection('RunInstance').where('departureDate', '==', date).limit(200).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
+    instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
     return { success: true, count: instances.length, data: instances };
   }
 

@@ -5,7 +5,7 @@ import multer from 'multer';
 import * as evidence from '../../evidence_manager.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
 
-const storageService = new StorageService(db.bucket);
+const storageService = new StorageService();
 
 class MediaService {
   getMulterUpload() {
