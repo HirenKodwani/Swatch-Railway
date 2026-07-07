@@ -10,6 +10,7 @@ const router = express.Router();
 
 router.post('/api/machines', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), validate(createMachineSchema), machineController.create);
 router.get('/api/machines', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.list);
+router.get('/api/machines/station/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.listByStation);
 router.get('/api/machines/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.getById);
 router.put('/api/machines/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.update);
 router.delete('/api/machines/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.remove);

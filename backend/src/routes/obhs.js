@@ -16,6 +16,8 @@ router.post('/api/obhs/attendance', verifyToken, obhsController.markAttendance);
 router.get('/api/obhs/attendance/status', verifyToken, obhsController.getAttendanceStatus);
 router.get('/api/obhs/attendance/list', verifyToken, obhsController.listAttendance);
 router.post('/api/obhs/attendance/report-issue', verifyToken, obhsController.reportAttendanceIssue);
+router.get('/api/obhs/attendance/exceptions', verifyToken, obhsController.getAttendanceExceptions);
+router.post('/api/obhs/attendance/exceptions/action', verifyToken, obhsController.takeAttendanceExceptionAction);
 router.post('/api/obhs/attendance/verify-face', verifyToken, async (req, res) => {
   const { image1Url, image2Url } = req.body;
   if (!image1Url || !image2Url) return res.status(400).json({ error: 'Both image1Url and image2Url are required.' });

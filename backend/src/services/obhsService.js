@@ -170,6 +170,34 @@ class ObhsService {
     };
   }
 
+  async getAttendanceExceptions(filters = {}) {
+    const { status } = filters;
+    let query = db.collection('attendance_exceptions');
+    if (status) query = query.where('status', '==', status);
+    const snapshot = await query.limit(200).get();
+    const exceptions = [];
+    snapshot.forEach(doc => exceptions.push(doc.data()));
+    exceptions.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
+    return { success: true, count: exceptions.length, exceptions };
+  }
+
+  async takeActionOnException(body) {
+    const { exceptionId, action, adminRemark } = body;
+    if (!exceptionId || !action) throw new ValidationError('exceptionId and action are required.');
+    const validActions = ['APPROVED', 'REJECTED'];
+    if (!validActions.includes(action)) throw new ValidationError('Action must be APPROVED or REJECTED.');
+    const ref = db.collection('attendance_exceptions').doc(exceptionId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Attendance exception not found.');
+    await ref.update({
+      status: action,
+      adminRemark: adminRemark || '',
+      actionTakenAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { success: true, message: `Exception ${action} successfully` };
+  }
+
   async reportAttendanceIssue(userData, body) {
     const { runInstanceId, issueType, remark, photoUrl, latitude, longitude, attendanceType } = body;
     if (!runInstanceId || !issueType) {

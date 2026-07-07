@@ -62,6 +62,16 @@ export const reportAttendanceIssue = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+export const getAttendanceExceptions = asyncHandler(async (req, res) => {
+  const result = await obhsService.getAttendanceExceptions(req.query);
+  res.status(200).json(result);
+});
+
+export const takeAttendanceExceptionAction = asyncHandler(async (req, res) => {
+  const result = await obhsService.takeActionOnException(req.body);
+  res.status(200).json(result);
+});
+
 // ─── GARBAGE TASKS ───────────────────────────────────────────────────────
 
 export const listGarbageTasks = asyncHandler(async (req, res) => {

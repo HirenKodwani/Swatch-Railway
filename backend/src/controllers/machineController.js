@@ -16,3 +16,7 @@ export const downtimeReport = asyncHandler(async (req, res) => res.json(await ma
 export const scheduleMaintenance = asyncHandler(async (req, res) => res.status(201).json(await machineService.scheduleMaintenance(req.user, req.body)));
 export const completeMaintenance = asyncHandler(async (req, res) => res.json(await machineService.completeMaintenance(req.params.uid, req.user, req.body)));
 export const listMaintenance = asyncHandler(async (req, res) => res.json(await machineService.listMaintenance(req.query)));
+export const listByStation = asyncHandler(async (req, res) => {
+  const result = await machineService.getMachines({ stationId: req.params.stationId });
+  res.json({ data: result.machines });
+});
