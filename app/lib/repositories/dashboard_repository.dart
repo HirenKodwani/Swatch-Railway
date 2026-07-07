@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../helper/api_error_handler.dart';
-import '../model/supervisor_dashboard_model.dart';
+import '../model/dashboard_model.dart';
 import '../services/api_services.dart';
 
 class DashboardRepository {

@@ -8,8 +8,8 @@ void main() {
   final IntegrationTestWidgetsFlutterBinding binding =
       IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   
-  // Set this to true to allow Espresso to wait for Flutter to be idle.
-  binding.enableEspressoIdlingResources = true;
+  // Note: enableEspressoIdlingResources was removed in newer integration_test
+  // binding.enableEspressoIdlingResources = true;
 
   testWidgets('Full functional smoke test', (WidgetTester tester) async {
     // Launch the app
