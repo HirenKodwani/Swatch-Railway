@@ -127,12 +127,12 @@ export const deleteStationRun = asyncHandler(async (req, res) => {
 });
 
 export const getWorkerStationRuns = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.getWorkerStationRuns(req.params.workerId);
+  const result = await stationCleaningService.getWorkerStationRuns(req.params.workerId, req.user);
   res.status(200).json(result);
 });
 
 export const getSupervisorStationRuns = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.getSupervisorStationRuns(req.params.supervisorId);
+  const result = await stationCleaningService.getSupervisorStationRuns(req.params.supervisorId, req.user);
   res.status(200).json(result);
 });
 

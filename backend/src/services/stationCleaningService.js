@@ -256,6 +256,15 @@ class StationCleaningService {
     if (!data.stationId || !data.stationName || !data.date || !data.shift) {
       throw new ValidationError('Missing required fields for station run');
     }
+    if (data.workerId) {
+      const existing = await db.collection('StationCleaningRuns')
+        .where('workerId', '==', data.workerId)
+        .where('date', '==', data.date)
+        .where('shift', '==', data.shift)
+        .where('status', 'in', ['Pending', 'InProgress'])
+        .get();
+      if (!existing.empty) throw new ValidationError('Worker already assigned to another run on this date/shift');
+    }
     const runData = {
       stationId: data.stationId,
       stationName: data.stationName,
@@ -352,11 +361,16 @@ class StationCleaningService {
     return { success: true, data: myRuns };
   }
 
-  async getWorkerStationRuns(workerId) {
+  async getWorkerStationRuns(workerId, caller) {
     if (!workerId) throw new ValidationError('workerId is required');
+    let q = db.collection('StationCleaningRuns');
+    if (caller && caller.userType === 'contractor' && caller.entityId) {
+      q = q.where('entityId', '==', caller.entityId);
+    }
+    if (caller) q = this._scopeByDivision(q, caller);
     const [janitorSnap, workerSnap] = await Promise.all([
-      db.collection('StationCleaningRuns').where('janitorId', '==', workerId).orderBy('createdAt', 'desc').limit(100).get(),
-      db.collection('StationCleaningRuns').where('workerId', '==', workerId).orderBy('createdAt', 'desc').limit(100).get(),
+      q.where('janitorId', '==', workerId).orderBy('createdAt', 'desc').limit(100).get(),
+      q.where('workerId', '==', workerId).orderBy('createdAt', 'desc').limit(100).get(),
     ]);
     const seen = new Set();
     const runs = [];
@@ -365,12 +379,14 @@ class StationCleaningService {
     return { success: true, count: runs.length, data: runs };
   }
 
-  async getSupervisorStationRuns(supervisorId) {
+  async getSupervisorStationRuns(supervisorId, caller) {
     if (!supervisorId) throw new ValidationError('supervisorId is required');
-    const snapshot = await db.collection('StationCleaningRuns')
-      .where('supervisorId', '==', supervisorId)
-      .orderBy('createdAt', 'desc')
-      .limit(200).get();
+    let q = db.collection('StationCleaningRuns').where('supervisorId', '==', supervisorId);
+    if (caller && caller.userType === 'contractor' && caller.entityId) {
+      q = q.where('entityId', '==', caller.entityId);
+    }
+    if (caller) q = this._scopeByDivision(q, caller);
+    const snapshot = await q.orderBy('createdAt', 'desc').limit(200).get();
     const runs = [];
     snapshot.forEach(doc => runs.push({ id: doc.id, ...doc.data() }));
     return { success: true, count: runs.length, data: runs };
@@ -472,7 +488,7 @@ class StationCleaningService {
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Form not found');
     const form = doc.data();
-    if (form.status !== 'draft') throw new ValidationError('Only draft forms can be submitted');
+    if (!['draft', 'rejected'].includes(form.status)) throw new ValidationError('Only draft or rejected forms can be submitted');
     const updates = {
       status: 'submitted',
       submittedAt: new Date().toISOString(),
@@ -595,7 +611,9 @@ class StationCleaningService {
       formQuery = formQuery.where('entityId', '==', entityId);
     }
 
-    const [stationSnap, formSnap] = await Promise.all([stationQuery.limit(200).get(), formQuery.limit(200).get()]);
+    const results = await Promise.allSettled([stationQuery.limit(200).get(), formQuery.limit(200).get()]);
+    const stationSnap = results[0].status === 'fulfilled' ? results[0].value : { empty: true, docs: [], size: 0 };
+    const formSnap = results[1].status === 'fulfilled' ? results[1].value : { empty: true, docs: [], size: 0 };
 
     let totalScore = 0, scoredCount = 0;
     let draftForms = 0, submittedForms = 0, approvedForms = 0, scoredForms = 0, lockedForms = 0, rejectedForms = 0;

@@ -148,6 +148,31 @@
       { "fieldPath": "janitorId", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" }
     ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workerId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "supervisorId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "division", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "entityId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "shift", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
     { "collectionGroup": "execution_plans", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "contractId", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" }
