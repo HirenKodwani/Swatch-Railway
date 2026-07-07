@@ -23,6 +23,8 @@ import 'feedback/feedback_qr_screen.dart';
 import 'cleaning_form/station_cleaning_form_list_screen.dart';
 import 'schedule/station_schedule_screen.dart';
 import 'area_config/area_config_screen.dart';
+import 'zone/station_zones_screen.dart';
+import 'contractor/contractor_mapping_screen.dart';
 import 'worker_tasks/worker_task_view_screen.dart';
 import 'supervisor_review/supervisor_review_screen.dart';
 import 'hierarchical_dashboard/hierarchical_dashboard_screen.dart';
@@ -62,22 +64,22 @@ class StationCleaningHubScreen extends StatelessWidget {
   Set<int> _visibleCards(String role) {
     final r = role.toUpperCase();
     if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
     }
     if (r == 'RAILWAY_SUPERVISOR') {
-      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20};
+      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 24, 25};
     }
     if (r == 'CONTRACTOR_ADMIN') {
-      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20};
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25};
     }
     if (r == 'STATION_MASTER') {
-      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 21, 22};
+      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 21, 22, 24, 25};
     }
     if (r == 'PLATFORM_MASTER') {
-      return {0, 1, 2, 19, 20, 21, 22};
+      return {0, 1, 2, 19, 20, 21, 22, 24, 25};
     }
     if (r == 'CONTRACTOR_SUPERVISOR') {
-      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20};
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20, 24, 25};
     }
     if (['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r)) {
       return {0, 1, 2, 20, 22};
@@ -115,6 +117,8 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.rate_review, 'Super.\nReview', Colors.purple, () => _openSupervisorReview(context)), // 21
       _moduleCard(context, Icons.dashboard_customize, 'Hier.\nDashboard', Colors.indigo.shade400, () => _openHierDashboard(context)), // 22
       _moduleCard(context, Icons.touch_app, 'Start\nTask', Colors.amber, () => _openQuickStart(context)),            // 23
+      _moduleCard(context, Icons.layers, 'Zones', Colors.teal.shade700, () => _openZones(context)),                 // 24
+      _moduleCard(context, Icons.business, 'Contractors', Colors.brown, () => _openContractors(context)),           // 25
     ];
 
     final cards = <Widget>[];
@@ -330,5 +334,13 @@ class StationCleaningHubScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _openZones(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationZonesScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openContractors(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ContractorMappingScreen(stationId: stationId, stationName: stationName)));
   }
 }
