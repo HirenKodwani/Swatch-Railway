@@ -45,3 +45,8 @@ export const getLogs = asyncHandler(async (req, res) => {
   const result = await materialService.getMaterialLogs(req.query);
   res.status(200).json(result);
 });
+
+export const use = asyncHandler(async (req, res) => {
+  const result = await materialService.useMaterial(req.user, { ...req.body, materialId: req.params.uid });
+  res.status(201).json(result);
+});

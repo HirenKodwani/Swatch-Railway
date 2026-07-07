@@ -140,6 +140,117 @@ class DashboardService {
     return result;
   }
 
+  async getAdminDashboard() {
+    const cacheKey = this._cacheKey('adminDash', {});
+    const cached = this._getCached(cacheKey);
+    if (cached) return cached;
+
+    const [stationsSnap, zonesSnap, platformsSnap, areasSnap, tasksSnap, usersSnap] = await Promise.all([
+      db.collection('stations').get(),
+      db.collection('zones').get(),
+      db.collection('platforms').get(),
+      db.collection('areas').get(),
+      db.collection('cleaningTasks').limit(1000).get(),
+      db.collection('users').get()
+    ]);
+
+    const tasks = [];
+    tasksSnap.forEach(d => tasks.push(d.data()));
+    const totalTasks = tasks.length;
+    const pendingTasks = tasks.filter(t => t.status === 'pending').length;
+    const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
+    const completedTasks = tasks.filter(t => t.status === 'completed').length;
+    const approvedTasks = tasks.filter(t => t.status === 'approved').length;
+    const rejectedTasks = tasks.filter(t => t.status === 'rejected').length;
+
+    const zones = [];
+    zonesSnap.forEach(d => zones.push({ id: d.id, ...d.data() }));
+    const stations = [];
+    stationsSnap.forEach(d => stations.push({ id: d.id, ...d.data() }));
+
+    const zoneSummaries = zones.map(z => ({
+      zoneId: z.id,
+      zoneName: z.name || z.zoneName || '',
+      stationCount: stations.filter(s => s.zoneId === z.id || s.zone === z.id).length
+    }));
+
+    const users = [];
+    usersSnap.forEach(d => users.push(d.data()));
+    const totalWorkers = users.filter(u => u.userType === 'contractor' || u.role === 'CLEANING_STAFF' || u.role === 'WORKER').length;
+    const totalSupervisors = users.filter(u => u.role === 'SUPERVISOR' || u.role === 'STATION_MASTER' || u.role === 'PLATFORM_MASTER').length;
+
+    const result = {
+      level: 'admin',
+      summary: {
+        totalZones: zones.length,
+        totalStations: stations.length,
+        totalPlatforms: platformsSnap.size,
+        totalAreas: areasSnap.size,
+        totalWorkers,
+        totalSupervisors
+      },
+      cleaningTasks: {
+        total: totalTasks,
+        pending: pendingTasks,
+        inProgress: inProgressTasks,
+        completed: completedTasks,
+        approved: approvedTasks,
+        rejected: rejectedTasks
+      },
+      zones: zoneSummaries
+    };
+    this._setCache(cacheKey, result);
+    return result;
+  }
+
+  async getZoneDashboard(zoneId) {
+    if (!zoneId) throw new ValidationError('zoneId is required');
+    const cacheKey = this._cacheKey('zoneDash', { zoneId });
+    const cached = this._getCached(cacheKey);
+    if (cached) return cached;
+
+    const [stationsSnap, zoneSnap] = await Promise.all([
+      db.collection('stations').where('zoneId', '==', zoneId).get(),
+      db.collection('zones').doc(zoneId).get()
+    ]);
+
+    const zoneData = zoneSnap.exists ? zoneSnap.data() : {};
+    const stations = [];
+    stationsSnap.forEach(d => stations.push({ id: d.id, ...d.data() }));
+
+    const stationSummaries = await Promise.all(stations.map(async s => {
+      const [platSnap, taskSnap] = await Promise.all([
+        db.collection('platforms').where('stationId', '==', s.id).get(),
+        db.collection('cleaningTasks').where('stationId', '==', s.id).where('scheduledDate', '==', new Date().toISOString().split('T')[0]).limit(200).get()
+      ]);
+      const todayTasks = [];
+      taskSnap.forEach(d => todayTasks.push(d.data()));
+      return {
+        stationId: s.id,
+        stationName: s.name || s.stationName || '',
+        stationCode: s.stationCode || '',
+        platformCount: platSnap.size,
+        todayTasks: {
+          total: todayTasks.length,
+          pending: todayTasks.filter(t => t.status === 'pending').length,
+          inProgress: todayTasks.filter(t => t.status === 'in_progress').length,
+          completed: todayTasks.filter(t => t.status === 'completed').length,
+          approved: todayTasks.filter(t => t.status === 'approved').length
+        }
+      };
+    }));
+
+    const result = {
+      level: 'zone',
+      zoneId,
+      zoneName: zoneData.name || zoneData.zoneName || '',
+      stationCount: stations.length,
+      stations: stationSummaries
+    };
+    this._setCache(cacheKey, result);
+    return result;
+  }
+
   async getStationDashboard(stationId, query = {}) {
     if (!stationId) throw new ValidationError('stationId is required');
     const { startDate, endDate, month, year } = query;
@@ -156,7 +267,7 @@ class DashboardService {
     const cached = this._getCached(cacheKey);
     if (cached) return cached;
 
-    const [scoreSnap, attendSnap, feedbackSnap, complaintSnap, machineSnap, actSnap, logSnap, freqSnap, billingSnap, emailSnap] = await Promise.all([
+    const [scoreSnap, attendSnap, feedbackSnap, complaintSnap, machineSnap, actSnap, logSnap, freqSnap, billingSnap, emailSnap, platSnap, stationSnap, tasksSnap] = await Promise.all([
       db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get(),
       db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get(),
       db.collection('station_feedback').where('stationId', '==', stationId).where('createdAt', '>=', sDate).where('createdAt', '<=', eDate + 'T23:59:59').get(),
@@ -167,7 +278,12 @@ class DashboardService {
       db.collection('activity_frequencies').where('stationId', '==', stationId).get(),
       db.collection('station_billing_packs').where('stationId', '==', stationId).get(),
       db.collection('email_history').where('stationId', '==', stationId).get(),
+      db.collection('platforms').where('stationId', '==', stationId).get(),
+      db.collection('stations').doc(stationId).get(),
+      db.collection('cleaningTasks').where('stationId', '==', stationId).where('scheduledDate', '>=', sDate).where('scheduledDate', '<=', eDate).limit(500).get()
     ]);
+
+    const stationData = stationSnap.exists ? stationSnap.data() : {};
 
     const scores = []; scoreSnap.forEach(d => scores.push(d.data()));
     const avgScore = scores.length > 0 ? Math.round(scores.reduce((s, c) => s + (c.overallStationScore || 0), 0) / scores.length) : 0;
@@ -212,8 +328,32 @@ class DashboardService {
     const emailLogs = []; emailSnap.forEach(d => emailLogs.push(d.data()));
     const reportsSent = emailLogs.length;
 
+    const platforms = [];
+    platSnap.forEach(d => platforms.push({ id: d.id, ...d.data() }));
+
+    const tasks = [];
+    tasksSnap.forEach(d => tasks.push(d.data()));
+    const cleaningStats = {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      inProgress: tasks.filter(t => t.status === 'in_progress').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      approved: tasks.filter(t => t.status === 'approved').length,
+      rejected: tasks.filter(t => t.status === 'rejected').length
+    };
+
+    const platformSummaries = platforms.map(p => ({
+      platformId: p.id,
+      platformName: p.name || p.platformName || '',
+      platformNumber: p.platformNumber || ''
+    }));
+
     const result = {
-      stationId, period: { start: sDate, end: eDate },
+      level: 'station',
+      stationId,
+      stationName: stationData.name || stationData.stationName || '',
+      stationCode: stationData.stationCode || '',
+      period: { start: sDate, end: eDate },
       scorecard: { daysWithScore: scores.length, averageScore: avgScore, trend: scoreTrend },
       attendance: { total: attendance.length, present, absent, attendanceRate: attendance.length > 0 ? Math.round(present / attendance.length * 100) : 0 },
       feedback: { total: feedbacks.length, averageRating: avgFeedback, negative: feedbacks.filter(f => f.isNegative).length },
@@ -223,7 +363,148 @@ class DashboardService {
       plannedVsCompleted: { planned: plannedManpower, actual: actualManpower, variance: plannedManpower - actualManpower },
       missedAlerts: { count: missedAlerts, alert: missedAlerts > 0 },
       billingReadiness: { total: billingPacks.length, ready: billingReady, draft: billingDraft },
-      reportsSent: { count: reportsSent }
+      reportsSent: { count: reportsSent },
+      cleaning: cleaningStats,
+      platforms: platformSummaries
+    };
+    this._setCache(cacheKey, result);
+    return result;
+  }
+
+  async getPlatformDashboard(platformId, query = {}) {
+    if (!platformId) throw new ValidationError('platformId is required');
+    const { startDate, endDate, date } = query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    const cacheKey = this._cacheKey('platDash', { platformId, targetDate });
+    const cached = this._getCached(cacheKey);
+    if (cached) return cached;
+
+    const [platformSnap, areasSnap, tasksSnap, runsSnap] = await Promise.all([
+      db.collection('platforms').doc(platformId).get(),
+      db.collection('areas').where('platformId', '==', platformId).get(),
+      db.collection('cleaningTasks').where('platformId', '==', platformId).where('scheduledDate', '==', targetDate).limit(500).get(),
+      db.collection('stationCleaningRuns').where('platformId', '==', platformId).where('date', '==', targetDate).limit(200).get()
+    ]);
+
+    const platformData = platformSnap.exists ? platformSnap.data() : {};
+
+    const areas = [];
+    areasSnap.forEach(d => areas.push({ id: d.id, ...d.data() }));
+
+    const tasks = [];
+    tasksSnap.forEach(d => tasks.push(d.data()));
+
+    const runs = [];
+    runsSnap.forEach(d => runs.push(d.data()));
+
+    const areaSummaries = areas.map(a => ({
+      areaId: a.id,
+      areaName: a.areaName || a.name || '',
+      areaCode: a.areaCode || '',
+      cleaningFrequency: a.cleaningFrequency || a.frequency || 'daily',
+      defaultShift: a.defaultShift || 'morning',
+      workerCount: 0
+    }));
+
+    const cleaningStats = {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      inProgress: tasks.filter(t => t.status === 'in_progress').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      approved: tasks.filter(t => t.status === 'approved').length,
+      rejected: tasks.filter(t => t.status === 'rejected').length
+    };
+
+    const result = {
+      level: 'platform',
+      platformId,
+      platformName: platformData.name || platformData.platformName || '',
+      platformNumber: platformData.platformNumber || '',
+      stationId: platformData.stationId || '',
+      date: targetDate,
+      areaCount: areas.length,
+      runCount: runs.length,
+      cleaning: cleaningStats,
+      areas: areaSummaries
+    };
+    this._setCache(cacheKey, result);
+    return result;
+  }
+
+  async getAreaDashboard(areaId, query = {}) {
+    if (!areaId) throw new ValidationError('areaId is required');
+    const { startDate, endDate, date } = query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    const cacheKey = this._cacheKey('areaDash', { areaId, targetDate });
+    const cached = this._getCached(cacheKey);
+    if (cached) return cached;
+
+    const [areaSnap, tasksSnap, assignmentsSnap, runsSnap] = await Promise.all([
+      db.collection('areas').doc(areaId).get(),
+      db.collection('cleaningTasks').where('areaId', '==', areaId).where('scheduledDate', '==', targetDate).limit(200).get(),
+      db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).get(),
+      db.collection('stationCleaningRuns').where('areaId', '==', areaId).where('date', '==', targetDate).limit(100).get()
+    ]);
+
+    if (!areaSnap.exists) throw new ValidationError('Area not found');
+    const areaData = areaSnap.data();
+
+    const tasks = [];
+    tasksSnap.forEach(d => tasks.push({ id: d.id, ...d.data() }));
+
+    const assignments = [];
+    assignmentsSnap.forEach(d => assignments.push({ id: d.id, ...d.data() }));
+
+    const runs = [];
+    runsSnap.forEach(d => runs.push(d.data()));
+
+    const workerSummaries = assignments.map(a => ({
+      assignmentId: a.uid || a.id,
+      workerId: a.workerId,
+      workerName: a.workerName,
+      shift: a.shift,
+      isPrimary: a.isPrimary || false,
+      status: a.status || 'active'
+    }));
+
+    const cleaningStats = {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      inProgress: tasks.filter(t => t.status === 'in_progress').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      approved: tasks.filter(t => t.status === 'approved').length,
+      rejected: tasks.filter(t => t.status === 'rejected').length,
+      resubmitted: tasks.filter(t => t.status === 'resubmitted').length
+    };
+
+    const result = {
+      level: 'area',
+      areaId,
+      areaName: areaData.areaName || areaData.name || '',
+      areaCode: areaData.areaCode || '',
+      stationId: areaData.stationId || '',
+      platformId: areaData.platformId || '',
+      cleaningFrequency: areaData.cleaningFrequency || areaData.frequency || 'daily',
+      frequencyTimes: areaData.frequencyTimes || [],
+      defaultShift: areaData.defaultShift || 'morning',
+      defaultWorkers: areaData.defaultWorkers || 1,
+      priority: areaData.priority || 3,
+      date: targetDate,
+      cleaning: cleaningStats,
+      workerCount: workerSummaries.length,
+      workers: workerSummaries,
+      runs: runs.length,
+      scheduledTasks: tasks.map(t => ({
+        taskId: t.uid || t.id,
+        scheduledTime: t.scheduledTime,
+        workerId: t.workerId,
+        workerName: t.workerName,
+        status: t.status,
+        startedAt: t.startedAt,
+        completedAt: t.completedAt
+      }))
     };
     this._setCache(cacheKey, result);
     return result;

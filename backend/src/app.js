@@ -31,6 +31,8 @@ import auditRoutes from './routes/audit.js';
 import evidenceRoutes from './routes/evidence.js';
 import platformRoutes from './routes/platform.js';
 import areaRoutes from './routes/area.js';
+import areaAssignmentRoutes from './routes/areaAssignments.js';
+import tasksV2Routes from './routes/tasksV2.js';
 import analyticsRoutes from './routes/analytics.js';
 import complaintRoutes from './routes/complaint.js';
 import deploymentRoutes from './routes/deployment.js';
@@ -90,6 +92,8 @@ app.use(evidenceRoutes);                          // /api/evidence/*
 app.use(analyticsRoutes);                         // /api/analytics/*
 app.use(platformRoutes);                          // /api/platforms/*
 app.use(areaRoutes);                              // /api/areas/*
+app.use(areaAssignmentRoutes);                    // /api/area-assignments/*
+app.use(tasksV2Routes);                           // /api/tasks/* (v2 task management)
 app.use(complaintRoutes);                         // /api/complaints/*
 app.use(deploymentRoutes);                        // /api/deployments/*
 app.use(executionRoutes);                         // /api/execution-plans/*

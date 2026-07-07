@@ -10,3 +10,8 @@ export const supervisorStats = asyncHandler(async (req, res) => res.json(await d
 export const activeTrains = asyncHandler(async (req, res) => res.json(await dashboardService.getActiveTrains()));
 export const activeWorkers = asyncHandler(async (req, res) => res.json(await dashboardService.getActiveWorkers()));
 export const allFormsStats = asyncHandler(async (req, res) => res.json(await dashboardService.getAllFormsStats()));
+
+export const adminDashboard = asyncHandler(async (req, res) => res.json(await dashboardService.getAdminDashboard()));
+export const zoneDashboard = asyncHandler(async (req, res) => res.json(await dashboardService.getZoneDashboard(req.params.zoneId)));
+export const platformDashboard = asyncHandler(async (req, res) => res.json(await dashboardService.getPlatformDashboard(req.params.platformId, req.query)));
+export const areaDashboard = asyncHandler(async (req, res) => res.json(await dashboardService.getAreaDashboard(req.params.areaId, req.query)));

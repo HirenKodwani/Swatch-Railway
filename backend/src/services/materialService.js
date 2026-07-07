@@ -114,7 +114,6 @@ class MaterialService {
     await matRef.update({
       currentStock: logData.stockAfter,
       issuedQuantity: admin.firestore.FieldValue.increment(qty),
-      usedQuantity: admin.firestore.FieldValue.increment(qty),
       updatedAt: new Date().toISOString()
     });
     await logRef.set(logData);
@@ -162,6 +161,49 @@ class MaterialService {
     await logRef.set(logData);
 
     return { message: 'Material received', uid: logRef.id, transaction: logData };
+  }
+
+  async useMaterial(userData, body) {
+    const { materialId, quantity, taskId, workerId, stationId, remarks } = body;
+    if (!materialId || !quantity) {
+      throw new ValidationError('materialId and quantity are required');
+    }
+
+    const matRef = db.collection('materials').doc(materialId);
+    const matDoc = await matRef.get();
+    if (!matDoc.exists) throw new NotFoundError('Material not found');
+    const matData = matDoc.data();
+
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty <= 0) throw new ValidationError('quantity must be a positive number');
+    if (qty > (matData.currentStock || 0)) throw new ValidationError('Insufficient stock');
+
+    const logRef = db.collection('material_logs').doc();
+    const logData = {
+      uid: logRef.id,
+      materialId,
+      materialName: matData.materialName,
+      materialType: matData.materialType,
+      unit: matData.unit,
+      transactionType: 'use',
+      quantity: qty,
+      stockBefore: matData.currentStock || 0,
+      stockAfter: (matData.currentStock || 0) - qty,
+      usedBy: workerId || userData.uid,
+      taskId: taskId || null,
+      stationId: stationId || matData.stationId,
+      remarks: remarks || '',
+      createdAt: new Date().toISOString()
+    };
+
+    await matRef.update({
+      currentStock: logData.stockAfter,
+      usedQuantity: admin.firestore.FieldValue.increment(qty),
+      updatedAt: new Date().toISOString()
+    });
+    await logRef.set(logData);
+
+    return { message: 'Material usage recorded', uid: logRef.id, transaction: logData };
   }
 
   async getStockAlerts(query = {}) {

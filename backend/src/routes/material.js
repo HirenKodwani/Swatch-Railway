@@ -16,6 +16,7 @@ router.get('/api/materials/:uid', verifyToken, requirePermission(PERMISSIONS.VIE
 router.put('/api/materials/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.update);
 router.delete('/api/materials/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.remove);
 router.post('/api/materials/:uid/issue', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.issue);
+router.post('/api/materials/:uid/use', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.use);
 router.post('/api/materials/:uid/receive', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.receive);
 
 export default router;

@@ -21,6 +21,11 @@ export const listStationAreas = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const getStationArea = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getStationArea(req.params.uid);
+  res.status(200).json(result);
+});
+
 export const createStationZone = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.createStationZone(req.body);
   res.status(201).json(result);
@@ -28,6 +33,21 @@ export const createStationZone = asyncHandler(async (req, res) => {
 
 export const listStationZones = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.listStationZones(req.params.stationId, req.query.areaId, req.user);
+  res.status(200).json(result);
+});
+
+export const getStationZone = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getStationZone(req.params.uid);
+  res.status(200).json(result);
+});
+
+export const updateStationZone = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.updateStationZone(req.params.uid, req.body);
+  res.status(200).json(result);
+});
+
+export const deleteStationZone = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.deleteStationZone(req.params.uid);
   res.status(200).json(result);
 });
 
@@ -41,6 +61,21 @@ export const listContractorMappings = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const getContractorMapping = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getContractorMapping(req.params.uid);
+  res.status(200).json(result);
+});
+
+export const updateContractorMapping = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.updateContractorMapping(req.params.uid, req.body);
+  res.status(200).json(result);
+});
+
+export const deleteContractorMapping = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.deleteContractorMapping(req.params.uid);
+  res.status(200).json(result);
+});
+
 export const createSchedule = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.createSchedule(req.body);
   res.status(201).json(result);
@@ -48,6 +83,21 @@ export const createSchedule = asyncHandler(async (req, res) => {
 
 export const listSchedules = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.listSchedules(req.params.stationId, req.user);
+  res.status(200).json(result);
+});
+
+export const getSchedule = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getSchedule(req.params.uid);
+  res.status(200).json(result);
+});
+
+export const updateSchedule = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.updateSchedule(req.params.uid, req.body);
+  res.status(200).json(result);
+});
+
+export const deleteSchedule = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.deleteSchedule(req.params.uid);
   res.status(200).json(result);
 });
 
@@ -76,9 +126,34 @@ export const deleteStationRun = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const getWorkerStationRuns = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getWorkerStationRuns(req.params.workerId);
+  res.status(200).json(result);
+});
+
+export const getSupervisorStationRuns = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getSupervisorStationRuns(req.params.supervisorId);
+  res.status(200).json(result);
+});
+
 export const submitStationTask = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.submitStationTask(req.body);
   res.status(201).json(result);
+});
+
+export const getStationTask = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getStationTask(req.params.taskId);
+  res.status(200).json(result);
+});
+
+export const updateStationTask = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.updateStationTask(req.params.taskId, req.body);
+  res.status(200).json(result);
+});
+
+export const deleteStationTask = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.deleteStationTask(req.params.taskId);
+  res.status(200).json(result);
 });
 
 export const listPendingStationTasks = asyncHandler(async (req, res) => {
@@ -92,7 +167,7 @@ export const createStationCleaningForm = asyncHandler(async (req, res) => {
 });
 
 export const submitStationCleaningForm = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.submitStationCleaningForm(req.params.uid, req.user);
+  const result = await stationCleaningService.submitStationCleaningForm(req.params.uid, req.body, req.user);
   res.status(200).json(result);
 });
 

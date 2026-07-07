@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { db, admin } from './database/index.js';
 import * as evidence from '../evidence_manager.js';
 import logger from './logger/index.js';
+import { taskManagementService } from './services/taskManagementService.js';
 
 let resend = null;
 try {
@@ -209,10 +210,29 @@ const checkContractExpiry = async () => {
   } catch (e) { logger.error('Cron', ' [Cron Error] Contract Expiry:', e.message); }
 };
 
-// ─── Daily midnight: Check contract expiry ───
-cron.schedule('0 0 * * *', () => {
+// ─── Daily midnight: Check contract expiry & generate daily cleaning tasks ───
+cron.schedule('0 0 * * *', async () => {
   logger.info('Cron', ' Running Midnight Cron Job...');
-  checkContractExpiry();
+  try {
+    await checkContractExpiry();
+    const today = new Date().toISOString().split('T')[0];
+    const taskResult = await taskManagementService.generateFrequencyBasedTasks(today);
+    logger.info('Cron', ` [TaskGen] ${taskResult.message}`);
+  } catch (e) { logger.error('Cron', ' [Cron Error] Midnight tasks:', e.message); }
+});
+
+// ─── Daily 6 AM & 6 PM: Regenerate tasks for current day if needed ───
+cron.schedule('0 6,18 * * *', async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const existingSnap = await db.collection('cleaningTasks').where('scheduledDate', '==', today).limit(1).get();
+    if (existingSnap.empty) {
+      const result = await taskManagementService.generateFrequencyBasedTasks(today);
+      logger.info('Cron', ` [TaskGen-Refresh] ${result.message}`);
+    } else {
+      logger.info('Cron', ' [TaskGen-Refresh] Tasks already exist for today, skipping');
+    }
+  } catch (e) { logger.error('Cron', ' [Cron Error] Task refresh:', e.message); }
 });
 
 // ─── Daily 23:55: Automated daily reports ───

@@ -4,7 +4,7 @@ import { paginate } from '../utils/paginate.js';
 
 class PlatformService {
   async createPlatform(userData, body) {
-    const { platformNumber, stationId, platformName } = body;
+    const { platformNumber, stationId, platformName, surfaceType, length, width } = body;
     if (!platformNumber || !stationId) throw new ValidationError('platformNumber and stationId are required');
 
     const stationDoc = await db.collection('stations').doc(stationId).get();
@@ -22,6 +22,9 @@ class PlatformService {
       uid: ref.id, platformNumber, stationId,
       stationName: stationData.stationName || '',
       platformName: platformName || `Platform ${platformNumber}`,
+      surfaceType: surfaceType || null,
+      length: length || null,
+      width: width || null,
       status: 'active',
       createdBy: userData.uid,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
@@ -51,7 +54,7 @@ class PlatformService {
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Platform not found');
     const updates = {};
-    const allowed = ['platformNumber', 'platformName', 'status'];
+    const allowed = ['platformNumber', 'platformName', 'surfaceType', 'length', 'width', 'status'];
     for (const key of allowed) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
