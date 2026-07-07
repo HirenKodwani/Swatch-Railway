@@ -4,10 +4,19 @@ import { paginate } from '../utils/paginate.js';
 
 class StationCleaningService {
   _resolveStationId(requestedStationId, user) {
-    if (user.stationId && (user.role || '').toUpperCase() === 'RAILWAY_SUPERVISOR') {
+    const role = (user.role || '').toUpperCase();
+    if (user.stationId && ['RAILWAY_SUPERVISOR', 'STATION_MASTER'].includes(role)) {
       return user.stationId;
     }
     return requestedStationId;
+  }
+
+  _resolveAreaId(requestedAreaId, user) {
+    const role = (user.role || '').toUpperCase();
+    if (user.areaId && role === 'PLATFORM_MASTER') {
+      return user.areaId;
+    }
+    return requestedAreaId;
   }
 
   _isMasterOrAdmin(user) {
@@ -18,6 +27,14 @@ class StationCleaningService {
   _scopeByEntity(query, user) {
     if (user.userType === 'contractor' && user.entityId) {
       return query.where('entityId', '==', user.entityId);
+    }
+    return query;
+  }
+
+  _scopeByArea(query, user, field = 'areaId') {
+    const role = (user.role || '').toUpperCase();
+    if (role === 'PLATFORM_MASTER' && user.areaId) {
+      return query.where(field, '==', user.areaId);
     }
     return query;
   }
@@ -55,7 +72,9 @@ class StationCleaningService {
 
   async listStationAreas(stationId, user) {
     const resolvedId = this._resolveStationId(stationId, user);
-    const snapshot = await db.collection('stationAreas').where('stationId', '==', resolvedId).limit(200).get();
+    let query = db.collection('stationAreas').where('stationId', '==', resolvedId);
+    query = this._scopeByArea(query, user, 'uid');
+    const snapshot = await query.limit(200).get();
     const areas = [];
     snapshot.forEach(doc => areas.push(doc.data()));
     areas.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -114,10 +133,11 @@ class StationCleaningService {
     const resolvedId = this._resolveStationId(stationId, user);
     let q = db.collection('stationContractors').where('stationId', '==', resolvedId);
     q = this._scopeByEntity(q, user);
+    q = this._scopeByArea(q, user, 'areaId');
     const snapshot = await q.limit(200).get();
     const mappings = [];
     snapshot.forEach(doc => mappings.push(doc.data()));
-    return { count: mappings.length, mappings };
+    return { count: mappings.length, mappings, contractors: mappings };
   }
 
   async createSchedule(data) {
@@ -133,6 +153,7 @@ class StationCleaningService {
     const resolvedId = this._resolveStationId(stationId, user);
     let q = db.collection('stationSchedules').where('stationId', '==', resolvedId);
     q = this._scopeByEntity(q, user);
+    q = this._scopeByArea(q, user, 'areaId');
     const snapshot = await q.limit(200).get();
     const schedules = [];
     snapshot.forEach(doc => schedules.push(doc.data()));

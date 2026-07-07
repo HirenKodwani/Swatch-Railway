@@ -5,7 +5,7 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type } = userData;
+    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, areaId } = userData;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
     const creatorName = creatorNameAuth || name || creatorRole || 'Admin';
@@ -39,6 +39,21 @@ class UserService {
     if (roleUpper === 'RAILWAY SUPERVISOR') {
       if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
         throw new ValidationError("Division and at least one Train ID are mandatory for Railway Supervisor.");
+      }
+    }
+
+    if (roleUpper === 'STATION_MASTER') {
+      if (!stationId) {
+        throw new ValidationError("stationId is mandatory for Station Master.");
+      }
+    }
+
+    if (roleUpper === 'PLATFORM_MASTER') {
+      if (!areaId) {
+        throw new ValidationError("areaId is mandatory for Platform Master.");
+      }
+      if (!stationId) {
+        throw new ValidationError("stationId is mandatory for Platform Master.");
       }
     }
 
@@ -106,6 +121,8 @@ class UserService {
       trainId: trainId || null,
       trainIds: trainIds || (trainId ? [trainId] : []),
       worker_type: worker_type || null,
+      stationId: stationId || null,
+      areaId: areaId || null,
       createdBy: creatorId,
       createdByName: creatorName,
       status: 'PENDING',

@@ -52,3 +52,33 @@ export function requireEntityAccess(req, res, next) {
   }
   next();
 }
+
+export function requireStationAccess(req, res, next) {
+  const role = (req.user?.role || '').toUpperCase();
+  if (role === 'STATION_MASTER') {
+    const stationId = req.user.stationId;
+    if (!stationId) {
+      throw new ForbiddenError('No station assigned to your account');
+    }
+    const targetStationId = req.params.stationId || req.body.stationId || req.query.stationId;
+    if (targetStationId && targetStationId !== stationId) {
+      throw new ForbiddenError('You can only access your assigned station');
+    }
+  }
+  next();
+}
+
+export function requirePlatformAccess(req, res, next) {
+  const role = (req.user?.role || '').toUpperCase();
+  if (role === 'PLATFORM_MASTER') {
+    const areaId = req.user.areaId;
+    if (!areaId) {
+      throw new ForbiddenError('No platform/area assigned to your account');
+    }
+    const targetAreaId = req.params.areaId || req.body.areaId || req.query.areaId;
+    if (targetAreaId && targetAreaId !== areaId) {
+      throw new ForbiddenError('You can only access your assigned platform/area');
+    }
+  }
+  next();
+}

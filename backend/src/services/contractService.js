@@ -3,7 +3,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../errors/index.j
 
 class ContractService {
   async createContract(creatorData, body) {
-    const { contractNumber, contractName, entityId, stationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle } = body;
+    const { contractNumber, contractName, entityId, stationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division } = body;
     const { uid, name, fullName, email, role } = creatorData;
     const creatorName = fullName || name || email || role || 'Unknown';
 
@@ -29,11 +29,16 @@ class ContractService {
     const entityName = entityData.companyName;
 
     const stationNames = [];
+    let inferredZone, inferredDivision;
     if (stationIds && stationIds.length) {
       for (const sid of stationIds) {
         const snap = await db.collection('stations').doc(sid).get();
-        if (snap.exists) stationNames.push(snap.data().stationName || sid);
-        else throw new NotFoundError(`Station ${sid} not found.`);
+        if (snap.exists) {
+          const sData = snap.data();
+          stationNames.push(sData.stationName || sid);
+          if (!inferredZone) inferredZone = sData.zone;
+          if (!inferredDivision) inferredDivision = sData.division;
+        } else throw new NotFoundError(`Station ${sid} not found.`);
       }
     }
 
@@ -77,6 +82,8 @@ class ContractService {
       assignedContractorUsers: assignedContractorUsers || [],
       scoringApplicability: scoringApplicability || false,
       billingCycle: billingCycle || 'monthly',
+      zone: zone || inferredZone || '',
+      division: division || inferredDivision || '',
       createdAt: db.Timestamp(),
       createdBy: uid,
       createdByName: creatorName
