@@ -72,7 +72,7 @@ class StationCleaningHubScreen extends StatelessWidget {
     if (r == 'CONTRACTOR_ADMIN') {
       return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25};
     }
-    if (r == 'STATION_MASTER') {
+    if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
       return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 21, 22, 24, 25};
     }
     if (r == 'PLATFORM_MASTER') {

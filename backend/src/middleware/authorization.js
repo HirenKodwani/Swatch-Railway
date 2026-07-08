@@ -55,7 +55,7 @@ export function requireEntityAccess(req, res, next) {
 
 export function requireStationAccess(req, res, next) {
   const role = (req.user?.role || '').toUpperCase();
-  if (role === 'STATION_MASTER') {
+  if (role === 'STATION_MASTER' || role === 'AREA_MASTER') {
     const stationId = req.user.stationId;
     if (!stationId) {
       throw new ForbiddenError('No station assigned to your account');
@@ -108,22 +108,22 @@ export function requireDashboardLevelAccess(level) {
         }
         break;
       case 'zone':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER'].includes(role)) {
+        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER'].includes(role)) {
           throw new ForbiddenError('Zone dashboard access requires zone-level privileges');
         }
         break;
       case 'station':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER'].includes(role)) {
+        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER'].includes(role)) {
           throw new ForbiddenError('Station dashboard access requires station-level privileges');
         }
         break;
       case 'platform':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'PLATFORM_MASTER'].includes(role)) {
+        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER', 'PLATFORM_MASTER'].includes(role)) {
           throw new ForbiddenError('Platform dashboard access requires platform-level privileges');
         }
         break;
       case 'area':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'PLATFORM_MASTER', 'WORKER', 'JANITOR'].includes(role)) {
+        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER', 'PLATFORM_MASTER', 'WORKER', 'JANITOR'].includes(role)) {
           throw new ForbiddenError('Area dashboard access requires area-level privileges');
         }
         break;
