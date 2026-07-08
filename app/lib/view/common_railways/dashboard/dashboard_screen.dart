@@ -38,14 +38,6 @@ import '../widgets/filter_section.dart';
 import '../widgets/indicator_color.dart';
 import '../widgets/status_tile.dart';
 import '../attendance/attendance_exception_dashboard.dart';
-import '../station_management/station_list_screen.dart';
-import '../station_management/platform_list_screen.dart';
-import '../station_management/area_config_screen.dart';
-import '../station_management/area_assignment_screen.dart';
-import '../station_management/bulk_assignment_screen.dart';
-import '../station_management/area_performance_dashboard.dart';
-import '../station_management/area_comparison_screen.dart';
-import '../station_management/area_history_screen.dart';
 
 class CommonDashboard extends StatefulWidget {
   CommonDashboard({
@@ -436,16 +428,13 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "icon": Icons.dashboard_rounded,
         "title": "Dashboard",
         "route": null,
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.admin_panel_settings,
         "title": "Masters",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin"],
         "children": [
-          {"title": "Station Master", "route": "station_list"},
-          {"title": "Platform Master", "route": "platform_list"},
-          {"title": "Area Master", "route": "area_config"},
           {"title": "User Management", "route": "users"},
           {"title": "Entity Management", "route": "entities"},
           {"title": "Contract Management", "route": "contracts"},
@@ -456,21 +445,9 @@ class _CommonDashboardState extends State<CommonDashboard> {
         ]
       },
       {
-        "icon": Icons.assignment,
-        "title": "Area Operations",
-        "roles": ["Station Master", "Area Master", "Platform Master", "Railway Supervisor", "Contractor Supervisor"],
-        "children": [
-          {"title": "Area Assignments", "route": "area_assignments"},
-          {"title": "Bulk Assignment", "route": "bulk_assignment"},
-          {"title": "Area Performance", "route": "area_performance"},
-          {"title": "Area Comparison", "route": "area_comparison"},
-          {"title": "Area History", "route": "area_history"},
-        ]
-      },
-      {
         "icon": Icons.cleaning_services,
         "title": "Operations",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
           {"title": "Coach Cleaning", "route": "coach_cleaning"},
           {"title": "Premise Cleaning", "route": "premise_cleaning"},
@@ -484,7 +461,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.directions_run,
         "title": "OBHS",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
           {"title": "Attendance", "route": "obhs_attendance"},
           {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
@@ -495,7 +472,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.analytics,
         "title": "Reports",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
           {"title": "Coach Reports", "route": "coach_reports"},
           {"title": "Premise Reports", "route": "premise_reports"},
@@ -507,18 +484,18 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "icon": Icons.receipt_long,
         "title": "Billing",
         "route": "billing",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.star_outline,
         "title": "Ratings",
         "route": "ratings",
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.security,
         "title": "Audit & Compliance",
-        "roles": ["Company Master", "Railway Master", "Railway Admin"],
+        "roles": ["SUPER_ADMIN", "Company Master", "Railway Master", "Railway Admin"],
         "children": [
           {"title": "Compliance & Security Tracking", "route": "audit_logs"},
           {"title": "Business Activities", "route": "activity_logs"},
@@ -607,30 +584,6 @@ class _CommonDashboardState extends State<CommonDashboard> {
         break;
       case "complaints":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
-        break;
-      case "station_list":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationListScreen()));
-        break;
-      case "platform_list":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const PlatformListScreen()));
-        break;
-      case "area_config":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaConfigScreen()));
-        break;
-      case "area_assignments":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaAssignmentScreen()));
-        break;
-      case "bulk_assignment":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const BulkAssignmentScreen()));
-        break;
-      case "area_performance":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaPerformanceDashboard()));
-        break;
-      case "area_comparison":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaComparisonScreen()));
-        break;
-      case "area_history":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaHistoryScreen()));
         break;
       default:
         break;
