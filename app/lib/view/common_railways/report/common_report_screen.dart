@@ -1308,35 +1308,31 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                   });
                 },
                 children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      if (user?.role != 'Railway Supervisor')
-                        ZoneDivisionDepotDropdowns(
-                          user: user!,
-                          onChangedWithZone: (zone, division, depot) {
-                            setState(() {
-                              _selectedFilterZone = zone;
-                              _selectedFilterDivision = division;
-                              _selectedFilterDepot = depot;
-                            });
-                          },
-                        ),
-                      _multiSelectTile(
-                        label: "Areas",
-                        items: ares,
-                        selected: selectedAres,
-                        onTap: () async {
-                          final selected = await _showMultiSelectDialog(
-                            ares,
-                            selectedAres,
-                          );
-                          if (selected != null)
-                            setState(() => selectedAres = selected);
-                        },
-                      ),
-                    ],
+                  if (user != null && user.role != 'Railway Supervisor') ...[
+                    ZoneDivisionDepotDropdowns(
+                      user: user,
+                      onChangedWithZone: (zone, division, depot) {
+                        setState(() {
+                          _selectedFilterZone = zone;
+                          _selectedFilterDivision = division;
+                          _selectedFilterDepot = depot;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  _multiSelectTile(
+                    label: "Areas",
+                    items: ares,
+                    selected: selectedAres,
+                    onTap: () async {
+                      final selected = await _showMultiSelectDialog(
+                        ares,
+                        selectedAres,
+                      );
+                      if (selected != null)
+                        setState(() => selectedAres = selected);
+                    },
                   ),
                   const SizedBox(height: 12),
                   _dateRangePicker(),
@@ -1526,22 +1522,17 @@ class _CommonReportScreenState extends State<CommonReportScreen>
               });
             },
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  ZoneDivisionDepotDropdowns(
-                    user: user!,
-                    onChangedWithZone: (zone, division, depot) {
-                      setState(() {
-                        _selectedFilterZone = zone;
-                        _selectedFilterDivision = division;
-                        _selectedFilterDepot = depot;
-                      });
-                    },
-                  ),
-                ],
-              ),
+                  if (user != null)
+                    ZoneDivisionDepotDropdowns(
+                      user: user,
+                      onChangedWithZone: (zone, division, depot) {
+                        setState(() {
+                          _selectedFilterZone = zone;
+                          _selectedFilterDivision = division;
+                          _selectedFilterDepot = depot;
+                        });
+                      },
+                    ),
 
               const SizedBox(height: 12),
               Row(
@@ -1934,22 +1925,17 @@ class _CommonReportScreenState extends State<CommonReportScreen>
               });
             },
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  ZoneDivisionDepotDropdowns(
-                    user: user!,
-                    onChangedWithZone: (zone, division, depot) {
-                      setState(() {
-                        _selectedFilterZone = zone;
-                        _selectedFilterDivision = division;
-                        _selectedFilterDepot = depot;
-                      });
-                    },
-                  ),
-                ],
-              ),
+                  if (user != null)
+                    ZoneDivisionDepotDropdowns(
+                      user: user,
+                      onChangedWithZone: (zone, division, depot) {
+                        setState(() {
+                          _selectedFilterZone = zone;
+                          _selectedFilterDivision = division;
+                          _selectedFilterDepot = depot;
+                        });
+                      },
+                    ),
 
               const SizedBox(height: 12),
               Row(

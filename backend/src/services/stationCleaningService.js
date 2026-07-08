@@ -266,7 +266,7 @@ class StationCleaningService {
   // ─── Station Tasks ──────────────────────────────────────────────────────────
   async submitStationTask(body) {
     const { stationId, areaId, workerId } = body;
-    if (!stationId) throw new ValidationError('stationId is required');
+    // stationId is now validated above
     const ref = db.collection('stationTasks').doc();
     const data = {
       uid: ref.id, stationId, areaId: areaId || null,

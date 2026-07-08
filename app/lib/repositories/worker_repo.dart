@@ -707,8 +707,8 @@ class WorkerRepository {
   /// POST /api/obhs/feedback/passenger
   static Future<Map<String, dynamic>> submitPassengerFeedback({
     required String passengerName,
-    required String pnrNumber,
-    required String mobileNumber,
+    String? pnrNumber,
+    String? mobileNumber,
     required String coachNo,
     required Map<String, int> ratings,
     String? remarks,
@@ -722,8 +722,8 @@ class WorkerRepository {
 
       final body = <String, dynamic>{
         'passengerName': passengerName,
-        'pnrNumber': pnrNumber,
-        'mobileNumber': mobileNumber,
+        'pnrNumber': pnrNumber ?? '',
+        'mobileNumber': mobileNumber ?? '',
         'coachNo': coachNo,
         'ratings': ratings,
         'runInstanceId': runInstanceId,

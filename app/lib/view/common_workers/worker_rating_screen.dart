@@ -1065,14 +1065,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
   final TextEditingController _inspectorController = TextEditingController();
   final TextEditingController _passengerNameController =
       TextEditingController();
-  final TextEditingController _pnrController = TextEditingController();
-  final TextEditingController _mobileController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController();
-  bool _otpSent = false;
-  bool _otpVerified = false;
-  bool _isSendingOtp = false;
-  bool _isVerifyingOtp = false;
-  String? _otpPhone;
+
 
   List<RailwayWorkerModel> _workers = [];
   String? _selectedWorkerId;
@@ -1107,9 +1100,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
     _remarksController.dispose();
     _inspectorController.dispose();
     _passengerNameController.dispose();
-    _pnrController.dispose();
-    _mobileController.dispose();
-    _otpController.dispose();
+
     super.dispose();
   }
 
@@ -1121,13 +1112,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
       if (_selectedWorkerId == null) return false;
     }
     if (!widget.isOfficialMode) {
-      final mobile = _mobileController.text.trim();
-      final otp = _otpController.text.trim();
       if (_passengerNameController.text.trim().isEmpty) return false;
-      if (_pnrController.text.trim().isEmpty) return false;
-      if (mobile.length != 10) return false;
-      if (!_otpSent || !_otpVerified || _otpPhone != mobile) return false;
-      if (otp.length != 6) return false;
     }
     return true;
   }
@@ -1194,8 +1179,6 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
       } else {
         res = await WorkerRepository.submitPassengerFeedback(
           passengerName: _passengerNameController.text.trim(),
-          pnrNumber: _pnrController.text.trim(),
-          mobileNumber: _mobileController.text.trim(),
           coachNo: _selectedCoach!,
           ratings: intRatings,
           remarks: _remarksController.text.trim(),
@@ -1228,114 +1211,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
     }
   }
 
-  Future<void> _sendOtp() async {
-    final mobile = _mobileController.text.trim();
-    if (mobile.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter valid 10 digit mobile number'),
-          backgroundColor: kErrorRed,
-        ),
-      );
-      return;
-    }
 
-    try {
-      setState(() => _isSendingOtp = true);
-
-      final response = await ApiService.sendPassengerOtp(phone: mobile);
-      if (!mounted) return;
-
-      setState(() {
-        _otpSent = true;
-        _otpVerified = false;
-        _otpPhone = mobile;
-        _otpController.clear();
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            response['message']?.toString().isNotEmpty == true
-                ? response['message'].toString()
-                : 'OTP sent to $mobile',
-          ),
-          backgroundColor: kSuccessGreen,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: kErrorRed,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSendingOtp = false);
-    }
-  }
-
-  Future<void> _verifyOtp() async {
-    final mobile = _mobileController.text.trim();
-    final otp = _otpController.text.trim();
-
-    if (!_otpSent || _otpPhone != mobile) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please send OTP first'),
-          backgroundColor: kErrorRed,
-        ),
-      );
-      return;
-    }
-
-    if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter valid 6 digit OTP'),
-          backgroundColor: kErrorRed,
-        ),
-      );
-      return;
-    }
-
-    try {
-      setState(() => _isVerifyingOtp = true);
-
-      final response = await ApiService.verifyPassengerOtp(
-        phone: mobile,
-        otp: otp,
-      );
-      if (!mounted) return;
-
-      setState(() => _otpVerified = true);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            response['message']?.toString().isNotEmpty == true
-                ? response['message'].toString()
-                : 'OTP verified successfully',
-          ),
-          backgroundColor: kSuccessGreen,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _otpVerified = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: kErrorRed,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isVerifyingOtp = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1507,157 +1383,6 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _inputContainer(
-                child: TextField(
-                  controller: _pnrController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'PNR number',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.all(12),
-                    prefixIcon: Icon(Icons.confirmation_number_outlined),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _inputContainer(
-                      child: TextField(
-                        controller: _mobileController,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10),
-                        ],
-                        onChanged: (_) {
-                          if (_otpSent || _otpVerified) {
-                            _otpController.clear();
-                            _otpSent = false;
-                            _otpVerified = false;
-                            _otpPhone = null;
-                          }
-                          setState(() {});
-                        },
-                        decoration: const InputDecoration(
-                          hintText: 'Mobile number',
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.all(12),
-                          prefixIcon: Icon(Icons.phone_android_outlined),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isSendingOtp ? null : _sendOtp,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kRailwayBlue,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: _isSendingOtp
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              _otpSent ? 'Resend' : 'Send OTP',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _inputContainer(
-                      child: TextField(
-                        controller: _otpController,
-                        enabled: _otpSent && !_otpVerified,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(6),
-                        ],
-                        onChanged: (_) {
-                          if (_otpVerified) _otpVerified = false;
-                          setState(() {});
-                        },
-                        decoration: InputDecoration(
-                          hintText: _otpVerified
-                              ? 'OTP verified'
-                              : _otpSent
-                              ? 'Enter 6 digit OTP'
-                              : 'Send OTP first',
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(12),
-                          prefixIcon: Icon(
-                            _otpVerified
-                                ? Icons.verified_outlined
-                                : Icons.lock_clock_outlined,
-                            color: _otpVerified ? kSuccessGreen : null,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: (!_otpSent || _otpVerified || _isVerifyingOtp)
-                          ? null
-                          : _verifyOtp,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kSuccessGreen,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: _isVerifyingOtp
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              _otpVerified ? 'Verified' : 'Verify',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
               ),
               const SizedBox(height: 16),
             ],
