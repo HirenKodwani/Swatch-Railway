@@ -42,27 +42,27 @@ class StationCleaningHubScreen extends StatelessWidget {
   });
 
   bool _isRailway(String role) {
-    final r = role.toUpperCase();
+    final r = role.toUpperCase().replaceAll(' ', '_');
     return r.contains('RAILWAY') || r.contains('ADMIN') || r.contains('MASTER') || r == 'SUPER_ADMIN';
   }
 
   bool _isContractor(String role) {
-    return role.toUpperCase().contains('CONTRACTOR');
+    return role.toUpperCase().replaceAll(' ', '_').contains('CONTRACTOR');
   }
 
   bool _isWorker(String role) {
-    final r = role.toUpperCase();
+    final r = role.toUpperCase().replaceAll(' ', '_');
     return ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r);
   }
 
   bool _isMasterOrAdmin(String role) {
-    final r = role.toUpperCase();
+    final r = role.toUpperCase().replaceAll(' ', '_');
     return ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r);
   }
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
-    final r = role.toUpperCase();
+    final r = role.toUpperCase().replaceAll(' ', '_');
     if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
       return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
     }

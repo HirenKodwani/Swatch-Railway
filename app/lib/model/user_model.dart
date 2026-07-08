@@ -35,13 +35,54 @@ class UserModel {
     this.approvedAt,
   });
 
+  static String _normalizeRole(String? rawRole) {
+    if (rawRole == null) return '';
+    final roleUpper = rawRole.toUpperCase().replaceAll(' ', '_');
+    switch (roleUpper) {
+      case 'SUPER_ADMIN':
+        return 'Super Admin';
+      case 'COMPANY_MASTER':
+        return 'Company Master';
+      case 'RAILWAY_MASTER':
+        return 'Railway Master';
+      case 'ADMIN':
+        return 'Admin';
+      case 'RAILWAY_ADMIN':
+        return 'Railway Admin';
+      case 'RAILWAY_SUPERVISOR':
+        return 'Railway Supervisor';
+      case 'CONTRACTOR_ADMIN':
+        return 'Contractor Admin';
+      case 'CONTRACTOR_SUPERVISOR':
+        return 'Contractor Supervisor';
+      case 'STATION_MASTER':
+        return 'Station Master';
+      case 'PLATFORM_MASTER':
+        return 'Platform Master';
+      case 'CTS':
+        return 'CTS';
+      case 'WORKER':
+        return 'Worker';
+      case 'RAILWAY_WORKER':
+        return 'Railway Worker';
+      case 'JANITOR':
+        return 'Janitor';
+      case 'ATTENDANT':
+        return 'Attendant';
+      case 'PASSENGER':
+        return 'Passenger';
+      default:
+        return rawRole;
+    }
+  }
+
   factory UserModel.fromApiResponse(Map<String, dynamic> json) {
     final user = json['user'] is Map<String, dynamic> ? json['user'] : json;
 
     return UserModel(
       uid: user['uid'] ?? '',
       email: user['email'] ?? '',
-      role: user['role'] ?? '',
+      role: _normalizeRole(user['role']),
       userType: user['userType'] ?? '',
       fullName: user['fullName'] ?? user['name'] ?? '',
       mobile: user['mobile']?.toString(),
@@ -64,7 +105,7 @@ class UserModel {
     return UserModel(
       uid: json['uid'] ?? '',
       email: json['email'] ?? '',
-      role: json['role'] ?? '',
+      role: _normalizeRole(json['role']),
       userType: json['userType'] ?? '',
       fullName: json['fullName'] ?? '',
       mobile: json['mobile'],

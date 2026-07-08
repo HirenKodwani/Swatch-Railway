@@ -1,30 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// This is a widget test for Swachh Railways app.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:get/get.dart';
 import 'package:crm_train/main.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Splash screen text validation and transition to LoginScreen', (WidgetTester tester) async {
+    // Mock shared preferences before the provider loads the session
+    SharedPreferences.setMockInitialValues({});
+    
+    final authProvider = AuthProvider();
+    await authProvider.loadUserSession();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(
+            value: authProvider,
+          ),
+        ],
+        child: const MyApp(),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Verify that the splash screen title and subtitle are present initially
+    expect(find.text("Swachh Railways"), findsOneWidget);
+    expect(find.text("Swachh Bharat, Swachh Railways"), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Pump the 2 second delay timer and settle the routing transition
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    // Verify that we transitioned to the LoginScreen
+    expect(find.text("Welcome Back"), findsOneWidget);
+    expect(find.text("Choose your login method"), findsOneWidget);
   });
 }
+
+

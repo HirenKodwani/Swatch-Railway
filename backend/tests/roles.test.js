@@ -6,12 +6,14 @@ import { ROLES, PERMISSIONS, ROLE_PERMISSIONS, ROLE_HIERARCHY } from '../src/per
    ========================================================================== */
 
 describe('Role Definitions', () => {
-  it('all 12 roles are defined', () => {
+  it('all 16 roles are defined', () => {
     const expected = [
       'SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER',
       'ADMIN', 'RAILWAY_ADMIN', 'RAILWAY_SUPERVISOR',
-      'CONTRACTOR_SUPERVISOR', 'CTS',
-      'WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'
+      'CONTRACTOR_ADMIN', 'CONTRACTOR_SUPERVISOR',
+      'STATION_MASTER', 'PLATFORM_MASTER', 'CTS',
+      'WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT',
+      'PASSENGER'
     ];
     for (const role of expected) {
       expect(ROLES[role], `Missing role: ${role}`).toBe(role);
@@ -19,8 +21,8 @@ describe('Role Definitions', () => {
     expect(Object.keys(ROLES).length).toBe(expected.length);
   });
 
-  it('all 82 permissions are defined', () => {
-    expect(Object.keys(PERMISSIONS).length).toBe(82);
+  it('all 104 permissions are defined', () => {
+    expect(Object.keys(PERMISSIONS).length).toBe(104);
   });
 
   it('each permission value is unique and non-empty', () => {
@@ -139,14 +141,14 @@ describe('ADMIN - Read-only Master Data access', () => {
       expect(hasPermission('ADMIN', perm)).toBe(true);
     });
   }
-  const noManagePerms = ['MANAGE_PLATFORMS', 'MANAGE_AREAS', 'MANAGE_FREQUENCIES',
+  const managePerms = ['MANAGE_PLATFORMS', 'MANAGE_AREAS', 'MANAGE_FREQUENCIES',
     'MANAGE_SHIFTS', 'MANAGE_DEPLOYMENTS', 'MANAGE_GEOFENCES',
     'MANAGE_INSPECTIONS', 'MANAGE_ACTIVITIES', 'MANAGE_MACHINES',
     'MANAGE_MATERIALS', 'MANAGE_PEST_CONTROL', 'MANAGE_GARBAGE',
     'MANAGE_SCORECARDS', 'MANAGE_EXECUTION'];
-  for (const perm of noManagePerms) {
-    it(`does NOT have MANAGE ${perm}`, () => {
-      expect(hasPermission('ADMIN', perm)).toBe(false);
+  for (const perm of managePerms) {
+    it(`has MANAGE ${perm}`, () => {
+      expect(hasPermission('ADMIN', perm)).toBe(true);
     });
   }
   it('can assign shifts', () => {
@@ -157,11 +159,19 @@ describe('ADMIN - Read-only Master Data access', () => {
   });
 });
 
-describe('WORKER/RAILWAY_WORKER/JANITOR/ATTENDANT - Minimal access', () => {
+describe('WORKER/RAILWAY_WORKER/JANITOR/ATTENDANT - Task access', () => {
   const minimalRoles = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'];
   for (const role of minimalRoles) {
-    it(`${role} only has VIEW_RUN_INSTANCES`, () => {
-      expect(ROLE_PERMISSIONS[role]).toEqual([PERMISSIONS.VIEW_RUN_INSTANCES]);
+    it(`${role} has expected task execution permissions`, () => {
+      expect(ROLE_PERMISSIONS[role]).toEqual([
+        PERMISSIONS.VIEW_RUN_INSTANCES,
+        PERMISSIONS.VIEW_TASKS,
+        PERMISSIONS.SUBMIT_TASKS,
+        PERMISSIONS.START_TASK,
+        PERMISSIONS.COMPLETE_TASK,
+        PERMISSIONS.RESUBMIT_TASK,
+        PERMISSIONS.VIEW_DASHBOARD
+      ]);
     });
   }
 });

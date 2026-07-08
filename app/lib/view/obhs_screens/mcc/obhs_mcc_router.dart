@@ -16,18 +16,23 @@ class ObhsMccRouter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    switch (user.role) {
+    final role = user.role.toUpperCase().replaceAll(' ', '_');
+    switch (role) {
       case 'CM':
+      case 'COMPANY_MASTER':
+      case 'CONTRACTOR_MASTER':
         return CmDashboardScreen(user: user);
       case 'CA':
+      case 'CONTRACTOR_ADMIN':
         return CaDashboardScreen(user: user);
       case 'CTS':
         return CtsTrainViewScreen(user: user);
       case 'CS':
+      case 'CONTRACTOR_SUPERVISOR':
         return CsFieldExecutionScreen(user: user);
-      case 'Janitor':
+      case 'JANITOR':
         return JanitorHomeScreen(user: user);
-      case 'Attendant':
+      case 'ATTENDANT':
         return AttendantHomeScreen(user: user);
       default:
         return const Scaffold(
