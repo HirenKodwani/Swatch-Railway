@@ -84,8 +84,25 @@ if (process.env.SENDGRID_API_KEY) {
 
 const app = express();
 const port = process.env.PORT || 5000;
-app.use(cors());
+
+// ─── CORS Configuration ────────────────────────────────────────────────────
+// Allow all origins for Flutter APK & Web clients
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: false,
+}));
+
+// Handle all OPTIONS preflight requests globally
+app.options('*', cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+}));
+
 app.use(express.json());
+
 
 const db = admin.firestore();
 
