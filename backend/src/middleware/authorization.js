@@ -83,17 +83,59 @@ export function requirePlatformAccess(req, res, next) {
   next();
 }
 
-export function requireAreaAccess(req, res, next) {
+export function requireMasterAccess(minRole) {
+  return (req, res, next) => {
+    const role = (req.user?.role || '').toUpperCase();
+    const roleHierarchy = {
+      'SUPER_ADMIN': 100,
+      'COMPANY_MASTER': 90,
+      'RAILWAY_MASTER': 80,
+      'ADMIN': 70,
+      'RAILWAY_ADMIN': 60,
+      'RAILWAY_SUPERVISOR': 50,
+      'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40,
+      'STATION_MASTER': 55,
+      'AREA_MASTER': 48,
+      'PLATFORM_MASTER': 35,
+      'CTS': 30,
+      'WORKER': 10,
+      'RAILWAY_WORKER': 10,
+      'JANITOR': 10,
+      'ATTENDANT': 10,
+      'PASSENGER': 1
+    };
+
+    const userRoleLevel = roleHierarchy[role] || 0;
+    const requiredRoleLevel = roleHierarchy[minRole] || 0;
+
+    if (userRoleLevel < requiredRoleLevel) {
+      throw new ForbiddenError(`Access denied. Requires ${minRole} or higher role`);
+    }
+    next();
+  };
+}
+
+export function requireZoneMasterAccess(req, res, next) {
   const role = (req.user?.role || '').toUpperCase();
-  if (role === 'PLATFORM_MASTER' || role === 'WORKER' || role === 'CLEANING_STAFF' || role === 'JANITOR') {
-    const userAreaId = req.user.areaId;
-    if (!userAreaId) {
-      throw new ForbiddenError('No area assigned to your account');
-    }
-    const targetAreaId = req.params.areaId || req.body.areaId || req.query.areaId;
-    if (targetAreaId && targetAreaId !== userAreaId) {
-      throw new ForbiddenError('You can only access your assigned area');
-    }
+  if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_MASTER', 'RAILWAY_ADMIN', 'COMPANY_MASTER'].includes(role)) {
+    throw new ForbiddenError('Access denied. Requires zone master or higher role');
+  }
+  next();
+}
+
+export function requireAreaMasterAccess(req, res, next) {
+  const role = (req.user?.role || '').toUpperCase();
+  if (!['AREA_MASTER', 'STATION_MASTER', 'PLATFORM_MASTER'].includes(role)) {
+    throw new ForbiddenError('Access denied. Requires area master, station master, or platform master role');
+  }
+  next();
+}
+
+export function requirePlatformMasterAccess(req, res, next) {
+  const role = (req.user?.role || '').toUpperCase();
+  if (!['PLATFORM_MASTER', 'AREA_MASTER', 'STATION_MASTER'].includes(role)) {
+    throw new ForbiddenError('Access denied. Requires platform master, area master, or station master role');
   }
   next();
 }

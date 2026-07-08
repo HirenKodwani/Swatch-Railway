@@ -210,6 +210,21 @@ export const PERMISSIONS = Object.freeze({
   MANAGE_STATIONS: 'manage_stations',
   VIEW_STATIONS: 'view_stations',
 
+  // Platform Master
+  MANAGE_PLATFORMS: 'manage_platforms',
+  VIEW_PLATFORMS: 'view_platforms',
+
+  // Frequency Configuration
+  MANAGE_FREQUENCIES: 'manage_frequencies',
+  VIEW_FREQUENCIES: 'view_frequencies',
+  GENERATE_TASKS: 'generate_tasks',
+  CALCULATE_FREQUENCY: 'calculate_frequency',
+
+  // Master Access
+  STATION_MASTER_ACCESS: 'station_master_access',
+  AREA_MASTER_ACCESS: 'area_master_access',
+  PLATFORM_MASTER_ACCESS: 'platform_master_access',
+
   // Station Archives
   MANAGE_ARCHIVES: 'manage_archives',
   VIEW_ARCHIVES: 'view_archives',
