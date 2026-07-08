@@ -73,7 +73,7 @@ class _PremisesStatusCardState extends State<PremisesStatusCard> {
                   color: statusInfo['color'],
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: user!.userType != 'railway'
+                child: user?.userType != 'railway'
                     ? Text(
                   _getContractorStatusText(widget.form.status),
                   textAlign: TextAlign.center,
@@ -159,7 +159,7 @@ class _PremisesStatusCardState extends State<PremisesStatusCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              user!.userType == 'contractor'
+              user?.userType == 'contractor'
                   ? _buildContractorButtons(context)
                   : _buildRailwayButtons(context)
             ],

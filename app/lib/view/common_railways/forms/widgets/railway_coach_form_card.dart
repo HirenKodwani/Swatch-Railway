@@ -70,7 +70,7 @@ class _RailwayCoachFormCardState extends State<RailwayCoachFormCard> {
                   color: statusInfo['color'],
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: user!.userType != 'railway'
+                child: user?.userType != 'railway'
                     ? Text(
                   _getContractorStatusText(widget.form.status),
                   textAlign: TextAlign.center,

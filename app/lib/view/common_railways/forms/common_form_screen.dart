@@ -1057,6 +1057,9 @@ class _CommonFormScreenState extends State<CommonFormScreen> with TickerProvider
 
   Widget _buildFiltersAlternative() {
     final user = Provider.of<AuthProvider>(context).currentUser;
+    if (user == null) {
+      return const SizedBox.shrink();
+    }
 
     return Container(
       decoration: BoxDecoration(

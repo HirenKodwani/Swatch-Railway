@@ -207,6 +207,13 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
+    if (user == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
     final filteredActiveTrains = _applyFilters(activeTrains);
     final filteredInactiveTrains = _applyFilters(inactiveTrains);
