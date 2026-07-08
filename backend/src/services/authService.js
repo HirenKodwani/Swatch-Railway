@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db, admin } from '../database/index.js';
 import { AppError, AuthenticationError, ForbiddenError, NotFoundError, ValidationError } from '../errors/index.js';
@@ -117,13 +118,16 @@ class AuthService {
     }
     const normalizedEmail = email.trim().toLowerCase();
     const usersRef = db.collection('users');
-    const snapshot = await usersRef.where('email', '==', normalizedEmail).limit(1).get();
+    const snapshot = await usersRef.where('email', '==', normalizedEmail).orderBy('createdAt', 'desc').limit(1).get();
     if (snapshot.empty) {
       logger.info('Auth', `(Login) Failed login: Email not found ${normalizedEmail}`);
       throw new AuthenticationError("Invalid credentials.");
     }
     const userData = snapshot.docs[0].data();
-    if (userData.password !== password) {
+    const storedPassword = userData.password || '';
+    const isBcrypt = storedPassword.startsWith('$2');
+    const passwordValid = isBcrypt ? bcrypt.compareSync(password, storedPassword) : storedPassword === password;
+    if (!passwordValid) {
       logger.info('Auth', `(Login) Failed login: Password mismatch for ${normalizedEmail}`);
       throw new AuthenticationError("Invalid credentials.");
     }
@@ -182,7 +186,10 @@ class AuthService {
       throw new AuthenticationError("Invalid credentials.");
     }
     const userData = snapshot.docs[0].data();
-    if (userData.password !== password) {
+    const storedPassword = userData.password || '';
+    const isBcrypt = storedPassword.startsWith('$2');
+    const passwordValid = isBcrypt ? bcrypt.compareSync(password, storedPassword) : storedPassword === password;
+    if (!passwordValid) {
       logger.info('Auth', `(Login) Failed login: Password mismatch for mobile ${mobile}`);
       throw new AuthenticationError("Invalid credentials.");
     }
