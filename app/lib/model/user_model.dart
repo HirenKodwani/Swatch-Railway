@@ -9,6 +9,8 @@ class UserModel {
   final String? zone;
   final String? division;
   final String? depot;
+  final String? stationId;
+  final String? areaId;
   final String? entityId;
   final Map<String, dynamic>? entityDetails;
   final String? status;
@@ -27,6 +29,8 @@ class UserModel {
     this.zone,
     this.division,
     this.depot,
+    this.stationId,
+    this.areaId,
     this.entityId,
     this.entityDetails,
     this.status,
@@ -57,6 +61,8 @@ class UserModel {
         return 'Contractor Supervisor';
       case 'STATION_MASTER':
         return 'Station Master';
+      case 'AREA_MASTER':
+        return 'Area Master';
       case 'PLATFORM_MASTER':
         return 'Platform Master';
       case 'CTS':
@@ -90,6 +96,8 @@ class UserModel {
       zone: user['zone'],
       division: user['division'],
       depot: user['depot'],
+      stationId: user['stationId'],
+      areaId: user['areaId'],
       entityId: user['entityId'],
       entityDetails: user['entityDetails'] is Map<String, dynamic>
           ? user['entityDetails']
@@ -113,6 +121,8 @@ class UserModel {
       zone: json['zone'],
       division: json['division'],
       depot: json['depot'],
+      stationId: json['stationId'],
+      areaId: json['areaId'],
       entityId: json['entityId'],
       entityDetails: json['entityDetails'] is Map<String, dynamic>
           ? json['entityDetails']
@@ -142,6 +152,8 @@ class UserModel {
       'zone': zone,
       'division': division,
       'depot': depot,
+      'stationId': stationId,
+      'areaId': areaId,
       'entityId': entityId,
       'entityDetails': entityDetails,
       'status': status,
