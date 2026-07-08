@@ -376,7 +376,7 @@ class _WorkerCheckinScreenState extends State<WorkerCheckinScreen> {
           'photoUrl': _selfieBase64,
           'latitude': _gpsData?['lat'],
           'longitude': _gpsData?['lng'],
-          'workerName': user.fullName ?? user.name ?? '',
+          'workerName': user.fullName ?? '',
         },
         parser: (d) => d,
       );
