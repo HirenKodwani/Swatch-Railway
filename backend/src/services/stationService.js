@@ -1,0 +1,114 @@
+import { db } from '../database/index.js';
+import { NotFoundError, ValidationError, ConflictError } from '../errors/index.js';
+
+class StationService {
+  async getStations(query = {}) {
+    const { zone, division, category, active, userRole, userDivision, limit } = query;
+    let q = db.collection('stations');
+    const role = (userRole || '').toLowerCase();
+
+    if (!role.includes('master') && userDivision) {
+      q = q.where('division', '==', userDivision);
+    }
+    if (division) q = q.where('division', '==', division);
+    if (zone) q = q.where('zone', '==', zone);
+    if (category) q = q.where('category', '==', category);
+    if (active !== undefined) q = q.where('active', '==', active === 'true');
+
+    const pageSize = Math.min(200, Math.max(1, parseInt(limit) || 200));
+    const snapped = await q.limit(pageSize).get();
+
+    const stations = [];
+    snapped.forEach(doc => stations.push({ id: doc.id, ...doc.data() }));
+    stations.sort((a, b) => (a.stationName || '').localeCompare(b.stationName || ''));
+
+    return { count: stations.length, stations };
+  }
+
+  async getStationById(uid) {
+    const doc = await db.collection('stations').doc(uid).get();
+    if (!doc.exists) throw new NotFoundError('Station not found');
+    return { id: doc.id, ...doc.data() };
+  }
+
+  async searchStations(queryStr) {
+    if (!queryStr || queryStr.length < 2) throw new ValidationError('Search query must be at least 2 characters');
+    const keyword = queryStr.toLowerCase();
+
+    const keywordUpper = keyword.toUpperCase();
+    const keywordLower = keyword.toLowerCase();
+
+    const [codeSnap, namePrefixSnap, fullSnap] = await Promise.all([
+      db.collection('stations').where('stationCode', '>=', keywordUpper).where('stationCode', '<=', keywordUpper + '\uf8ff').limit(20).get(),
+      db.collection('stations').where('stationName', '>=', keyword).where('stationName', '<=', keyword + '\uf8ff').limit(20).get(),
+      db.collection('stations').limit(200).get(),
+    ]);
+
+    const stationsMap = new Map();
+    codeSnap.forEach(doc => stationsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+    namePrefixSnap.forEach(doc => {
+      if (!stationsMap.has(doc.id)) stationsMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
+    fullSnap.forEach(doc => {
+      if (!stationsMap.has(doc.id) && (doc.data().stationName || '').toLowerCase().includes(keywordLower)) {
+        stationsMap.set(doc.id, { id: doc.id, ...doc.data() });
+      }
+    });
+
+    const stations = Array.from(stationsMap.values()).slice(0, 20);
+    return { count: stations.length, stations };
+  }
+
+  async getStationsByDivision(division) {
+    if (!division) throw new ValidationError('Division is required');
+    const snapshot = await db.collection('stations').where('division', '==', division).orderBy('stationName', 'asc').limit(200).get();
+    const stations = [];
+    snapshot.forEach(doc => stations.push({ id: doc.id, ...doc.data() }));
+    return { count: stations.length, stations };
+  }
+
+  async createStation(userData, body) {
+    const { stationCode, stationName, zone, division, category, stationType, active, latitude, longitude, address } = body;
+    if (!stationCode || !stationName || !zone || !division) {
+      throw new ValidationError('stationCode, stationName, zone, division are required');
+    }
+    const existing = await db.collection('stations').where('stationCode', '==', stationCode).limit(1).get();
+    if (!existing.empty) throw new ConflictError(`Station with code ${stationCode} already exists`);
+    const ref = db.collection('stations').doc();
+    const data = {
+      uid: ref.id, stationCode, stationName, zone, division,
+      category: category || 'c', stationType: stationType || 'regular',
+      active: active !== false,
+      latitude: latitude || 0, longitude: longitude || 0, address: address || '',
+      createdBy: userData.uid,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await ref.set(data);
+    return { message: 'Station created', uid: ref.id, station: data };
+  }
+
+  async updateStation(uid, userData, body) {
+    const ref = db.collection('stations').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station not found');
+    const updates = {};
+    const allowedStationFields = ['stationName', 'category', 'stationType', 'active', 'latitude', 'longitude', 'address', 'zone', 'division'];
+    for (const key of allowedStationFields) {
+      if (body[key] !== undefined) updates[key] = body[key];
+    }
+    updates.updatedAt = new Date().toISOString();
+    updates.updatedBy = userData.uid;
+    await ref.update(updates);
+    return { message: 'Station updated' };
+  }
+
+  async deleteStation(uid) {
+    const ref = db.collection('stations').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station not found');
+    await ref.update({ active: false, deletedAt: new Date().toISOString() });
+    return { message: 'Station deactivated' };
+  }
+}
+
+export const stationService = new StationService();

@@ -1,0 +1,232 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/helper/api_error_handler.dart';
+
+class AreaConfigScreen extends StatefulWidget {
+  final String stationId;
+  final String stationName;
+  final String? platformId;
+
+  const AreaConfigScreen({
+    super.key,
+    required this.stationId,
+    required this.stationName,
+    this.platformId,
+  });
+
+  @override
+  State<AreaConfigScreen> createState() => _AreaConfigScreenState();
+}
+
+class _AreaConfigScreenState extends State<AreaConfigScreen> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _areas = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAreas();
+  }
+
+  Future<void> _loadAreas() async {
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final uri = Uri.parse('${ApiService.baseUrl}/api/areas').replace(queryParameters: {
+        'stationId': widget.stationId,
+        if (widget.platformId != null) 'platformId': widget.platformId,
+      });
+
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final list = body['data'] as List<dynamic>? ?? body['areas'] as List<dynamic>? ?? [];
+        setState(() {
+          _areas = list.cast<Map<String, dynamic>>();
+          _isLoading = false;
+        });
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString().contains('AUTH_ERROR') ? 'Session expired' : e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _showConfigDialog({Map<String, dynamic>? area}) async {
+    final nameCtrl = TextEditingController(text: area?['areaName'] ?? '');
+    final codeCtrl = TextEditingController(text: area?['areaCode'] ?? '');
+    final freqCtrl = TextEditingController(text: area?['cleaningFrequency'] ?? area?['frequency'] ?? 'daily');
+    final shiftCtrl = TextEditingController(text: area?['defaultShift'] ?? 'morning');
+    final workersCtrl = TextEditingController(text: (area?['defaultWorkers'] ?? 1).toString());
+    final priorityCtrl = TextEditingController(text: (area?['priority'] ?? 3).toString());
+    List<String> times = (area?['frequencyTimes'] as List<dynamic>?)?.cast<String>() ?? ['08:00'];
+    bool isEditing = area != null;
+    String areaId = area?['uid'] ?? area?['id'] ?? '';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEditing ? 'Configure Area' : 'Add Area'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Area Name')),
+                TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Area Code', hintText: 'e.g. PF1-WAIT')),
+                TextField(controller: freqCtrl, decoration: const InputDecoration(labelText: 'Frequency'),),
+                Text('Frequency Times:'),
+                Wrap(
+                  spacing: 4,
+                  children: times.map((t) => Chip(
+                    label: Text(t),
+                    onDeleted: () { setDialogState(() => times.remove(t)); },
+                  )).toList(),
+                ),
+                TextField(
+                  decoration: const InputDecoration(labelText: 'Add Time (HH:MM)'),
+                  onSubmitted: (v) { if (v.isNotEmpty) setDialogState(() => times.add(v)); },
+                ),
+                TextField(controller: shiftCtrl, decoration: const InputDecoration(labelText: 'Default Shift')),
+                TextField(controller: workersCtrl, decoration: const InputDecoration(labelText: 'Default Workers'), keyboardType: TextInputType.number),
+                TextField(controller: priorityCtrl, decoration: const InputDecoration(labelText: 'Priority (1-5)'), keyboardType: TextInputType.number),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final data = {
+                  'areaName': nameCtrl.text,
+                  'areaCode': codeCtrl.text,
+                  'stationId': widget.stationId,
+                  'platformId': widget.platformId,
+                  'cleaningFrequency': freqCtrl.text,
+                  'frequencyTimes': times,
+                  'defaultShift': shiftCtrl.text,
+                  'defaultWorkers': int.tryParse(workersCtrl.text) ?? 1,
+                  'priority': int.tryParse(priorityCtrl.text) ?? 3,
+                };
+
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  final token = prefs.getString('token');
+                  if (token == null) throw Exception('AUTH_ERROR');
+
+                  final url = isEditing
+                      ? '${ApiService.baseUrl}/api/areas/$areaId/configure'
+                      : '${ApiService.baseUrl}/api/areas';
+                  final response = isEditing
+                      ? await http.put(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data))
+                      : await http.post(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data));
+
+                  if (response.statusCode == 200 || response.statusCode == 201) {
+                    Navigator.pop(ctx);
+                    _loadAreas();
+                  } else {
+                    throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              child: Text(isEditing ? 'Update' : 'Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Areas - ${widget.stationName}')),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () => _showConfigDialog(),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text('Error: $_error'))
+              : _areas.isEmpty
+                  ? const Center(child: Text('No areas configured'))
+                  : RefreshIndicator(
+                      onRefresh: _loadAreas,
+                      child: ListView.builder(
+                        itemCount: _areas.length,
+                        itemBuilder: (ctx, i) {
+                          final area = _areas[i];
+                          final freq = area['cleaningFrequency'] ?? area['frequency'] ?? 'daily';
+                          final times = (area['frequencyTimes'] as List<dynamic>?)?.join(', ') ?? '08:00';
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: ListTile(
+                              title: Text(area['areaName'] ?? area['name'] ?? 'Unnamed Area'),
+                              subtitle: Text('Code: ${area['areaCode'] ?? '-'} | Freq: $freq ($times) | Shift: ${area['defaultShift'] ?? 'morning'}'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20),
+                                    onPressed: () => _showConfigDialog(area: area),
+                                  ),
+                                  if (area['qrCode'] != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.qr_code, size: 20),
+                                      onPressed: () => _showQRCode(area['qrCode']),
+                                    ),
+                                ],
+                              ),
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Area: ${area['areaName'] ?? area['name']} | Frequency: $freq | Workers: ${area['defaultWorkers'] ?? 1}')),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+    );
+  }
+
+  void _showQRCode(String qrCode) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Area QR Code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.qr_code, size: 200),
+            const SizedBox(height: 16),
+            SelectableText(qrCode, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+}

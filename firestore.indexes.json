@@ -1,0 +1,268 @@
+{
+  "indexes": [
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "entityId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "division", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "division", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "areaId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "pestControlRecords", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "pestControlRecords", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "pestControlRecords", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "pestType", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "pestControlRecords", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "machineDeployments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "machineDeployments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "garbageDisposalRecords", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_feedback", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_feedback", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "category", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_feedback", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "category", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_feedback", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "isNegative", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "billingReports", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "entityId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "billingReports", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "division", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "billingReports", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "zone", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "inspections", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "inspections", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "inspectionType", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "inspections", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "inspections", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "inspectorId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "inspections", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "complaints", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "complaints", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_daily_activities", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_daily_activities", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "areaId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_daily_activities", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "shift", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_daily_activities", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "janitorId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workerId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "supervisorId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "division", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "entityId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "StationCleaningRuns", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "shift", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stationCleaningForms", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "execution_plans", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "contractId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "execution_plans", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "execution_plans", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "execution_logs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "execution_logs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "daily_scorecards", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "daily_scorecards", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "supervisor_daily_logs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "supervisor_daily_logs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "shift", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "supervisor_daily_logs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "supervisorId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_attendance", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_attendance", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workerId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_archives", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "archivedAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_archives", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "archiveType", "order": "ASCENDING" },
+      { "fieldPath": "archivedAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_reports", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "generatedAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_billing_packs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "contractId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_billing_packs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "station_billing_packs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "stationId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "stations", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "division", "order": "ASCENDING" },
+      { "fieldPath": "stationName", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "stations", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "zone", "order": "ASCENDING" },
+      { "fieldPath": "stationName", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "stations", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" },
+      { "fieldPath": "stationName", "order": "ASCENDING" }
+    ]}
+  ],
+  "fieldOverrides": []
+}

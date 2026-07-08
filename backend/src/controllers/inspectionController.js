@@ -1,0 +1,22 @@
+import { inspectionService } from '../services/inspectionService.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+
+export const create = asyncHandler(async (req, res) => res.status(201).json(await inspectionService.createInspection(req.user, req.body)));
+export const list = asyncHandler(async (req, res) => res.json(await inspectionService.getInspections(req.query)));
+export const getById = asyncHandler(async (req, res) => res.json(await inspectionService.getInspectionById(req.params.uid)));
+export const update = asyncHandler(async (req, res) => res.json(await inspectionService.updateInspection(req.params.uid, req.body)));
+export const remove = asyncHandler(async (req, res) => res.json(await inspectionService.deleteInspection(req.params.uid)));
+export const start = asyncHandler(async (req, res) => res.json(await inspectionService.startInspection(req.params.uid, req.user)));
+export const submitRatings = asyncHandler(async (req, res) => res.json(await inspectionService.submitRatings(req.params.uid, req.user, req.body)));
+export const approve = asyncHandler(async (req, res) => res.json(await inspectionService.approveInspection(req.params.uid, req.user, req.body)));
+export const reject = asyncHandler(async (req, res) => res.json(await inspectionService.rejectInspection(req.params.uid, req.user, req.body)));
+export const resubmit = asyncHandler(async (req, res) => res.json(await inspectionService.resubmitInspection(req.params.uid, req.user, req.body)));
+export const scoreSummary = asyncHandler(async (req, res) => res.json(await inspectionService.getScoreSummary(req.params.stationId)));
+export const addDeficiency = asyncHandler(async (req, res) => res.json(await inspectionService.addDeficiency(req.params.uid, req.body, req.user)));
+export const closeDeficiency = asyncHandler(async (req, res) => res.json(await inspectionService.closeDeficiency(req.params.uid, req.params.defId, req.body, req.user)));
+export const verifyDeficiency = asyncHandler(async (req, res) => res.json(await inspectionService.verifyDeficiencyClosure(req.params.uid, req.params.defId, req.user)));
+export const createTemplate = asyncHandler(async (req, res) => res.status(201).json(await inspectionService.createTemplate(req.user, req.body)));
+export const listTemplates = asyncHandler(async (req, res) => res.json(await inspectionService.listTemplates()));
+export const getTemplateById = asyncHandler(async (req, res) => res.json(await inspectionService.getTemplateById(req.params.uid)));
+export const updateTemplate = asyncHandler(async (req, res) => res.json(await inspectionService.updateTemplate(req.params.uid, req.body)));
+export const deleteTemplate = asyncHandler(async (req, res) => res.json(await inspectionService.deleteTemplate(req.params.uid)));

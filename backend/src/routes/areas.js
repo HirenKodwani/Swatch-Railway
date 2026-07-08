@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import { verifyToken } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/authorization.js';
+import { PERMISSIONS } from '../permissions/roles.js';
+import * as areaController from '../controllers/areaController.js';
+
+const router = Router();
+
+router.post('/api/areas', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), areaController.create);
+router.get('/api/areas', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), areaController.list);
+router.get('/api/areas/by-station/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), areaController.getByStation);
+router.get('/api/areas/by-platform/:stationId/:platformId', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), areaController.getByPlatform);
+router.get('/api/areas/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), areaController.getById);
+router.put('/api/areas/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), areaController.update);
+router.delete('/api/areas/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), areaController.remove);
+
+export default router;

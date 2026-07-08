@@ -1,0 +1,472 @@
+import 'package:crm_train/model/station_cleaning_models.dart';
+import 'package:crm_train/repositories/complaint_repository.dart';
+import 'package:crm_train/utills/app_colors.dart';
+import 'package:flutter/material.dart';
+
+class ComplaintFormScreen extends StatefulWidget {
+  final Complaint? complaint;
+  final String stationId;
+  final String stationName;
+  const ComplaintFormScreen({super.key, this.complaint, required this.stationId, required this.stationName});
+
+  @override
+  State<ComplaintFormScreen> createState() => _ComplaintFormScreenState();
+}
+
+class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+
+  late TextEditingController _descriptionCtrl;
+  late TextEditingController _photoUrlCtrl;
+  late TextEditingController _assigneeCtrl;
+  late TextEditingController _resolutionCtrl;
+  late TextEditingController _resolutionPhotoCtrl;
+  late TextEditingController _reopenReasonCtrl;
+  late TextEditingController _escalateToCtrl;
+
+  String _category = 'Cleanliness';
+
+  bool get isEdit => widget.complaint != null;
+  String get _currentStatus => widget.complaint?.status ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.complaint;
+    _descriptionCtrl = TextEditingController(text: r?.description ?? '');
+    _photoUrlCtrl = TextEditingController();
+    _assigneeCtrl = TextEditingController();
+    _resolutionCtrl = TextEditingController();
+    _resolutionPhotoCtrl = TextEditingController();
+    _reopenReasonCtrl = TextEditingController();
+    _escalateToCtrl = TextEditingController();
+
+    if (r != null) {
+      _category = r.category;
+    }
+  }
+
+  @override
+  void dispose() {
+    _descriptionCtrl.dispose();
+    _photoUrlCtrl.dispose();
+    _assigneeCtrl.dispose();
+    _resolutionCtrl.dispose();
+    _resolutionPhotoCtrl.dispose();
+    _reopenReasonCtrl.dispose();
+    _escalateToCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createComplaint() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      await ComplaintRepository.create({
+        'stationId': widget.stationId,
+        'category': _category,
+        'description': _descriptionCtrl.text.trim(),
+        'photoUrl': _photoUrlCtrl.text.trim(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Complaint created'), backgroundColor: kSuccessGreen),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _assign() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Assign Complaint'),
+        content: TextField(
+          controller: _assigneeCtrl,
+          decoration: const InputDecoration(labelText: 'Assignee ID', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              if (_assigneeCtrl.text.trim().isEmpty) return;
+              try {
+                await ComplaintRepository.assign(widget.complaint!.uid, _assigneeCtrl.text.trim());
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Complaint assigned'), backgroundColor: kSuccessGreen),
+                  );
+                  Navigator.pop(context, true);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+                  );
+                }
+              }
+            },
+            child: const Text('Assign'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startProgress() async {
+    setState(() => _isLoading = true);
+    try {
+      await ComplaintRepository.startProgress(widget.complaint!.uid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Progress started'), backgroundColor: kSuccessGreen),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _resolve() {
+    _resolutionCtrl.text = widget.complaint?.resolution ?? '';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Resolve Complaint'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _resolutionCtrl,
+                decoration: const InputDecoration(labelText: 'Resolution *', border: OutlineInputBorder()),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _resolutionPhotoCtrl,
+                decoration: const InputDecoration(labelText: 'Photo URL (optional)', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              if (_resolutionCtrl.text.trim().isEmpty) return;
+              try {
+                await ComplaintRepository.resolve(
+                  widget.complaint!.uid,
+                  _resolutionCtrl.text.trim(),
+                  _resolutionPhotoCtrl.text.trim().isNotEmpty ? _resolutionPhotoCtrl.text.trim() : null,
+                );
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Complaint resolved'), backgroundColor: kSuccessGreen),
+                  );
+                  Navigator.pop(context, true);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+                  );
+                }
+              }
+            },
+            child: const Text('Resolve'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _closeComplaint() async {
+    setState(() => _isLoading = true);
+    try {
+      await ComplaintRepository.close(widget.complaint!.uid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Complaint closed'), backgroundColor: kSuccessGreen),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _reopen() {
+    _reopenReasonCtrl.clear();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reopen Complaint'),
+        content: TextField(
+          controller: _reopenReasonCtrl,
+          decoration: const InputDecoration(labelText: 'Reason *', border: OutlineInputBorder()),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              if (_reopenReasonCtrl.text.trim().isEmpty) return;
+              try {
+                await ComplaintRepository.reopen(widget.complaint!.uid, _reopenReasonCtrl.text.trim());
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Complaint reopened'), backgroundColor: kWarningOrange),
+                  );
+                  Navigator.pop(context, true);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+                  );
+                }
+              }
+            },
+            child: const Text('Reopen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _escalate() {
+    _escalateToCtrl.clear();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Escalate Complaint'),
+        content: TextField(
+          controller: _escalateToCtrl,
+          decoration: const InputDecoration(labelText: 'Escalate To *', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              if (_escalateToCtrl.text.trim().isEmpty) return;
+              try {
+                await ComplaintRepository.escalate(widget.complaint!.uid, _escalateToCtrl.text.trim());
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Complaint escalated'), backgroundColor: kWarningOrange),
+                  );
+                  Navigator.pop(context, true);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+                  );
+                }
+              }
+            },
+            child: const Text('Escalate'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.complaint;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEdit ? 'Complaint Detail' : 'New Complaint', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: kRailwayBlue,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: _category,
+                        decoration: const InputDecoration(labelText: 'Category *', border: OutlineInputBorder()),
+                        items: const [
+                          DropdownMenuItem(value: 'Cleanliness', child: Text('Cleanliness')),
+                          DropdownMenuItem(value: 'Water', child: Text('Water')),
+                          DropdownMenuItem(value: 'Toilet', child: Text('Toilet')),
+                          DropdownMenuItem(value: 'Pest', child: Text('Pest')),
+                          DropdownMenuItem(value: 'Machine', child: Text('Machine')),
+                          DropdownMenuItem(value: 'Other', child: Text('Other')),
+                        ],
+                        onChanged: isEdit ? null : (v) {
+                          if (v != null) setState(() => _category = v);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _descriptionCtrl,
+                        decoration: const InputDecoration(labelText: 'Description *', border: OutlineInputBorder()),
+                        maxLines: 4,
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      if (!isEdit) ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _photoUrlCtrl,
+                          decoration: const InputDecoration(labelText: 'Photo URL (optional)', border: OutlineInputBorder()),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (r != null && r.slaDeadline != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: r.slaBreached ? kErrorRed.withOpacity(0.1) : kSuccessGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: r.slaBreached ? kErrorRed : kSuccessGreen),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(r.slaBreached ? Icons.warning : Icons.access_time,
+                          color: r.slaBreached ? kErrorRed : kSuccessGreen),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          r.slaBreached ? 'SLA BREACHED - Deadline: ${r.slaDeadline}' : 'SLA Deadline: ${r.slaDeadline}',
+                          style: TextStyle(
+                            color: r.slaBreached ? kErrorRed : kSuccessGreen,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (isEdit && (_currentStatus == 'reported' || _currentStatus == 'assigned' ||
+                  _currentStatus == 'inProgress')) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _escalate,
+                    icon: const Icon(Icons.arrow_upward),
+                    label: const Text('Escalate'),
+                    style: ElevatedButton.styleFrom(backgroundColor: kWarningOrange, foregroundColor: Colors.white),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                if (!isEdit)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _createComplaint,
+                      style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
+                      child: const Text('Create Complaint'),
+                    ),
+                  ),
+                if (isEdit && _currentStatus == 'reported') ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _assign,
+                      style: ElevatedButton.styleFrom(backgroundColor: kWarningOrange, foregroundColor: Colors.white),
+                      child: const Text('Assign'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _startProgress,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                      child: const Text('Start Progress'),
+                    ),
+                  ),
+                ],
+                if (isEdit && _currentStatus == 'inProgress')
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _resolve,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                      child: const Text('Resolve'),
+                    ),
+                  ),
+                if (isEdit && _currentStatus == 'resolved')
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _closeComplaint,
+                      style: ElevatedButton.styleFrom(backgroundColor: kSuccessGreen, foregroundColor: Colors.white),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                if (isEdit && _currentStatus == 'closed')
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _reopen,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                      child: const Text('Reopen'),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
