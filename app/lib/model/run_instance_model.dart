@@ -204,8 +204,21 @@ class CoachAssignment {
   });
 
   factory CoachAssignment.fromJson(Map<String, dynamic> json) {
+    // coachPosition may come as int, String number, or label like "S1"
+    int parseCoachPosition(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is String) {
+        final parsed = int.tryParse(v);
+        if (parsed != null) return parsed;
+        // e.g. "S1" -> extract digits -> 1
+        final digits = RegExp(r'\d+').firstMatch(v)?.group(0);
+        return digits != null ? int.tryParse(digits) ?? 0 : 0;
+      }
+      return 0;
+    }
     return CoachAssignment(
-      coachPosition: json['coachPosition'] as int? ?? 0,
+      coachPosition: parseCoachPosition(json['coachPosition']),
       coachType: json['coachType'] as String? ?? '',
       janitorId: (json['janitorId'] ?? json['workerId']) as String?,
       janitorName: (json['janitorName'] ?? json['workerName']) as String?,
