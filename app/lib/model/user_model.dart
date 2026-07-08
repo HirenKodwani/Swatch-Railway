@@ -10,6 +10,7 @@ class UserModel {
   final String? division;
   final String? depot;
   final String? stationId;
+  final String? platformId;
   final String? areaId;
   final String? entityId;
   final Map<String, dynamic>? entityDetails;
@@ -30,6 +31,7 @@ class UserModel {
     this.division,
     this.depot,
     this.stationId,
+    this.platformId,
     this.areaId,
     this.entityId,
     this.entityDetails,
@@ -97,6 +99,7 @@ class UserModel {
       division: user['division'],
       depot: user['depot'],
       stationId: user['stationId'],
+      platformId: user['platformId'],
       areaId: user['areaId'],
       entityId: user['entityId'],
       entityDetails: user['entityDetails'] is Map<String, dynamic>
@@ -122,6 +125,7 @@ class UserModel {
       division: json['division'],
       depot: json['depot'],
       stationId: json['stationId'],
+      platformId: json['platformId'],
       areaId: json['areaId'],
       entityId: json['entityId'],
       entityDetails: json['entityDetails'] is Map<String, dynamic>
@@ -153,6 +157,7 @@ class UserModel {
       'division': division,
       'depot': depot,
       'stationId': stationId,
+      'platformId': platformId,
       'areaId': areaId,
       'entityId': entityId,
       'entityDetails': entityDetails,

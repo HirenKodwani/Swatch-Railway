@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/providers/auth_provider.dart';
+import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'area_form_screen.dart';
 
 class AreaListScreen extends StatefulWidget {
-  const AreaListScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+
+  const AreaListScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<AreaListScreen> createState() => _AreaListScreenState();
@@ -15,7 +22,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
   List<Station> _stations = [];
   List<StationArea> _areas = [];
   Station? _selectedStation;
+  List<Platform> _platforms = [];
+  Platform? _selectedPlatform;
   bool _isLoadingStations = true;
+  bool _isLoadingPlatforms = false;
   bool _isLoadingAreas = false;
   String? _error;
 
@@ -28,15 +38,39 @@ class _AreaListScreenState extends State<AreaListScreen> {
   Future<void> _loadStations() async {
     setState(() => _isLoadingStations = true);
     try {
-      _stations = await ApiService.getStations(active: true);
+      if (widget.stationId != null) {
+        _stations = await ApiService.getStations(active: true);
+        _stations = _stations.where((s) => s.uid == widget.stationId).toList();
+        _selectedStation = _stations.isNotEmpty ? _stations.first : null;
+      } else {
+        final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
+        final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+        _stations = await ApiService.getStations(active: true);
+        if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
+          _stations = _stations.where((s) => s.uid == user?.stationId).toList();
+        }
+      }
       if (_stations.isNotEmpty) {
-        _selectedStation = _stations.first;
-        _loadAreas();
+        _selectedStation ??= _stations.first;
+        await _loadPlatforms();
+        await _loadAreas();
       }
     } catch (e) {
       _error = e.toString();
     } finally {
       if (mounted) setState(() => _isLoadingStations = false);
+    }
+  }
+
+  Future<void> _loadPlatforms() async {
+    if (_selectedStation == null) return;
+    setState(() => _isLoadingPlatforms = true);
+    try {
+      _platforms = await PlatformRepository.getByStation(_selectedStation!.uid ?? '');
+    } catch (_) {
+      // platforms may not exist yet
+    } finally {
+      if (mounted) setState(() => _isLoadingPlatforms = false);
     }
   }
 
@@ -135,6 +169,28 @@ class _AreaListScreenState extends State<AreaListScreen> {
                         },
                       ),
                     ),
+                    if (_platforms.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        color: Colors.white,
+                        child: DropdownButtonFormField<Platform>(
+                          value: _selectedPlatform,
+                          decoration: const InputDecoration(
+                            labelText: 'Platform (optional)',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.view_quilt),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('All Platforms')),
+                            ..._platforms.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName))),
+                          ],
+                          onChanged: (v) {
+                            setState(() => _selectedPlatform = v);
+                            _loadAreas();
+                          },
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: _isLoadingAreas

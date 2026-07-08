@@ -36,6 +36,7 @@ import '../common_railways/station_management/area_performance_dashboard.dart';
 import '../common_railways/station_management/area_comparison_screen.dart';
 import '../common_railways/station_management/area_history_screen.dart';
 import '../common_railways/station_management/area_assignment_screen.dart';
+import '../common_railways/station_management/platform_list_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
   final String stationId;
@@ -62,10 +63,10 @@ class StationCleaningHubScreen extends StatelessWidget {
       return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25, 28, 30};
     }
     if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33};
+      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};
     }
     if (r == 'PLATFORM_MASTER') {
-      return {0, 1, 2, 19, 20, 21, 22, 24, 25, 27, 29};
+      return {0, 1, 2, 19, 20, 21, 22, 24, 25, 27, 29, 34};
     }
     if (r == 'CONTRACTOR_SUPERVISOR') {
       return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20, 24, 25, 28, 30};
@@ -116,6 +117,7 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.compare_arrows, 'Area\nCompare', Colors.teal, () => _openAreaComparison(context)),// 31
       _moduleCard(context, Icons.history, 'Area\nHistory', Colors.brown, () => _openAreaHistory(context)),         // 32
       _moduleCard(context, Icons.people, 'Area\nAssign', Colors.blueGrey, () => _openAreaAssignment(context)),     // 33
+      _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 34
     ];
 
     final cards = <Widget>[];
@@ -272,7 +274,11 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openAreaConfig(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaConfigScreen(stationId: stationId, stationName: stationName)));
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    final role = user?.role ?? '';
+    final r = role.toUpperCase().replaceAll(' ', '_');
+    final platformId = r == 'PLATFORM_MASTER' ? user?.platformId : null;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaConfigScreen(stationId: stationId, stationName: stationName, platformId: platformId)));
   }
 
   void _openWorkerTasks(BuildContext context) {
@@ -293,7 +299,19 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openHierDashboard(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const HierarchicalDashboardScreen()));
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    final role = user?.role ?? '';
+    final r = role.toUpperCase().replaceAll(' ', '_');
+    String? level;
+    String? levelId;
+    if (r == 'PLATFORM_MASTER') {
+      level = 'platform';
+      levelId = user?.platformId;
+    } else if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
+      level = 'station';
+      levelId = stationId;
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => HierarchicalDashboardScreen(initialLevel: level, levelId: levelId)));
   }
 
   void _openQuickStart(BuildContext context) {
@@ -383,5 +401,9 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openAreaAssignment(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => AreaAssignmentScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openPlatforms(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformListScreen(stationId: stationId, stationName: stationName)));
   }
 }

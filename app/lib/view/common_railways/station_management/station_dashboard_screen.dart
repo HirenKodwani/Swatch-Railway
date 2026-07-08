@@ -130,7 +130,7 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
         List<Station> all = data;
         if (role == 'Railway Supervisor') {
           all = all.where((s) => s.division == user?.division).toList();
-        } else if (role == 'Station Master' || role == 'Area Master') {
+        } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
           all = all.where((s) => s.uid == user?.stationId).toList();
         }
         setState(() {
@@ -156,7 +156,7 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
           all = all.where((f) => f.division == user?.division).toList();
         } else if (role == 'Contractor' || role == 'Contractor Master') {
           all = all.where((f) => f.submittedBy == user?.uid).toList();
-        } else if (role == 'Station Master' || role == 'Area Master') {
+        } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
           all = all.where((f) => f.stationId == user?.stationId).toList();
         }
         setState(() {

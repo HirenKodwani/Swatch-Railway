@@ -5,7 +5,7 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, areaId } = userData;
+    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
     const creatorName = creatorNameAuth || name || creatorRole || 'Admin';
@@ -51,6 +51,9 @@ class UserService {
     if (roleUpper === 'PLATFORM_MASTER') {
       if (!areaId) {
         throw new ValidationError("areaId is mandatory for Platform Master.");
+      }
+      if (!platformId) {
+        throw new ValidationError("platformId is mandatory for Platform Master.");
       }
       if (!stationId) {
         throw new ValidationError("stationId is mandatory for Platform Master.");
@@ -122,6 +125,7 @@ class UserService {
       trainIds: trainIds || (trainId ? [trainId] : []),
       worker_type: worker_type || null,
       stationId: stationId || null,
+      platformId: platformId || null,
       areaId: areaId || null,
       createdBy: creatorId,
       createdByName: creatorName,
@@ -135,7 +139,7 @@ class UserService {
   }
 
   async updateUser(editorData, uid, updates) {
-    const { fullName, designation, mobile, zone, division, depot, role, userType, password, entityId, trainId, trainIds, worker_type } = updates;
+    const { fullName, designation, mobile, zone, division, depot, role, userType, password, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId } = updates;
     const { uid: editorId, name, fullName: editorAuthName, role: editorRole } = editorData;
     const editorName = editorAuthName || name || editorRole || 'Admin';
 
@@ -184,6 +188,9 @@ class UserService {
     if (trainId !== undefined) updateData.trainId = trainId;
     if (trainIds !== undefined) updateData.trainIds = trainIds;
     if (worker_type !== undefined) updateData.worker_type = worker_type;
+    if (stationId !== undefined) updateData.stationId = stationId;
+    if (platformId !== undefined) updateData.platformId = platformId;
+    if (areaId !== undefined) updateData.areaId = areaId;
     updateData.status = 'PENDING';
     updateData.updatedAt = new Date().toISOString();
     updateData.updatedBy = editorId;

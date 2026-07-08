@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'platform_form_screen.dart';
 
 class PlatformListScreen extends StatefulWidget {
-  const PlatformListScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+
+  const PlatformListScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<PlatformListScreen> createState() => _PlatformListScreenState();
@@ -30,9 +35,20 @@ class _PlatformListScreenState extends State<PlatformListScreen> {
   Future<void> _loadStations() async {
     setState(() => _isLoadingStations = true);
     try {
-      _stations = await ApiService.getStations(active: true);
+      if (widget.stationId != null) {
+        _stations = await ApiService.getStations(active: true);
+        _stations = _stations.where((s) => s.uid == widget.stationId).toList();
+        _selectedStation = _stations.isNotEmpty ? _stations.first : null;
+      } else {
+        final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
+        final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+        _stations = await ApiService.getStations(active: true);
+        if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
+          _stations = _stations.where((s) => s.uid == user?.stationId).toList();
+        }
+      }
       if (_stations.isNotEmpty) {
-        _selectedStation = _stations.first;
+        _selectedStation ??= _stations.first;
         _loadPlatforms();
       }
     } catch (e) {
