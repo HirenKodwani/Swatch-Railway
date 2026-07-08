@@ -118,12 +118,18 @@ class AuthService {
     }
     const normalizedEmail = email.trim().toLowerCase();
     const usersRef = db.collection('users');
-    const snapshot = await usersRef.where('email', '==', normalizedEmail).orderBy('createdAt', 'desc').limit(1).get();
+    const snapshot = await usersRef.where('email', '==', normalizedEmail).get();
     if (snapshot.empty) {
       logger.info('Auth', `(Login) Failed login: Email not found ${normalizedEmail}`);
       throw new AuthenticationError("Invalid credentials.");
     }
-    const userData = snapshot.docs[0].data();
+    const docs = snapshot.docs;
+    docs.sort((a, b) => {
+      const aTime = a.data().createdAt || '';
+      const bTime = b.data().createdAt || '';
+      return bTime.localeCompare(aTime);
+    });
+    const userData = docs[0].data();
     const storedPassword = userData.password || '';
     const isBcrypt = storedPassword.startsWith('$2');
     const passwordValid = isBcrypt ? bcrypt.compareSync(password, storedPassword) : storedPassword === password;
