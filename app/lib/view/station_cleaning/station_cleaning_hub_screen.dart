@@ -5,6 +5,9 @@ import 'package:crm_train/utills/app_colors.dart';
 import 'package:crm_train/view/common_railways/station_management/station_feedback_list_screen.dart';
 import 'package:crm_train/view/common_railways/station_management/material_list_screen.dart';
 import 'dashboard/station_dashboard_kpi_screen.dart';
+import 'dashboard/supervisor_dashboard_screen.dart';
+import 'dashboard/station_master_dashboard_screen.dart';
+import 'dashboard/platform_master_dashboard_screen.dart';
 import 'attendance/station_attendance_screen.dart';
 import 'activities/daily_activity_list_screen.dart';
 import 'billing/billing_support_pack_screen.dart';
@@ -154,7 +157,7 @@ class StationCleaningHubScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(backgroundColor: color.withOpacity(0.15), radius: 24, child: Icon(icon, color: color, size: 26)),
+            CircleAvatar(backgroundColor: color.withValues(alpha: 0.15), radius: 24, child: Icon(icon, color: color, size: 26)),
             const SizedBox(height: 8),
             Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
           ],
@@ -164,7 +167,24 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openDashboard(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StationDashboardKpiScreen(stationId: stationId, stationName: stationName)));
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    final role = user?.role ?? '';
+    final r = role.toUpperCase().replaceAll(' ', '_');
+    if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => StationMasterDashboardScreen(stationId: stationId, stationName: stationName)));
+    } else if (r == 'PLATFORM_MASTER') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformMasterDashboardScreen(
+        stationId: stationId, stationName: stationName,
+        platformId: user?.platformId ?? '',
+      )));
+    } else if (r == 'RAILWAY_SUPERVISOR' || r == 'CONTRACTOR_SUPERVISOR') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorDashboardScreen(
+        stationId: stationId, stationName: stationName,
+        platformId: user?.platformId,
+      )));
+    } else {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => StationDashboardKpiScreen(stationId: stationId, stationName: stationName)));
+    }
   }
 
   void _openAttendance(BuildContext context) {

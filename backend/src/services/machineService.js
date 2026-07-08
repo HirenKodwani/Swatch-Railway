@@ -153,6 +153,70 @@ class MachineService {
     const snapshot = await q.orderBy('scheduledDate', 'desc').limit(parseInt(limit)).get();
     return { count: snapshot.size, schedules: snapshot.docs.map(d => d.data()) };
   }
+  async requestReplacement(machineId, userData, body) {
+    const machineRef = db.collection('machines').doc(machineId);
+    const machineDoc = await machineRef.get();
+    if (!machineDoc.exists) throw new NotFoundError('Machine not found');
+    const { reason, replacementMachineType, notes } = body;
+    if (!reason) throw new ValidationError('reason is required');
+    const ref = db.collection('machine_replacement_requests').doc();
+    const data = {
+      uid: ref.id, machineId, machineName: machineDoc.data().machineName,
+      stationId: machineDoc.data().stationId, reason,
+      replacementMachineType: replacementMachineType || machineDoc.data().machineType,
+      notes: notes || '', requestedBy: userData.uid, requestedAt: new Date().toISOString(),
+      status: 'PENDING', approvedBy: null, approvedAt: null, rejectionReason: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await ref.set(data);
+    await machineRef.update({ replacementStatus: 'requested', updatedAt: new Date().toISOString() });
+    return { message: 'Replacement requested', uid: ref.id, request: data };
+  }
+
+  async approveReplacement(uid, userData, body) {
+    const ref = db.collection('machine_replacement_requests').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Replacement request not found');
+    const { approved, rejectionReason, newSerialNumber, newMachineName } = body;
+    if (approved === true) {
+      const reqData = doc.data();
+      const updates = { status: 'APPROVED', approvedBy: userData.uid, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      if (newSerialNumber) updates.newSerialNumber = newSerialNumber;
+      if (newMachineName) updates.newMachineName = newMachineName;
+      await ref.update(updates);
+      await db.collection('machines').doc(reqData.machineId).update({
+        replacementStatus: 'approved', status: 'inactive', deactivatedAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      if (newSerialNumber && newMachineName) {
+        const oldMachine = (await db.collection('machines').doc(reqData.machineId).get()).data();
+        const newRef = db.collection('machines').doc();
+        const newData = {
+          uid: newRef.id, machineName: newMachineName, machineType: reqData.replacementMachineType,
+          serialNumber: newSerialNumber, stationId: reqData.stationId,
+          stationName: oldMachine.stationName || '', location: oldMachine.location || '',
+          workingStatus: 'working', status: 'active', replacementStatus: 'none',
+          replacesRequestId: uid, createdBy: userData.uid,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        };
+        await newRef.set(newData);
+        return { message: 'Replacement approved and new machine created', uid: ref.id, newMachineId: newRef.id };
+      }
+      return { message: 'Replacement approved', uid: ref.id };
+    } else {
+      await ref.update({ status: 'REJECTED', rejectionReason: rejectionReason || 'No reason provided', approvedBy: userData.uid, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await db.collection('machines').doc(doc.data().machineId).update({ replacementStatus: 'rejected', updatedAt: new Date().toISOString() });
+      return { message: 'Replacement rejected', uid: ref.id };
+    }
+  }
+
+  async listReplacementRequests(query = {}) {
+    const { stationId, status, limit = 50 } = query;
+    let q = db.collection('machine_replacement_requests');
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (status) q = q.where('status', '==', status);
+    const snapshot = await q.orderBy('requestedAt', 'desc').limit(parseInt(limit)).get();
+    return { count: snapshot.size, requests: snapshot.docs.map(d => d.data()) };
+  }
 }
 
 export const machineService = new MachineService();

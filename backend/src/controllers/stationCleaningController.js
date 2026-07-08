@@ -274,3 +274,32 @@ export const garbageReport = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.garbageReport(req.query);
   res.status(200).json({ success: true, ...result });
 });
+
+// ─── Station Cleaning Reports & Dashboards ────────────────────────────────
+export const getWorkerDashboard = asyncHandler(async (req, res) => {
+  res.json(await stationCleaningService.getWorkerDashboard(req.params.workerId, req.query));
+});
+
+export const getSupervisorDashboard = asyncHandler(async (req, res) => {
+  res.json(await stationCleaningService.getSupervisorDashboard(req.params.supervisorId, req.query));
+});
+
+export const generateDailyReport = asyncHandler(async (req, res) => {
+  const { stationId } = req.params;
+  res.json(await stationCleaningService.generateDailyReport(stationId, req.query));
+});
+
+export const generateWeeklyReport = asyncHandler(async (req, res) => {
+  const { stationId } = req.params;
+  res.json(await stationCleaningService.generateWeeklyReport(stationId, req.query));
+});
+
+export const generateMonthlyReport = asyncHandler(async (req, res) => {
+  const { stationId } = req.params;
+  res.json(await stationCleaningService.generateMonthlyReport(stationId, req.query));
+});
+
+export const getScoreTrend = asyncHandler(async (req, res) => {
+  const { stationId } = req.params;
+  res.json(await stationCleaningService.getScoreTrend(stationId, req.query));
+});

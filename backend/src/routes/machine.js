@@ -24,5 +24,8 @@ router.get('/api/machines/downtime/report', verifyToken, requirePermission(PERMI
 router.post('/api/machines/maintenance', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.scheduleMaintenance);
 router.post('/api/machines/maintenance/:uid/complete', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.completeMaintenance);
 router.get('/api/machines/maintenance', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.listMaintenance);
+router.post('/api/machines/:uid/replacement/request', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.requestReplacement);
+router.post('/api/machines/replacement/:uid/approve', verifyToken, requirePermission(PERMISSIONS.MANAGE_MACHINES), machineController.approveReplacement);
+router.get('/api/machines/replacement/requests', verifyToken, requirePermission(PERMISSIONS.VIEW_MACHINES), machineController.listReplacementRequests);
 
 export default router;

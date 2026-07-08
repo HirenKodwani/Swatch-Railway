@@ -88,4 +88,16 @@ router.post('/api/station-garbage/record', verifyToken, requirePermission(PERMIS
 router.get('/api/station-garbage/records', verifyToken, requirePermission(PERMISSIONS.VIEW_GARBAGE), stationCleaning.listGarbageRecords);
 router.get('/api/station-garbage/report', verifyToken, requirePermission(PERMISSIONS.VIEW_GARBAGE), stationCleaning.garbageReport);
 
+// ─── Worker Dashboard ─────────────────────────────────────────────────────
+router.get('/api/station-cleaning/dashboard/worker/:workerId', verifyToken, requirePermission(PERMISSIONS.VIEW_DASHBOARD), stationCleaning.getWorkerDashboard);
+
+// ─── Supervisor Dashboard ──────────────────────────────────────────────────
+router.get('/api/station-cleaning/dashboard/supervisor/:supervisorId', verifyToken, requirePermission(PERMISSIONS.VIEW_DASHBOARD), stationCleaning.getSupervisorDashboard);
+
+// ─── Cleaning Reports ──────────────────────────────────────────────────────
+router.get('/api/station-cleaning/reports/daily/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_REPORTS), stationCleaning.generateDailyReport);
+router.get('/api/station-cleaning/reports/weekly/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_REPORTS), stationCleaning.generateWeeklyReport);
+router.get('/api/station-cleaning/reports/monthly/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_REPORTS), stationCleaning.generateMonthlyReport);
+router.get('/api/station-cleaning/reports/score-trend/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_REPORTS), stationCleaning.getScoreTrend);
+
 export default router;

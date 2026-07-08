@@ -20,3 +20,15 @@ export const listByStation = asyncHandler(async (req, res) => {
   const result = await machineService.getMachines({ stationId: req.params.stationId });
   res.json({ data: result.machines });
 });
+
+export const requestReplacement = asyncHandler(async (req, res) => {
+  res.status(201).json(await machineService.requestReplacement(req.params.uid, req.user, req.body));
+});
+
+export const approveReplacement = asyncHandler(async (req, res) => {
+  res.json(await machineService.approveReplacement(req.params.uid, req.user, req.body));
+});
+
+export const listReplacementRequests = asyncHandler(async (req, res) => {
+  res.json(await machineService.listReplacementRequests(req.query));
+});

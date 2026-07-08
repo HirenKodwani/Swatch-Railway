@@ -18,5 +18,8 @@ router.delete('/api/materials/:uid', verifyToken, requirePermission(PERMISSIONS.
 router.post('/api/materials/:uid/issue', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.issue);
 router.post('/api/materials/:uid/use', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.use);
 router.post('/api/materials/:uid/receive', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.receive);
+router.post('/api/materials/reorder-request', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.createReorderRequest);
+router.post('/api/materials/reorder-request/:uid/approve', verifyToken, requirePermission(PERMISSIONS.MANAGE_MATERIALS), materialController.approveReorderRequest);
+router.get('/api/materials/reorder-requests', verifyToken, requirePermission(PERMISSIONS.VIEW_MATERIALS), materialController.listReorderRequests);
 
 export default router;

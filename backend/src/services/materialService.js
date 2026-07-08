@@ -230,6 +230,61 @@ class MaterialService {
     return { count: alerts.length, alerts };
   }
 
+  async createReorderRequest(userData, body) {
+    const { materialId, quantity, reason, stationId } = body;
+    if (!materialId || !quantity) throw new ValidationError('materialId and quantity are required');
+    const materialDoc = await db.collection('materials').doc(materialId).get();
+    if (!materialDoc.exists) throw new NotFoundError('Material not found');
+    const material = materialDoc.data();
+    const ref = db.collection('material_reorder_requests').doc();
+    const data = {
+      uid: ref.id, materialId, materialName: material.materialName,
+      materialType: material.materialType, unit: material.unit,
+      currentStock: material.currentStock || 0, requestedQuantity: quantity,
+      reason: reason || '', stationId: stationId || material.stationId,
+      requestedBy: userData.uid, requestedAt: new Date().toISOString(),
+      status: 'PENDING', approvedBy: null, approvedAt: null, rejectionReason: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await ref.set(data);
+    return { message: 'Reorder request created', uid: ref.id, request: data };
+  }
+
+  async approveReorderRequest(uid, userData, body) {
+    const ref = db.collection('material_reorder_requests').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Reorder request not found');
+    const { approved, rejectionReason } = body;
+    const reqData = doc.data();
+    if (approved === true) {
+      await ref.update({ status: 'APPROVED', approvedBy: userData.uid, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await db.collection('materials').doc(reqData.materialId).update({
+        currentStock: admin.firestore.FieldValue.increment(reqData.requestedQuantity),
+        updatedAt: new Date().toISOString()
+      });
+      await db.collection('material_logs').add({
+        materialId: reqData.materialId, materialName: reqData.materialName,
+        transactionType: 'reorder_received', quantity: reqData.requestedQuantity,
+        stockBefore: reqData.currentStock, stockAfter: reqData.currentStock + reqData.requestedQuantity,
+        reorderRequestId: uid, performedBy: userData.uid, createdAt: new Date().toISOString()
+      });
+      return { message: 'Reorder approved and stock updated', uid: ref.id };
+    } else {
+      await ref.update({ status: 'REJECTED', rejectionReason: rejectionReason || 'No reason provided', approvedBy: userData.uid, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      return { message: 'Reorder request rejected', uid: ref.id };
+    }
+  }
+
+  async listReorderRequests(query = {}) {
+    const { stationId, materialId, status, limit = 50 } = query;
+    let q = db.collection('material_reorder_requests');
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (materialId) q = q.where('materialId', '==', materialId);
+    if (status) q = q.where('status', '==', status);
+    const snapshot = await q.orderBy('requestedAt', 'desc').limit(parseInt(limit)).get();
+    return { count: snapshot.size, requests: snapshot.docs.map(d => d.data()) };
+  }
+
   async getMaterialLogs(query = {}) {
     const { materialId, stationId, transactionType, limit = 50, cursor } = query;
     let firestoreQuery = db.collection('material_logs');

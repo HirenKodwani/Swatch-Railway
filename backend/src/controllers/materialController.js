@@ -50,3 +50,15 @@ export const use = asyncHandler(async (req, res) => {
   const result = await materialService.useMaterial(req.user, { ...req.body, materialId: req.params.uid });
   res.status(201).json(result);
 });
+
+export const createReorderRequest = asyncHandler(async (req, res) => {
+  res.status(201).json(await materialService.createReorderRequest(req.user, req.body));
+});
+
+export const approveReorderRequest = asyncHandler(async (req, res) => {
+  res.json(await materialService.approveReorderRequest(req.params.uid, req.user, req.body));
+});
+
+export const listReorderRequests = asyncHandler(async (req, res) => {
+  res.json(await materialService.listReorderRequests(req.query));
+});
