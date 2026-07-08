@@ -60,9 +60,34 @@ import { swaggerSpec } from './config/swagger.js';
 
 const app = express();
 
-app.use(helmet());
+// ─── CORS MUST come before helmet ───────────────────────────────────────────
+// cors() middleware - allow ALL origins for Flutter web + APK
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: false,
+}));
+
+// Handle all OPTIONS preflight requests immediately
+app.options('*', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept');
+  res.status(204).end();
+});
+
+// Safety net: explicitly set ACAO on every response
+app.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept');
+  next();
+});
+
+// Helmet AFTER cors - disable crossOriginResourcePolicy so CORS headers pass through
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(compression());
-app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(requestLogger);
