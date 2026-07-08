@@ -8,7 +8,9 @@ import 'package:crm_train/utills/app_colors.dart';
 class AreaPerformanceDashboard extends StatefulWidget {
   final String? areaId;
   final String? areaName;
-  const AreaPerformanceDashboard({super.key, this.areaId, this.areaName});
+  final String? stationId;
+  final String? stationName;
+  const AreaPerformanceDashboard({super.key, this.areaId, this.areaName, this.stationId, this.stationName});
 
   @override
   State<AreaPerformanceDashboard> createState() => _AreaPerformanceDashboardState();
@@ -55,17 +57,6 @@ class _AreaPerformanceDashboardState extends State<AreaPerformanceDashboard> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _loadScoreTrend() async {
-    try {
-      await BaseRepository.apiCall(
-        method: 'GET',
-        path: '/api/station-reports/score-trend',
-        queryParams: {'stationId': _dashboard?.stationId ?? '', 'months': '6'},
-        parser: (d) => d,
-      );
-    } catch (_) {}
   }
 
   @override

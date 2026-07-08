@@ -53,7 +53,7 @@ class _BulkAssignmentScreenState extends State<BulkAssignmentScreen> {
     try {
       _areas = await ApiService.getStationAreas(_selectedStation!.uid ?? '');
     } catch (e) {
-      //
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _isLoadingAreas = false);
     }

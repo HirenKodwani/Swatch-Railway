@@ -36,7 +36,6 @@ import '../common_railways/station_management/area_performance_dashboard.dart';
 import '../common_railways/station_management/area_comparison_screen.dart';
 import '../common_railways/station_management/area_history_screen.dart';
 import '../common_railways/station_management/area_assignment_screen.dart';
-import '../common_railways/station_management/material_reorder_approval_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
   final String stationId;
@@ -49,25 +48,6 @@ class StationCleaningHubScreen extends StatelessWidget {
     required this.stationName,
     this.contractId,
   });
-
-  bool _isRailway(String role) {
-    final r = role.toUpperCase().replaceAll(' ', '_');
-    return r.contains('RAILWAY') || r.contains('ADMIN') || r.contains('MASTER') || r == 'SUPER_ADMIN';
-  }
-
-  bool _isContractor(String role) {
-    return role.toUpperCase().replaceAll(' ', '_').contains('CONTRACTOR');
-  }
-
-  bool _isWorker(String role) {
-    final r = role.toUpperCase().replaceAll(' ', '_');
-    return ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r);
-  }
-
-  bool _isMasterOrAdmin(String role) {
-    final r = role.toUpperCase().replaceAll(' ', '_');
-    return ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r);
-  }
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
@@ -296,7 +276,16 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openWorkerTasks(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkerTaskViewScreen(workerId: '', workerName: '')));
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WorkerTaskViewScreen(
+          workerId: user?.uid ?? '',
+          workerName: user?.fullName ?? '',
+        ),
+      ),
+    );
   }
 
   void _openSupervisorReview(BuildContext context) {
@@ -308,6 +297,7 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openQuickStart(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -325,7 +315,9 @@ class StationCleaningHubScreen extends StatelessWidget {
                 subtitle: const Text('Open your first pending task for today'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkerTaskViewScreen(workerId: '', workerName: '')));
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => WorkerTaskViewScreen(workerId: user?.uid ?? '', workerName: user?.fullName ?? ''),
+                  ));
                 },
               ),
               ListTile(
@@ -362,34 +354,34 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openQRGenerator(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const QRCodeScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => QRCodeScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openCheckin(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkerCheckinScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerCheckinScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openTaskGen(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const TaskGenerationScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskGenerationScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openTaskApproval(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const TaskApprovalScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskApprovalScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openAreaPerformance(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaPerformanceDashboard(areaId: stationId, areaName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaPerformanceDashboard(stationId: stationId, stationName: stationName)));
   }
 
   void _openAreaComparison(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const AreaComparisonScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaComparisonScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openAreaHistory(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaHistoryScreen(areaId: stationId, areaName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaHistoryScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openAreaAssignment(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const AreaAssignmentScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaAssignmentScreen(stationId: stationId, stationName: stationName)));
   }
 }

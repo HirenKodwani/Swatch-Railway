@@ -4,7 +4,9 @@ import 'package:crm_train/repositories/base_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class TaskApprovalScreen extends StatefulWidget {
-  const TaskApprovalScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const TaskApprovalScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<TaskApprovalScreen> createState() => _TaskApprovalScreenState();
@@ -39,11 +41,32 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
   }
 
   Future<void> _approveTask(CleaningTask task) async {
+    final notesCtrl = TextEditingController();
+    final notes = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Approve Task'),
+        content: TextField(
+          controller: notesCtrl,
+          decoration: const InputDecoration(labelText: 'Supervisor Notes (optional)', border: OutlineInputBorder()),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, notesCtrl.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: kSuccessGreen),
+            child: const Text('Approve', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (notes == null) return;
     try {
       await BaseRepository.apiCall(
         method: 'PUT',
         path: '/api/station-tasks/${task.uid}',
-        body: {'status': 'approved', 'supervisorNotes': 'Approved'},
+        body: {'status': 'approved', 'supervisorNotes': notes.isNotEmpty ? notes : 'Approved'},
         parser: (d) => d,
       );
       _loadPending();

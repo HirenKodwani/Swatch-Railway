@@ -38,6 +38,12 @@ import '../widgets/filter_section.dart';
 import '../widgets/indicator_color.dart';
 import '../widgets/status_tile.dart';
 import '../attendance/attendance_exception_dashboard.dart';
+import '../station_management/area_list_screen.dart';
+import '../station_management/task_generation_screen.dart';
+import '../station_management/task_approval_screen.dart';
+import '../station_management/machine_master_list_screen.dart';
+import '../station_management/material_list_screen.dart';
+import '../station_management/area_performance_dashboard.dart';
 
 class CommonDashboard extends StatefulWidget {
   CommonDashboard({
@@ -252,6 +258,13 @@ class _CommonDashboardState extends State<CommonDashboard> {
       setState(() {
         dashboardData = stats;
 
+        final systemOverview = stats['systemOverview'] ?? {};
+        if (railwayEmployees == 0) railwayEmployees = systemOverview['railwayEmployees'] ?? 0;
+        if (contractorEmployees == 0) contractorEmployees = systemOverview['contractorEmployees'] ?? 0;
+        if (totalEntities == 0) totalEntities = systemOverview['totalRegisteredEntities'] ?? 0;
+        if (activeContracts == 0) activeContracts = systemOverview['activeContracts'] ?? 0;
+        if (totalFormsProcessed == 0) totalFormsProcessed = systemOverview['totalFormsProcessed'] ?? 0;
+
         final entityOverview = stats['entityOverview'] ?? {};
         approvedEntities = entityOverview['approved'] ?? 0;
         pendingEntities = entityOverview['pending'] ?? 0;
@@ -459,6 +472,20 @@ class _CommonDashboardState extends State<CommonDashboard> {
         ]
       },
       {
+        "icon": Icons.cleaning_services_rounded,
+        "title": "Station Cleaning",
+        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "children": [
+          {"title": "Dashboard", "route": "sc_dashboard"},
+          {"title": "Area Management", "route": "sc_areas"},
+          {"title": "Generate Tasks", "route": "sc_generate_tasks"},
+          {"title": "Task Approval", "route": "sc_approval"},
+          {"title": "Machines", "route": "sc_machines"},
+          {"title": "Materials", "route": "sc_materials"},
+          {"title": "Performance Reports", "route": "sc_performance"},
+        ]
+      },
+      {
         "icon": Icons.directions_run,
         "title": "OBHS",
         "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor"],
@@ -584,6 +611,27 @@ class _CommonDashboardState extends State<CommonDashboard> {
         break;
       case "complaints":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
+        break;
+      case "sc_dashboard":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "sc_areas":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaListScreen()));
+        break;
+      case "sc_generate_tasks":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskGenerationScreen()));
+        break;
+      case "sc_approval":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskApprovalScreen()));
+        break;
+      case "sc_machines":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MachineMasterListScreen()));
+        break;
+      case "sc_materials":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MaterialListScreen()));
+        break;
+      case "sc_performance":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaPerformanceDashboard()));
         break;
       default:
         break;

@@ -5,7 +5,9 @@ import 'package:crm_train/utills/app_colors.dart';
 class AreaHistoryScreen extends StatefulWidget {
   final String? areaId;
   final String? areaName;
-  const AreaHistoryScreen({super.key, this.areaId, this.areaName});
+  final String? stationId;
+  final String? stationName;
+  const AreaHistoryScreen({super.key, this.areaId, this.areaName, this.stationId, this.stationName});
 
   @override
   State<AreaHistoryScreen> createState() => _AreaHistoryScreenState();

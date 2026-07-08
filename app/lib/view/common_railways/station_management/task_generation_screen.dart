@@ -5,7 +5,9 @@ import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class TaskGenerationScreen extends StatefulWidget {
-  const TaskGenerationScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const TaskGenerationScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<TaskGenerationScreen> createState() => _TaskGenerationScreenState();

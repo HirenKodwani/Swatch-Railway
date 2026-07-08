@@ -12,7 +12,7 @@ class FirebaseCountService {
       print("Firebase App: ${firestore.app.name}");
       print("Firebase Project ID: ${firestore.app.options.projectId}");
 
-      final snapshot = await firestore.collection('users').get();
+      final snapshot = await firestore.collection('users').get().timeout(const Duration(seconds: 4));
 
       print("Users collection fetched");
       print("Total documents: ${snapshot.size}");
@@ -55,7 +55,7 @@ class FirebaseCountService {
         query = query.where('zone', isEqualTo: zone);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       final divisions = <String>{};
 
@@ -85,7 +85,7 @@ class FirebaseCountService {
         query = query.where('division', isEqualTo: division);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       final depots = <String>{};
 
@@ -122,7 +122,7 @@ class FirebaseCountService {
         query = query.where('depot', isEqualTo: depot);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       return snapshot.size;
     } catch (e) {
@@ -149,7 +149,7 @@ class FirebaseCountService {
         query = query.where('depot', isEqualTo: depot);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       return snapshot.size;
     } catch (e) {
@@ -160,7 +160,7 @@ class FirebaseCountService {
   static Future<int> getTotalEntityRegistered() async {
     try {
       final firestore = FirebaseFirestore.instance;
-      final snapshot = await firestore.collection('entities').get();
+      final snapshot = await firestore.collection('entities').get().timeout(const Duration(seconds: 4));
 
       return snapshot.size;
     } catch (e) {
@@ -187,7 +187,7 @@ class FirebaseCountService {
         query = query.where('depot', isEqualTo: depot);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       return snapshot.size;
     } catch (e) {
@@ -216,8 +216,8 @@ class FirebaseCountService {
         coachQuery = coachQuery.where('submittedByDivision', isEqualTo: division);
       }
 
-      final premisesSnapshot = await premisesQuery.get();
-      final coachSnapshot = await coachQuery.get();
+      final premisesSnapshot = await premisesQuery.get().timeout(const Duration(seconds: 4));
+      final coachSnapshot = await coachQuery.get().timeout(const Duration(seconds: 4));
 
       final total = premisesSnapshot.size + coachSnapshot.size;
 
@@ -237,7 +237,8 @@ class FirebaseCountService {
       final snapshot = await firestore
           .collection('coachForms')
           .where('submittedTo.railwayEmployeeId', isEqualTo: uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
 
 
       int scoredCount = 0;
@@ -346,7 +347,7 @@ class FirebaseCountService {
         query = query.where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate));
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       int totalPremisesCleaned = 0;
       int manPowerDeployed = 0;
@@ -477,7 +478,7 @@ class FirebaseCountService {
         }
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       int totalCoachesCleaned = 0;
       int manPowerDeployed = 0;

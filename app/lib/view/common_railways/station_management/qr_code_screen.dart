@@ -5,7 +5,9 @@ import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class QRCodeScreen extends StatefulWidget {
-  const QRCodeScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const QRCodeScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<QRCodeScreen> createState() => _QRCodeScreenState();

@@ -6,7 +6,9 @@ import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class AreaAssignmentScreen extends StatefulWidget {
-  const AreaAssignmentScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const AreaAssignmentScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<AreaAssignmentScreen> createState() => _AreaAssignmentScreenState();
@@ -19,6 +21,7 @@ class _AreaAssignmentScreenState extends State<AreaAssignmentScreen> {
   List<Map<String, dynamic>> _workers = [];
   Station? _selectedStation;
   StationArea? _selectedArea;
+  String _selectedShift = 'morning';
   bool _isLoadingStations = true;
   bool _isLoadingAreas = false;
   bool _isLoadingAssignments = false;
@@ -92,7 +95,7 @@ class _AreaAssignmentScreenState extends State<AreaAssignmentScreen> {
           'areaId': _selectedArea!.uid,
           'workerId': worker['uid'],
           'workerName': worker['fullName'] ?? '',
-          'shift': 'morning',
+          'shift': _selectedShift,
         },
         parser: (d) => d,
       );
@@ -192,6 +195,25 @@ class _AreaAssignmentScreenState extends State<AreaAssignmentScreen> {
                       },
                     ),
                   ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  color: Colors.white,
+                  child: Row(
+                    children: [
+                      const Text('Shift: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const SizedBox(width: 8),
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'morning', label: Text('Morning')),
+                          ButtonSegment(value: 'evening', label: Text('Evening')),
+                          ButtonSegment(value: 'night', label: Text('Night')),
+                        ],
+                        selected: {_selectedShift},
+                        onSelectionChanged: (v) => setState(() => _selectedShift = v.first),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: _isLoadingAssignments

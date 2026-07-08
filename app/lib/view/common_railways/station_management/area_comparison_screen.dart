@@ -5,7 +5,9 @@ import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class AreaComparisonScreen extends StatefulWidget {
-  const AreaComparisonScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const AreaComparisonScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<AreaComparisonScreen> createState() => _AreaComparisonScreenState();

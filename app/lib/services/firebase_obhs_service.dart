@@ -66,7 +66,7 @@ class FirebaseOBHSService {
         query = query.where('departureDate', isEqualTo: depStr);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
       var results = snapshot.docs
           .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
           .toList();
@@ -107,7 +107,7 @@ class FirebaseOBHSService {
         query = query.where('division', isEqualTo: division);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get().timeout(const Duration(seconds: 4));
 
       int totalInstances = snapshot.size;
       final Set<String> uniqueTrains = {};
@@ -151,7 +151,8 @@ class FirebaseOBHSService {
       final taskSnap = await _db
           .collection(_tasks)
           .where('status', isEqualTo: 'Completed')
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
 
       return {
         'totalTrains': uniqueTrains.length,
@@ -208,7 +209,8 @@ class FirebaseOBHSService {
           .collection(_attendance)
           .where('runInstanceId', isEqualTo: runInstanceId)
           .orderBy('attendanceTime', descending: false)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
       return snapshot.docs
           .map((d) => {'id': d.id, ...d.data()})
           .toList();
@@ -242,7 +244,8 @@ class FirebaseOBHSService {
           .collection(_tasks)
           .where('runInstanceId', isEqualTo: runInstanceId)
           .orderBy('completionTime', descending: false)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
       return snapshot.docs.map((d) => {'id': d.id, ...d.data()}).toList();
     } catch (e) {
       print('[FirebaseOBHSService] getTasksForRun error: $e');
@@ -273,7 +276,8 @@ class FirebaseOBHSService {
       final snapshot = await _db
           .collection(_complaints)
           .where('runInstanceId', isEqualTo: runInstanceId)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
       return snapshot.docs.map((d) => {'id': d.id, ...d.data()}).toList();
     } catch (e) {
       print('[FirebaseOBHSService] getComplaintsForRun error: $e');
@@ -294,7 +298,8 @@ class FirebaseOBHSService {
           .collection(_runs)
           .where('runInstanceId', isEqualTo: runInstanceId)
           .limit(1)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
 
       Map<String, dynamic> runData = {};
       if (runSnap.docs.isNotEmpty) {

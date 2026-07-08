@@ -6,7 +6,9 @@ import 'package:crm_train/utills/app_colors.dart';
 import 'package:provider/provider.dart';
 
 class WorkerCheckinScreen extends StatefulWidget {
-  const WorkerCheckinScreen({super.key});
+  final String? stationId;
+  final String? stationName;
+  const WorkerCheckinScreen({super.key, this.stationId, this.stationName});
 
   @override
   State<WorkerCheckinScreen> createState() => _WorkerCheckinScreenState();
