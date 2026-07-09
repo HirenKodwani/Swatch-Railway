@@ -62,8 +62,8 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
   }
 
 
-  Future<void> loadAllUsers() async {
-    setState(() => _isLoading = true);
+  Future<void> loadAllUsers({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
     try {
       final pending = await ApiService.getPendingUsers();
       final approved = await ApiService.getApprovedUsers();
@@ -73,10 +73,10 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
         pendingUsers = pending;
         approvedUsers = approved;
         rejectedUsers = rejected;
-        _isLoading = false;
+        if (!silent) _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (!silent) setState(() => _isLoading = false);
       _showError('Failed to load users: $e');
       print(e);
     }
@@ -218,16 +218,13 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
     }
 
     try {
-      setState(() => _isLoading = true);
       final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final result = await ApiService.approveUser(uid, approvedById: currentUser?.uid);
       final message = result['message'] ?? 'User approved successfully';
       _showSuccess(message);
-      await loadAllUsers();
+      await loadAllUsers(silent: true);
     } catch (e) {
       _showError('Failed to approve user: $e');
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -238,15 +235,12 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
     }
 
     try {
-      setState(() => _isLoading = true);
       final result = await ApiService.rejectUser(uid);
       final message = result['message'] ?? 'User rejected successfully';
       _showSuccess(message);
-      await loadAllUsers();
+      await loadAllUsers(silent: true);
     } catch (e) {
       _showError('Failed to reject user: $e');
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 

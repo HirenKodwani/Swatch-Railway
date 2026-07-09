@@ -214,29 +214,10 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           allWorkers = workersList.where((w) {
             final statusUpper = w.status.toUpperCase();
             final isApproved = statusUpper == 'APPROVED' || statusUpper == 'ACTIVE' || statusUpper == 'VERIFIED';
-            
-            final roleLower = w.role.toLowerCase();
-            final wtLower = w.workerType?.toLowerCase() ?? '';
-            final desigLower = w.designation?.toLowerCase() ?? '';
-            final isFieldWorker = roleLower.contains('janitor') || 
-                                 roleLower.contains('attendant') ||
-                                 roleLower.contains('worker') ||
-                                 roleLower.contains('cleaner') ||
-                                 roleLower.contains('safai') ||
-                                 roleLower.contains('field') ||
-                                 wtLower.contains('janitor') || 
-                                 wtLower.contains('attendant') ||
-                                 wtLower.contains('cleaner') ||
-                                 desigLower.contains('janitor') || 
-                                 desigLower.contains('attendant') || 
-                                 desigLower.contains('worker') ||
-                                 desigLower.contains('cleaner') ||
-                                 desigLower.contains('safai');
-
-            if (!isApproved || !isFieldWorker) {
+            if (!isApproved) {
               print('DEBUG: Filtered OUT ${w.fullName}: status=${w.status}, role=${w.role}, workerType=${w.workerType}, designation=${w.designation}');
             }
-            return isApproved && isFieldWorker;
+            return isApproved;
           }).toList();
           print('DEBUG: After filtering, allWorkers count: ${allWorkers.length}');
           _isLoadingWorkers = false;
