@@ -83,13 +83,13 @@ class StationCleaningMainScreen extends StatelessWidget {
 
   Widget _buildQuickAccessGrid(BuildContext context, String role, bool isFullAccess, String userId) {
     final items = <_QuickAction>[];
-    if (isFullAccess || role == 'STATION_MASTER' || role == 'AREA_MASTER' || role == 'RAILWAY_SUPERVISOR') {
+    if (isFullAccess || role == 'STATION_MASTER' || role == 'AREA_MASTER' || role == 'PLATFORM_MASTER' || role == 'RAILWAY_SUPERVISOR') {
       items.add(_QuickAction('Dashboard', Icons.dashboard, Colors.blue, () => _goToHub(context)));
     }
-    if (isFullAccess || role == 'CONTRACTOR_ADMIN' || role == 'CONTRACTOR_SUPERVISOR') {
+    if (isFullAccess || role == 'STATION_MASTER' || role == 'AREA_MASTER' || role == 'PLATFORM_MASTER' || role == 'CONTRACTOR_ADMIN' || role == 'CONTRACTOR_SUPERVISOR') {
       items.add(_QuickAction('Attendance', Icons.people, Colors.teal, () => _openModule(context, 'attendance', userId)));
     }
-    if (isFullAccess || role == 'CONTRACTOR_ADMIN' || role == 'CONTRACTOR_SUPERVISOR') {
+    if (isFullAccess || role == 'STATION_MASTER' || role == 'AREA_MASTER' || role == 'PLATFORM_MASTER' || role == 'CONTRACTOR_ADMIN' || role == 'CONTRACTOR_SUPERVISOR') {
       items.add(_QuickAction('Activities', Icons.assignment, Colors.orange, () => _openModule(context, 'activities', userId)));
     }
     items.add(_QuickAction('Feedback', Icons.feedback, Colors.amber, () => _openModule(context, 'feedback', userId)));

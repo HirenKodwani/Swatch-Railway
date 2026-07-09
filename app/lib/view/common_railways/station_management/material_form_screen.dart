@@ -41,7 +41,18 @@ class _MaterialFormScreenState extends State<MaterialFormScreen> {
     _priceCtrl = TextEditingController(text: e?.unitPrice.toString() ?? '');
     _monthlyReqCtrl = TextEditingController(text: e?.monthlyRequirement.toString() ?? '');
     _remarksCtrl = TextEditingController(text: e?.remarks ?? '');
-    if (e != null) _type = e.materialType;
+    if (e != null) {
+      final t = e.materialType.trim().toLowerCase();
+      if (t == 'cleaning equipment' || t == 'equipment') {
+        _type = 'equipment';
+      } else if (t == 'chemical') {
+        _type = 'chemical';
+      } else if (_types.contains(t)) {
+        _type = t;
+      } else {
+        _type = 'other';
+      }
+    }
   }
 
   @override

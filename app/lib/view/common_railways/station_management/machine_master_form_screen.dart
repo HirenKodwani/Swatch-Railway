@@ -49,7 +49,8 @@ class _MachineMasterFormScreenState extends State<MachineMasterFormScreen> {
     _estRepairDateCtrl = TextEditingController(text: m?['downtimeEntry']?['estimatedRepairDate'] ?? '');
     _actualRepairDateCtrl = TextEditingController(text: m?['downtimeEntry']?['actualRepairDate'] ?? '');
     if (m != null) {
-      _type = m['machineType'] ?? 'scrubber';
+      final t = (m['machineType'] as String? ?? 'scrubber').trim().toLowerCase();
+      _type = _types.contains(t) ? t : 'other';
       _workingStatus = m['workingStatus'] ?? 'working';
       _replacementStatus = m['replacementStatus'] ?? 'none';
       _stationId = m['stationId'];

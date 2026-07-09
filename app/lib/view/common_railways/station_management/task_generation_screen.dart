@@ -25,6 +25,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   String _frequency = 'daily';
   Map<String, dynamic>? _result;
 
+  List<Map<String, dynamic>> _workers = [];
+  String? _selectedWorkerId;
+  bool _isLoadingWorkers = false;
+  List<Map<String, dynamic>> _assignments = [];
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +43,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       if (_stations.isNotEmpty) {
         _selectedStation = _stations.first;
         _loadAreas();
+        _loadWorkers();
       }
     } catch (e) {
       //
@@ -49,8 +55,40 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   Future<void> _loadAreas() async {
     if (_selectedStation == null) return;
     try {
-      _areas = await ApiService.getStationAreas(_selectedStation!.uid ?? '');
+      final fetched = await ApiService.getStationAreas(_selectedStation!.uid ?? '');
+      final assignmentsResult = await BaseRepository.apiCall(
+        method: 'GET',
+        path: '/api/area-assignments',
+        queryParams: {'stationId': _selectedStation!.uid ?? '', 'isActive': 'true'},
+        parser: (d) => d,
+      );
+      final rawAssignments = (assignmentsResult['assignments'] as List? ?? []).map((a) => a as Map<String, dynamic>).toList();
+      if (mounted) {
+        setState(() {
+          _areas = fetched;
+          _assignments = rawAssignments;
+        });
+      }
     } catch (_) {}
+  }
+
+  Future<void> _loadWorkers() async {
+    if (_selectedStation == null) return;
+    if (mounted) setState(() => _isLoadingWorkers = true);
+    try {
+      final result = await BaseRepository.apiCall(
+        method: 'GET',
+        path: '/api/users/workers',
+        parser: (d) => d,
+      );
+      final list = (result['workers'] as List? ?? []).map((w) => w as Map<String, dynamic>).toList();
+      if (mounted) {
+        setState(() {
+          _workers = list.where((w) => w['stationId'] == _selectedStation!.uid).toList();
+        });
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoadingWorkers = false);
   }
 
   Future<void> _generateTasks() async {
@@ -66,6 +104,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           'date': _selectedDate,
           'shift': _shift,
           'frequency': _frequency,
+          if (_selectedWorkerId != null) 'workerId': _selectedWorkerId,
         },
         parser: (d) => d,
       );
@@ -109,13 +148,17 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                         children: [
                           const Text('Task Parameters', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(height: 12),
-                          DropdownButtonFormField<Station>(
+                           DropdownButtonFormField<Station>(
                             value: _selectedStation,
                             decoration: const InputDecoration(labelText: 'Station', border: OutlineInputBorder(), prefixIcon: Icon(Icons.train)),
                             items: _stations.map((s) => DropdownMenuItem(value: s, child: Text('${s.stationCode} - ${s.stationName}'))).toList(),
                             onChanged: (v) {
-                              setState(() => _selectedStation = v);
+                              setState(() {
+                                _selectedStation = v;
+                                _selectedWorkerId = null;
+                              });
                               _loadAreas();
+                              _loadWorkers();
                             },
                           ),
                           const SizedBox(height: 12),
@@ -147,6 +190,29 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             items: ['daily', 'weekly', 'monthly'].map((f) => DropdownMenuItem(value: f, child: Text(f[0].toUpperCase() + f.substring(1)))).toList(),
                             onChanged: (v) { if (v != null) setState(() => _frequency = v); },
                           ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            value: _selectedWorkerId,
+                            decoration: InputDecoration(
+                              labelText: 'Assign to specific worker (Optional)',
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.person),
+                              suffixIcon: _isLoadingWorkers
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                    )
+                                  : null,
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: null, child: Text('Use default assigned worker(s)')),
+                              ..._workers.map((w) => DropdownMenuItem(
+                                    value: w['uid'] as String,
+                                    child: Text('${w['fullName'] ?? ''} (${w['designation'] ?? w['role'] ?? ''})'),
+                                  )),
+                            ],
+                            onChanged: (v) => setState(() => _selectedWorkerId = v),
+                          ),
                         ],
                       ),
                     ),
@@ -166,17 +232,23 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           else
                             Wrap(
                               spacing: 8, runSpacing: 4,
-                              children: _areas.map((a) => FilterChip(
-                                label: Text(a.name, style: const TextStyle(fontSize: 12)),
-                                selected: _selectedAreaIds.contains(a.uid),
-                                onSelected: (v) {
-                                  setState(() {
-                                    if (v) { _selectedAreaIds.add(a.uid!); }
-                                    else { _selectedAreaIds.remove(a.uid); }
-                                  });
-                                },
-                                selectedColor: kRailwayBlue.withOpacity(0.2),
-                              )).toList(),
+                              children: _areas.map((a) {
+                                final areaAssignments = _assignments.where((assign) => assign['areaId'] == a.uid).toList();
+                                final workerLabel = areaAssignments.isEmpty
+                                    ? '(No assigned worker)'
+                                    : areaAssignments.map((assign) => '${assign['workerName']} (${assign['shift']})').join(', ');
+                                return FilterChip(
+                                  label: Text('${a.name} - $workerLabel', style: const TextStyle(fontSize: 12)),
+                                  selected: _selectedAreaIds.contains(a.uid),
+                                  onSelected: (v) {
+                                    setState(() {
+                                      if (v) { _selectedAreaIds.add(a.uid!); }
+                                      else { _selectedAreaIds.remove(a.uid); }
+                                    });
+                                  },
+                                  selectedColor: kRailwayBlue.withOpacity(0.2),
+                                );
+                              }).toList(),
                             ),
                         ],
                       ),

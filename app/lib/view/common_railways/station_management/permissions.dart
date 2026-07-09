@@ -38,19 +38,19 @@ class StationCleaningPermissions {
   }
 
   static bool canAssignWorker(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
   }
 
   static bool canBulkAssign(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role);
   }
 
   static bool canGenerateTasks(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
   }
 
   static bool canApproveTasks(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
   }
 
   static bool canStartTask(String role) {
@@ -62,7 +62,7 @@ class StationCleaningPermissions {
   }
 
   static bool canCreateMachine(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role);
   }
 
   static bool canDeleteMachine(String role) {
@@ -70,15 +70,15 @@ class StationCleaningPermissions {
   }
 
   static bool canAssignMachine(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
   }
 
   static bool canCreateMaterial(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role);
   }
 
   static bool canIssueMaterial(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
   }
 
   static bool canApproveReorder(String role) {

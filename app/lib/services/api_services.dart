@@ -3940,6 +3940,7 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (data == null || data['form'] == null) return null;
         return StationCleaningForm.fromJson(data['form']);
       }
       throw Exception('Failed to fetch station cleaning form detail');

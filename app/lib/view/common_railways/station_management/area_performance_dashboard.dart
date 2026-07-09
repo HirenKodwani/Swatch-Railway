@@ -24,11 +24,16 @@ class _AreaPerformanceDashboardState extends State<AreaPerformanceDashboard> {
   bool _isLoading = true;
   String? _error;
 
+  String? _selectedStationId;
+  List<StationArea> _areasOfStation = [];
+  bool _loadingAreas = false;
+
   @override
   void initState() {
     super.initState();
     _selectedAreaId = widget.areaId;
     _selectedAreaName = widget.areaName ?? '';
+    _selectedStationId = widget.stationId;
     if (_selectedAreaId != null) {
       _loadDashboard();
     } else {
@@ -37,9 +42,22 @@ class _AreaPerformanceDashboardState extends State<AreaPerformanceDashboard> {
   }
 
   Future<void> _loadStations() async {
+    setState(() => _isLoading = true);
     try {
       _stations = await ApiService.getStations(active: true);
+      if (_selectedStationId != null) {
+        await _loadAreasForStation(_selectedStationId!);
+      }
     } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadAreasForStation(String stationId) async {
+    if (mounted) setState(() => _loadingAreas = true);
+    try {
+      _areasOfStation = await ApiService.getStationAreas(stationId);
+    } catch (_) {}
+    if (mounted) setState(() => _loadingAreas = false);
   }
 
   Future<void> _loadDashboard() async {
@@ -85,7 +103,7 @@ class _AreaPerformanceDashboardState extends State<AreaPerformanceDashboard> {
                   ),
                 )
               : _dashboard == null
-                  ? const Center(child: Text('No data'))
+                  ? _buildSelectionUI()
                   : RefreshIndicator(
                       onRefresh: _loadDashboard,
                       child: SingleChildScrollView(
@@ -354,6 +372,120 @@ class _AreaPerformanceDashboardState extends State<AreaPerformanceDashboard> {
           const SizedBox(height: 2),
           Text(label, style: const TextStyle(fontSize: 11, color: kTextSecondary)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionUI() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Center(
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.dashboard_customize, color: kRailwayBlue, size: 24),
+                    SizedBox(width: 10),
+                    Text(
+                      'Select Station & Area',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Please select a station and area to view performance metrics.',
+                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+                const Divider(height: 32),
+                if (widget.stationId == null) ...[
+                  const Text('Station *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _selectedStationId,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.train, size: 20),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      isDense: true,
+                    ),
+                    items: _stations.map((s) => DropdownMenuItem(
+                      value: s.uid ?? s.stationCode,
+                      child: Text('${s.stationCode} - ${s.stationName}'),
+                    )).toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() {
+                          _selectedStationId = v;
+                          _selectedAreaId = null;
+                        });
+                        _loadAreasForStation(v);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                const Text('Area *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  value: _selectedAreaId,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.area_chart, size: 20),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
+                    suffixIcon: _loadingAreas
+                        ? const Padding(
+                            padding: EdgeInsets.all(12.0),
+                            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          )
+                        : null,
+                  ),
+                  items: _areasOfStation.map((a) => DropdownMenuItem(
+                    value: a.uid,
+                    child: Text(a.name),
+                  )).toList(),
+                  onChanged: _selectedStationId == null
+                      ? null
+                      : (v) {
+                          if (v != null) {
+                            setState(() {
+                              _selectedAreaId = v;
+                              _selectedAreaName = _areasOfStation.firstWhere((a) => a.uid == v).name;
+                            });
+                          }
+                        },
+                  hint: Text(_selectedStationId == null ? 'Select station first' : 'Select area'),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedAreaId == null
+                        ? null
+                        : () => _loadDashboard(),
+                    icon: const Icon(Icons.analytics),
+                    label: const Text('View Performance'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kRailwayBlue,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

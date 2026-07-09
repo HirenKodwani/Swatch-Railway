@@ -90,12 +90,11 @@ class _ZoneDivisionDepotDropdownsState
     }
 
     final zones = DepotDatabase.zoneData.keys.toList();
-    final divisions = selectedZone != null && DepotDatabase.zoneData.containsKey(selectedZone)
-        ? DepotDatabase.zoneData[selectedZone]!.keys.toList()
+    final divisions = selectedZone != null
+        ? (DepotDatabase.zoneData[selectedZone]?.keys.toList() ?? <String>[])
         : <String>[];
-    final depots = selectedZone != null && selectedDivision != null &&
-                   DepotDatabase.zoneData[selectedZone]![selectedDivision] != null
-        ? DepotDatabase.zoneData[selectedZone]![selectedDivision]!
+    final depots = selectedZone != null && selectedDivision != null
+        ? (DepotDatabase.zoneData[selectedZone]?[selectedDivision] ?? <String>[])
         : <String>[];
 
     if (selectedZone != null && !zones.contains(selectedZone)) {

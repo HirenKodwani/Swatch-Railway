@@ -340,7 +340,7 @@ class TaskManagementService {
   }
 
   async bulkGenerate(data, user) {
-    const { areaIds, date } = data;
+    const { areaIds, date, workerId } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
@@ -348,9 +348,17 @@ class TaskManagementService {
     let total = 0;
     const allTaskIds = [];
 
+    let assignedWorker = null;
+    if (workerId) {
+      const workerDoc = await db.collection('users').doc(workerId).get();
+      if (workerDoc.exists) {
+        assignedWorker = workerDoc.data();
+      }
+    }
+
     for (const areaId of areaIds) {
       const [workersSnap, areaDoc] = await Promise.all([
-        db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).limit(200).get(),
+        assignedWorker ? null : db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).limit(200).get(),
         db.collection('areas').doc(areaId).get()
       ]);
       const areaData = areaDoc.exists ? areaDoc.data() : {};
@@ -361,28 +369,27 @@ class TaskManagementService {
       const batch = db.batch();
       let batchCount = 0;
 
-      workersSnap.forEach(workerDoc => {
-        const assignment = workerDoc.data();
+      if (assignedWorker) {
         for (const scheduledTime of frequencyTimes) {
           const taskRef = db.collection('cleaningTasks').doc();
           const task = {
             uid: taskRef.id,
-            stationId: areaData.stationId || assignment.stationId,
-            platformId: areaData.platformId || assignment.platformId || null,
+            stationId: areaData.stationId || assignedWorker.stationId || '',
+            platformId: areaData.platformId || null,
             areaId,
             areaName,
             areaCode,
-            workerId: assignment.workerId,
-            workerName: assignment.workerName,
+            workerId: assignedWorker.uid,
+            workerName: assignedWorker.fullName || assignedWorker.name || 'Unknown',
             supervisorId: areaData.supervisorId || null,
-            assignmentId: assignment.uid,
+            assignmentId: null,
             activityType: areaData.areaType || 'Cleaning',
             frequency: areaData.cleaningFrequency || 'daily',
             date: targetDate,
             scheduledDate: targetDate,
             scheduledTime,
             priority: areaData.priority || 3,
-            shift: assignment.shift || areaData.defaultShift || 'morning',
+            shift: data.shift || areaData.defaultShift || 'morning',
             status: 'pending',
             startedAt: null, completedAt: null,
             approvedAt: null, rejectedAt: null,
@@ -396,7 +403,44 @@ class TaskManagementService {
           allTaskIds.push(taskRef.id);
           batchCount++;
         }
-      });
+      } else if (workersSnap) {
+        workersSnap.forEach(workerDoc => {
+          const assignment = workerDoc.data();
+          for (const scheduledTime of frequencyTimes) {
+            const taskRef = db.collection('cleaningTasks').doc();
+            const task = {
+              uid: taskRef.id,
+              stationId: areaData.stationId || assignment.stationId,
+              platformId: areaData.platformId || assignment.platformId || null,
+              areaId,
+              areaName,
+              areaCode,
+              workerId: assignment.workerId,
+              workerName: assignment.workerName,
+              supervisorId: areaData.supervisorId || null,
+              assignmentId: assignment.uid,
+              activityType: areaData.areaType || 'Cleaning',
+              frequency: areaData.cleaningFrequency || 'daily',
+              date: targetDate,
+              scheduledDate: targetDate,
+              scheduledTime,
+              priority: areaData.priority || 3,
+              shift: assignment.shift || areaData.defaultShift || 'morning',
+              status: 'pending',
+              startedAt: null, completedAt: null,
+              approvedAt: null, rejectedAt: null,
+              beforePhoto: null, afterPhoto: null,
+              gpsLat: null, gpsLng: null,
+              supervisorNotes: null, rejectionReason: null,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: new Date().toISOString()
+            };
+            batch.set(taskRef, task);
+            allTaskIds.push(taskRef.id);
+            batchCount++;
+          }
+        });
+      }
 
       if (batchCount > 0) {
         await batch.commit();
