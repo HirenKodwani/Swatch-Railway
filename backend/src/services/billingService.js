@@ -35,13 +35,15 @@ class BillingService {
   async listBillingConfigs(user) {
     const { role, zone, division, entityId, userType } = user;
     let query = db.collection('billingRules');
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || '').toLowerCase().replace(/_/g, ' ');
     if (userType === 'contractor') {
       if (!entityId) throw new ForbiddenError('Entity ID missing.');
       query = query.where('entityId', '==', entityId);
+    } else if (userRole === 'super admin') {
+      // Super admin sees all
     } else if (userRole === 'railway master') {
       query = query.where('zone', '==', zone);
-    } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
+    } else if ((!userRole.includes("super admin") && userRole.includes("admin")) || userRole.includes('supervisor')) {
       query = query.where('division', '==', division);
     }
     const snapshot = await query.limit(200).get();
@@ -91,10 +93,14 @@ class BillingService {
   async getInvoices(filters) {
     const { status, contractId, entityId: filterEntityId, division, zone, month, year, user } = filters;
     const { role, zone: userZone, division: userDivision, entityId: userEntityId, userType } = user;
+    const normalizedRole = (role || '').toLowerCase().replace(/_/g, ' ');
     let query = db.collection('billingReports');
     if (userType === 'contractor') query = query.where('entityId', '==', userEntityId);
-    else if ((role || '').toLowerCase() === 'railway master') query = query.where('zone', '==', userZone);
-    else if ((role || '').toLowerCase().includes('admin') || (role || '').toLowerCase().includes('supervisor')) query = query.where('division', '==', userDivision);
+    else if (normalizedRole === 'super admin') {
+      // Super Admin sees everything
+    }
+    else if (normalizedRole === 'railway master') query = query.where('zone', '==', userZone);
+    else if (normalizedRole.includes('admin') || normalizedRole.includes('supervisor')) query = query.where('division', '==', userDivision);
     if (status) query = query.where('status', '==', status);
     if (contractId) query = query.where('contractId', '==', contractId);
     if (filterEntityId) query = query.where('entityId', '==', filterEntityId);
@@ -158,10 +164,14 @@ class BillingService {
 
   async getDashboard(user) {
     const { role, zone, division, entityId, userType } = user;
+    const normalizedRole = (role || '').toLowerCase().replace(/_/g, ' ');
     let query = db.collection('billingReports');
     if (userType === 'contractor') query = query.where('entityId', '==', entityId);
-    else if ((role || '').toLowerCase() === 'railway master') query = query.where('zone', '==', zone);
-    else if ((role || '').toLowerCase().includes('admin') || (role || '').toLowerCase().includes('supervisor')) query = query.where('division', '==', division);
+    else if (normalizedRole === 'super admin') {
+      // Super Admin sees everything
+    }
+    else if (normalizedRole === 'railway master') query = query.where('zone', '==', zone);
+    else if (normalizedRole.includes('admin') || normalizedRole.includes('supervisor')) query = query.where('division', '==', division);
     const snapshot = await query.limit(200).get();
     const summary = { pendingBills: 0, approvedBills: 0, rejectedBills: 0, totalContractValue: 0, totalDeductions: 0, totalPayable: 0, activeContracts: 0 };
     const contractIds = new Set();

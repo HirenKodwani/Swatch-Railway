@@ -117,7 +117,7 @@ class ContractService {
   async getContracts(requesterData, query) {
     const { status, stationId, entityId } = query;
     const { userType, zone: userZone, division: userDivision, role } = requesterData;
-    const userRole = (role || '').trim().toLowerCase();
+    const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let firestoreQuery = db.collection('contracts');
 

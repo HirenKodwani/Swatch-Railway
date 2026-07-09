@@ -119,7 +119,7 @@ class EntityService {
   async getEntities(requesterData, query) {
     const queryStatus = query.status;
     const { userType, entityId, division, zone, role } = requesterData;
-    const userRole = (role || '').trim().toLowerCase();
+    const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let finalEntityIds = [];
     let isFilteredByContract = false;
@@ -130,7 +130,7 @@ class EntityService {
         if (!zone) throw new ValidationError('Zone missing in profile.');
         contractQuery = contractQuery.where('zone', '==', zone);
         isFilteredByContract = true;
-      } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
+      } else if ((!userRole.includes("super admin") && userRole.includes("admin")) || userRole.includes('supervisor')) {
         if (!division) throw new ValidationError('Division missing in profile.');
         contractQuery = contractQuery.where('division', '==', division);
         isFilteredByContract = true;

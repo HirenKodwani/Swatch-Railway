@@ -77,8 +77,8 @@ class UserService {
         throw new NotFoundError("Entity (Company) not found.");
       }
       entityData = entityDoc.data();
-      const userRoleLower = role.toLowerCase();
-      if (userRoleLower.includes('admin') || userRoleLower.includes('supervisor')) {
+      const userRoleLower = role.toLowerCase().replace(/_/g, " ");
+      if ((!userRoleLower.includes("super admin") && userRoleLower.includes("admin")) || userRoleLower.includes('supervisor')) {
         if (!zone || !division) {
           throw new ValidationError("Zone and Division are mandatory to check Active Contracts.");
         }
@@ -368,7 +368,7 @@ class UserService {
   async getUsers(requesterData, filters) {
     const { status: filterStatus, division, zone, depot } = filters;
     const { uid: requesterUid, role, zone: userZone, division: userDivision } = requesterData;
-    const userRole = (role || '').trim().toLowerCase();
+    const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let query = db.collection('users');
 
@@ -391,7 +391,7 @@ class UserService {
       const targetRole = (d.role || '').toLowerCase();
       if (doc.id === requesterUid) return;
 
-      if (userRole.includes('supervisor') && !userRole.includes('admin')) {
+      if (userRole.includes('supervisor') && !(!userRole.includes("super admin") && userRole.includes("admin"))) {
         const highLevelRoles = ['admin', 'super admin', 'company master', 'railway master'];
         if (highLevelRoles.some(r => targetRole.includes(r))) return;
       }
@@ -675,7 +675,7 @@ class UserService {
   }
 
   async getRailwaySupervisors(zone, division, role) {
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
     const isMaster = userRole.includes('master');
 
     let query = db.collection('users')
