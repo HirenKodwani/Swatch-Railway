@@ -118,6 +118,8 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
     }
     return [
       'All Roles',
+      'Super Admin',
+      'Company Master',
       'Railway Master',
       'Railway Admin',
       'Railway Supervisor',
@@ -142,7 +144,7 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
         }
       }
       else if (currentUser?.role == 'Railway Admin') {
-        if (user.role == 'Railway Master' || user.role == 'Contractor Master' || user.role == 'Company Master') {
+        if (user.role == 'SUPER_ADMIN' || user.role == 'Super Admin' || user.role == 'Railway Master' || user.role == 'Contractor Master' || user.role == 'Company Master') {
           return false;
         }
         if (currentUser?.division != null && user.division != currentUser?.division) {
@@ -164,7 +166,7 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
       }
       // Contractor Admin - can see Admins and Supervisors in their division
       else if (currentUser?.role == 'Contractor Admin') {
-        if (user.role == 'Railway Master' || user.role == 'Contractor Master' || user.role == 'Company Master') {
+        if (user.role == 'SUPER_ADMIN' || user.role == 'Super Admin' || user.role == 'Railway Master' || user.role == 'Contractor Master' || user.role == 'Company Master') {
           return false;
         }
         if (currentUser?.division != null && user.division != currentUser?.division) {
@@ -177,7 +179,10 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
         }
       }
 
-      if (selectedRoleFilter != 'All Roles' && user.role != selectedRoleFilter) {
+      final normalizedUserRole = user.role?.replaceAll('_', ' ').toLowerCase() ?? '';
+      final filterRoleLower = selectedRoleFilter.toLowerCase();
+      
+      if (selectedRoleFilter != 'All Roles' && normalizedUserRole != filterRoleLower) {
         return false;
       }
 
@@ -301,7 +306,9 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
     final filteredRejected = _applyFilters(rejectedUsers);
 
     final bool canAddUsers = user != null &&
-        (user.role == 'Company Master' ||
+        (user.role == 'SUPER_ADMIN' ||
+         user.role == 'Super Admin' ||
+         user.role == 'Company Master' ||
          user.role == 'Railway Master' ||
          user.role == 'Railway Admin' ||
          user.role == 'Contractor Master' ||
@@ -681,7 +688,9 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
   Widget _buildPendingList(List<UserRegistrationModel> users) {
     final currentUser = Provider.of<AuthProvider>(context).currentUser;
 
-    final canPerformActions = currentUser?.role == 'Company Master' ||
+    final canPerformActions = currentUser?.role == 'SUPER_ADMIN' ||
+        currentUser?.role == 'Super Admin' ||
+        currentUser?.role == 'Company Master' ||
         currentUser?.role == 'Railway Master' ||
         currentUser?.role == 'Railway Admin' ||
         currentUser?.role == 'Contractor Master' ||
@@ -736,7 +745,9 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
   Widget _buildUserList(List<UserRegistrationModel> users, {bool showActions = true}) {
     final currentUser = Provider.of<AuthProvider>(context).currentUser;
 
-    final canEdit = currentUser?.role == 'Company Master' ||
+    final canEdit = currentUser?.role == 'SUPER_ADMIN' ||
+                    currentUser?.role == 'Super Admin' ||
+                    currentUser?.role == 'Company Master' ||
                     currentUser?.role == 'Railway Master' ||
                     currentUser?.role == 'Railway Admin' ||
                     currentUser?.role == 'Contractor Master' ||
