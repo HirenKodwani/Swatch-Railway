@@ -3,10 +3,12 @@ import { verifyToken } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/authorization.js';
 import { PERMISSIONS } from '../permissions/roles.js';
 import * as taskManagementController from '../controllers/taskManagementController.js';
+import * as taskController from '../controllers/taskController.js';
 
 const router = Router();
 
 // Old v1 paths (keep backward compat)
+router.get('/api/tasks/pending-review', verifyToken, requirePermission(PERMISSIONS.VIEW_TASKS), taskController.pendingReview);
 router.post('/api/tasks/generate', verifyToken, requirePermission(PERMISSIONS.GENERATE_TASKS), taskManagementController.generateTasks);
 router.get('/api/tasks', verifyToken, requirePermission(PERMISSIONS.VIEW_TASKS), taskManagementController.list);
 router.get('/api/tasks/worker/:workerId', verifyToken, requirePermission(PERMISSIONS.VIEW_TASKS), taskManagementController.getWorkerTasks);
