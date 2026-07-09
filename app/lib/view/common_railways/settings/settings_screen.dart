@@ -14,7 +14,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final isAdmin = user?.role == 'Admin' || user?.role == 'Supervisor' || user?.role == 'Company Master';
+    final isAdmin = user?.role == 'SUPER_ADMIN' || user?.role == 'Super Admin' || user?.role == 'Admin' || user?.role == 'Supervisor' || user?.role == 'Company Master';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FC),

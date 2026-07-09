@@ -42,7 +42,7 @@ class _ZoneDivisionDepotDropdownsState
   }
 
   bool _canChangeZone() {
-    return widget.user.role == 'Company Master';
+    return widget.user.role == 'SUPER_ADMIN' || widget.user.role == 'Super Admin' || widget.user.role == 'Company Master';
   }
 
   bool _canChangeDivision() {
@@ -50,7 +50,7 @@ class _ZoneDivisionDepotDropdownsState
     final userZone = widget.user.zone;
 
     // Company Master can always change division
-    if (userRole == 'Company Master') return true;
+    if (userRole == 'SUPER_ADMIN' || userRole == 'Super Admin' || userRole == 'Company Master') return true;
 
     // Railway/Contractor Master can change division if they have a zone
     if ((userRole == 'Railway Master' || userRole == 'Contractor Master') && userZone != null) {
@@ -66,7 +66,7 @@ class _ZoneDivisionDepotDropdownsState
     final userDivision = widget.user.division;
 
     // Company Master can always change depot
-    if (userRole == 'Company Master') return true;
+    if (userRole == 'SUPER_ADMIN' || userRole == 'Super Admin' || userRole == 'Company Master') return true;
 
     // Railway/Contractor Master can change depot if they have a zone (zone-level access)
     if ((userRole == 'Railway Master' || userRole == 'Contractor Master') && userZone != null) {

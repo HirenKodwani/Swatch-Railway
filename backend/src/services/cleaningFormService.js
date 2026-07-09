@@ -45,7 +45,7 @@ class CleaningFormService {
       firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
     } else if ((role || '').toLowerCase().includes('supervisor')) {
       firestoreQuery = firestoreQuery.where('division', '==', userDiv);
-    } else if ((role || '').toLowerCase().includes('admin') || (role || '').toLowerCase().includes('master')) {
+    } else if ((!((role || "").toLowerCase().replace(/_/g, " ").includes("super admin")) && (role || "").toLowerCase().includes("admin")) || (role || '').toLowerCase().includes('master')) {
       if (queryDivision) firestoreQuery = firestoreQuery.where('division', '==', queryDivision);
     }
 

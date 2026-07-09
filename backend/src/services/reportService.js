@@ -312,9 +312,9 @@ class ReportService {
     const { uid, role, userType, zone, division, depot, entityId } = user;
     const { trainNo, startDate, endDate } = query;
     let queryRef = db.collection('coachForms').where('status', 'in', ['LOCKED', 'AUTO-APPROVED']);
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
     const isMaster = userRole.includes('master') || userRole === 'company master';
-    const isAdmin = userRole.includes('admin') || userRole === 'company admin';
+    const isAdmin = (!userRole.includes("super admin") && userRole.includes("admin")) || userRole === 'company admin';
     if (userType === 'railway') {
       if (isMaster) { if (zone) queryRef = queryRef.where('submittedByZone', '==', zone); }
       else if (isAdmin) queryRef = queryRef.where('submittedByDivision', '==', division);
@@ -353,9 +353,9 @@ class ReportService {
     const { uid, role, userType, entityId, division } = user;
     const { startDate, endDate, contractId } = query;
     let queryRef = db.collection('coachForms').where('status', 'in', ['LOCKED', 'AUTO-APPROVED']);
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
     const isMaster = userRole.includes('master');
-    const isAdmin = userRole.includes('admin');
+    const isAdmin = (!userRole.includes("super admin") && userRole.includes("admin"));
     if (userType === 'contractor') {
       if (!entityId) throw new ForbiddenError('Entity ID missing.');
       queryRef = queryRef.where('submittedByEntityId', '==', entityId);
@@ -399,9 +399,9 @@ class ReportService {
     const { uid, role, userType, entityId, division } = user;
     const { startDate, endDate, contractId } = query;
     let queryRef = db.collection('premisesForms').where('status', 'in', ['LOCKED', 'AUTO-APPROVED']);
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
     const isMaster = userRole.includes('master');
-    const isAdmin = userRole.includes('admin');
+    const isAdmin = (!userRole.includes("super admin") && userRole.includes("admin"));
     if (userType === 'contractor') {
       if (!entityId) throw new ForbiddenError('Entity ID missing.');
       queryRef = queryRef.where('submittedByEntityId', '==', entityId);
@@ -438,9 +438,9 @@ class ReportService {
     const { uid, role, userType, entityId, division } = user;
     const { startDate, endDate, contractId } = query;
     let queryRef = db.collection('ctsForms').where('status', 'in', ['LOCKED', 'AUTO-APPROVED']);
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
     const isMaster = userRole.includes('master');
-    const isAdmin = userRole.includes('admin');
+    const isAdmin = (!userRole.includes("super admin") && userRole.includes("admin"));
     if (userType === 'contractor') {
       if (!entityId) throw new ForbiddenError('Entity ID missing.');
       queryRef = queryRef.where('submittedByEntityId', '==', entityId);

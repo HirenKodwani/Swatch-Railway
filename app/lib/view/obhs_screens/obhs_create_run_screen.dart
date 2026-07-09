@@ -1369,6 +1369,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           ],
         ),
         const SizedBox(height: 6),
+        Text('Debug - Total Workers: ${allWorkers.length} | Filtered: ${filteredWorkers.length}', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: LinearProgressIndicator(

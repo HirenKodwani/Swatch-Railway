@@ -171,7 +171,7 @@ class _CommonEntityManagmentScreenState
     final user = Provider.of<AuthProvider>(context).currentUser;
 
     final bool isMaster = user != null &&
-        (user.role == 'Company Master');
+        (user.role == 'SUPER_ADMIN' || user.role == 'Super Admin' || user.role == 'Company Master');
 
 
     return Scaffold(

@@ -46,10 +46,10 @@ class DashboardService {
       db.collection('contracts').get()
     ]);
 
-    const userRole = (role || '').trim().toLowerCase();
+    const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
     const isSuperAdmin = userRole.includes('super admin');
     const isMaster = userRole.includes('master');
-    const isAdmin = userRole.includes('admin') || userRole.includes('supervisor');
+    const isAdmin = (!userRole.includes("super admin") && userRole.includes("admin")) || userRole.includes("supervisor");
 
     const stats = {
       user: { total: 0, approved: 0, pending: 0, railway: 0, contractor: 0 },
@@ -110,9 +110,9 @@ class DashboardService {
 
     let stats = { divisions: 0, depots: 0, railwayEmployees: 0, contractorEmployees: 0,
       registeredEntities: 0, activeContracts: 0, totalFormProcessed: formsSnap.size };
-    const nr = (role || '').toLowerCase();
+    const nr = (role || "").toLowerCase().replace(/_/g, " ");
 
-    if (nr === 'admin' || nr === 'super_admin') {
+    if (nr === 'admin' || (nr === "super_admin" || nr === "super admin")) {
       stats.divisions = divisionsSnap.size;
       stats.depots = depotsSnap.size;
       stats.registeredEntities = companiesSnap.size;

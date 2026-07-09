@@ -223,7 +223,8 @@ class _CommonTrainScreenState extends State<CommonTrainScreen> with SingleTicker
 
     final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
     final bool canAddTrains = currentUser != null &&
-        (currentUser.role == 'Super Admin' ||
+        (currentUser.role == 'SUPER_ADMIN' ||
+         currentUser.role == 'Super Admin' ||
          currentUser.role == 'Company Master' ||
          currentUser.role == 'Railway Master' ||
          currentUser.role == 'Railway Admin' ||

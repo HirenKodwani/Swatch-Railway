@@ -125,9 +125,9 @@ class PremisesFormService {
     const { status, type } = query;
 
     let firestoreQuery = db.collection('premisesForms');
-    const userRole = (role || '').toLowerCase();
+    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
     const isMaster = userRole.includes('master') || userRole === 'company master';
-    const isAdmin = userRole.includes('admin');
+    const isAdmin = (!userRole.includes("super admin") && userRole.includes("admin"));
 
     if (userType === 'railway') {
       if (isMaster) {

@@ -225,7 +225,7 @@ class TrainService {
   async getTrains(filters) {
     const { role, zone: userZone, division: userDivision, trainId: userTrainId } = filters;
     const { status, zone: queryZone, division: queryDivision, applicableFor } = filters;
-    const userRole = (role || '').trim().toLowerCase();
+    const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let query = db.collection('trains');
 
@@ -243,7 +243,7 @@ class TrainService {
       const trainDoc = await db.collection('trains').doc(userTrainId).get();
       if (!trainDoc.exists) return { count: 0, trains: [] };
       return { count: 1, trains: [{ uid: trainDoc.id, ...trainDoc.data() }] };
-    } else if (userRole.includes('admin') || userRole.includes('supervisor')) {
+    } else if ((!userRole.includes("super admin") && userRole.includes("admin")) || userRole.includes('supervisor')) {
       if (!userDivision) throw new ValidationError("Supervisor profile mein Division missing hai.");
       query = query.where('division', '==', userDivision);
       if (userZone) query = query.where('zone', '==', userZone);

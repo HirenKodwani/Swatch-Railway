@@ -65,7 +65,7 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
     if (role == 'Railway Supervisor') {
       return const SupervisorBillingDashboard();
     }
-    if (role == 'Railway Admin' || role == 'Railway Master' || role == 'Company Master') {
+    if (role == 'SUPER_ADMIN' || role == 'Super Admin' || role == 'Railway Admin' || role == 'Railway Master' || role == 'Company Master') {
       return _buildAdminDashboard();
     }
     return const ContractorBillingDashboard();
