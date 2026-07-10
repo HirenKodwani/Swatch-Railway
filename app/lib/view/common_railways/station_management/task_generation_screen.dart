@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/repositories/base_repository.dart';
+import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
@@ -76,15 +77,18 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     if (_selectedStation == null) return;
     if (mounted) setState(() => _isLoadingWorkers = true);
     try {
-      final result = await BaseRepository.apiCall(
-        method: 'GET',
-        path: '/api/users/workers',
-        parser: (d) => d,
-      );
-      final list = (result['workers'] as List? ?? []).map((w) => w as Map<String, dynamic>).toList();
+      final workersList = await OBHSRepository.getRailwayWorkers();
       if (mounted) {
         setState(() {
-          _workers = list.where((w) => w['stationId'] == _selectedStation!.uid).toList();
+          _workers = workersList.where((w) {
+            final statusUpper = w.status.toUpperCase();
+            return statusUpper == 'APPROVED' || statusUpper == 'ACTIVE' || statusUpper == 'VERIFIED';
+          }).map((w) => {
+            'uid': w.uid,
+            'fullName': w.fullName,
+            'role': w.role,
+            'designation': w.designation,
+          }).toList();
         });
       }
     } catch (_) {}
@@ -113,6 +117,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${result['count'] ?? 0} tasks generated'), backgroundColor: kSuccessGreen),
         );
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
