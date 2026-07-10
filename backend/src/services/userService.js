@@ -436,25 +436,26 @@ class UserService {
       }
     }
 
-    let snapshot = await query.limit(200).get();
+    let snapshot = await query.get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 
     if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
       if (requesterZone) {
         console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
         const fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
-        snapshot = await fallbackQuery.limit(200).get();
+        snapshot = await fallbackQuery.get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
     }
 
     let workerList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
+    const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
 
     snapshot.forEach(doc => {
       const d = doc.data();
       const r = (d.role || '').toLowerCase();
-      if (r.includes('admin') || r.includes('master') || r.includes('supervisor')) return;
+      if (!validRoles.includes(r)) return;
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;
       if (s === 'APPROVED') stats.approved++;
@@ -651,17 +652,14 @@ class UserService {
   }
 
   async getWorkers() {
-    const snapshot = await db.collection('users')
-      .where('role', 'in', ['Worker', 'Railway Worker', 'janitor', 'Janitor', 'Contractor Worker', 'CONTRACTOR_WORKER'])
-      .get();
+    const snapshot = await db.collection('users').get();
 
-    if (snapshot.empty) {
-      return { count: 0, workers: [] };
-    }
-
+    const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
     const workersList = [];
     snapshot.forEach(doc => {
       const data = doc.data();
+      const role = (data.role || '').toLowerCase();
+      if (!validRoles.includes(role)) return;
       workersList.push({
         uid: data.uid || doc.id,
         fullName: data.fullName || '',
@@ -669,7 +667,8 @@ class UserService {
         mobile: data.mobile || '',
         role: data.role || '',
         designation: data.designation || '',
-        status: data.status || 'PENDING'
+        status: data.status || 'PENDING',
+        userType: data.userType || ''
       });
     });
 
