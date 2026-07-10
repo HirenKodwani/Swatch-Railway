@@ -102,10 +102,10 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
   }
 
   List<RailwayWorkerModel> get _janitors =>
-      workers.where((w) => w.role == 'janitor' || w.userType == 'worker').toList();
+      workers.where((w) => (w.role.toLowerCase() == 'janitor' || w.role == 'JANITOR' || w.role.toLowerCase() == 'worker' || w.role.toLowerCase() == 'railway worker' || w.role.toLowerCase() == 'contractor worker')).toList();
 
   List<RailwayWorkerModel> get _attendants =>
-      workers.where((w) => w.role == 'attendant' || w.userType == 'worker').toList();
+      workers.where((w) => (w.role.toLowerCase() == 'attendant' || w.role.toLowerCase() == 'worker' || w.role.toLowerCase() == 'railway worker' || w.role.toLowerCase() == 'contractor worker')).toList();
 
   String _workerName(String? workerId) {
     if (workerId == null) return 'Not Assigned';

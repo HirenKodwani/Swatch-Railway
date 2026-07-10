@@ -13,11 +13,16 @@ export const update = asyncHandler(async (req, res) => {
 
 export const list = asyncHandler(async (req, res) => {
   const { division: queryDivision, status } = req.query;
-  const division = queryDivision || req.user?.division;
-  if (!division) {
+  const userRole = (req.user?.role || '').toLowerCase();
+  const isSuperAdmin = userRole.includes('super admin') || userRole.includes('company master') || userRole.includes('admin');
+
+  // Super admins see ALL instances; regular users are scoped to their division
+  const division = isSuperAdmin ? (queryDivision || null) : (queryDivision || req.user?.division);
+
+  if (!division && !isSuperAdmin) {
     return res.status(400).json({ error: 'Division is required' });
   }
-  const result = await runInstanceService.getRunInstancesByDivision(division, status);
+  const result = await runInstanceService.getRunInstancesByDivision(division, status, isSuperAdmin);
   res.status(200).json(result);
 });
 

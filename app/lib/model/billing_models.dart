@@ -64,37 +64,46 @@ class ContractBillingRule {
     this.updatedBy,
   });
 
-  factory ContractBillingRule.fromJson(Map<String, dynamic> json) => ContractBillingRule(
-    uid: json['uid'] ?? '',
-    contractId: json['contractId'] ?? '',
-    contractNumber: json['contractNumber'] ?? '',
-    entityId: json['entityId'] ?? '',
-    entityName: json['entityName'] ?? '',
-    division: json['division'] ?? '',
-    zone: json['zone'] ?? '',
-    contractValue: (json['contractValue'] ?? 0).toDouble(),
-    billingCycle: json['billingCycle'] ?? 'Monthly',
-    serviceTypes: (json['serviceTypes'] as List?)?.cast<String>() ?? [],
-    coachWeightage: (json['coachWeightage'] ?? 35).toDouble(),
-    premiseWeightage: (json['premiseWeightage'] ?? 35).toDouble(),
-    obhsWeightage: (json['obhsWeightage'] ?? 15).toDouble(),
-    passengerFeedbackWeightage: (json['passengerFeedbackWeightage'] ?? 10).toDouble(),
-    aiVerificationWeightage: (json['aiVerificationWeightage'] ?? 5).toDouble(),
-    penaltyScore90Plus: (json['penaltyScore90Plus'] ?? 0).toDouble(),
-    penaltyScore80To89: (json['penaltyScore80To89'] ?? 2).toDouble(),
-    penaltyScore70To79: (json['penaltyScore70To79'] ?? 5).toDouble(),
-    penaltyScoreBelow70: (json['penaltyScoreBelow70'] ?? 10).toDouble(),
-    manpowerShortagePenalty: (json['manpowerShortagePenalty'] ?? 500).toDouble(),
-    machineShortagePenalty: (json['machineShortagePenalty'] ?? 1000).toDouble(),
-    missedObhsComplaintPenalty: (json['missedObhsComplaintPenalty'] ?? 2000).toDouble(),
-    lateTaskCompletionPenalty: (json['lateTaskCompletionPenalty'] ?? 500).toDouble(),
-    nonCompliancePenalty: (json['nonCompliancePenalty'] ?? 1000).toDouble(),
-    status: json['status'] ?? 'Active',
-    createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
-    createdBy: json['createdBy'] ?? '',
-    updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
-    updatedBy: json['updatedBy'],
-  );
+  factory ContractBillingRule.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is String) return DateTime.tryParse(val);
+      if (val is Map) return DateTime.fromMillisecondsSinceEpoch((val['_seconds'] ?? 0) * 1000);
+      return null;
+    }
+
+    return ContractBillingRule(
+      uid: json['uid'] ?? '',
+      contractId: json['contractId'] ?? '',
+      contractNumber: json['contractNumber'] ?? '',
+      entityId: json['entityId'] ?? '',
+      entityName: json['entityName'] ?? '',
+      division: json['division'] ?? '',
+      zone: json['zone'] ?? '',
+      contractValue: (json['contractValue'] ?? 0).toDouble(),
+      billingCycle: json['billingCycle'] ?? 'Monthly',
+      serviceTypes: List<String>.from(json['serviceTypes'] ?? []),
+      coachWeightage: (json['coachWeightage'] ?? 0).toDouble(),
+      premiseWeightage: (json['premiseWeightage'] ?? 0).toDouble(),
+      obhsWeightage: (json['obhsWeightage'] ?? 0).toDouble(),
+      passengerFeedbackWeightage: (json['passengerFeedbackWeightage'] ?? 0).toDouble(),
+      aiVerificationWeightage: (json['aiVerificationWeightage'] ?? 0).toDouble(),
+      penaltyScore90Plus: (json['penaltyScore90Plus'] ?? 0).toDouble(),
+      penaltyScore80To89: (json['penaltyScore80To89'] ?? 0).toDouble(),
+      penaltyScore70To79: (json['penaltyScore70To79'] ?? 0).toDouble(),
+      penaltyScoreBelow70: (json['penaltyScoreBelow70'] ?? 0).toDouble(),
+      manpowerShortagePenalty: (json['manpowerShortagePenalty'] ?? 0).toDouble(),
+      machineShortagePenalty: (json['machineShortagePenalty'] ?? 0).toDouble(),
+      missedObhsComplaintPenalty: (json['missedObhsComplaintPenalty'] ?? 0).toDouble(),
+      lateTaskCompletionPenalty: (json['lateTaskCompletionPenalty'] ?? 0).toDouble(),
+      nonCompliancePenalty: (json['nonCompliancePenalty'] ?? 0).toDouble(),
+      status: json['status'] ?? 'Active',
+      createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
+      createdBy: json['createdBy'] is Map ? (json['createdBy']['name'] ?? json['createdBy']['uid']?.toString() ?? '') : (json['createdBy']?.toString() ?? ''),
+      updatedAt: parseDate(json['updatedAt']),
+      updatedBy: json['updatedBy'] is Map ? (json['updatedBy']['name'] ?? json['updatedBy']['uid']?.toString()) : json['updatedBy']?.toString(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'uid': uid,
@@ -206,8 +215,16 @@ class BillingReport {
     this.auditLog = const [],
   });
 
-  factory BillingReport.fromJson(Map<String, dynamic> json) => BillingReport(
-    uid: json['uid'] ?? '',
+  factory BillingReport.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is String) return DateTime.tryParse(val);
+      if (val is Map) return DateTime.fromMillisecondsSinceEpoch((val['_seconds'] ?? 0) * 1000);
+      return null;
+    }
+
+    return BillingReport(
+      uid: json['uid'] ?? '',
     billingRuleId: json['billingRuleId'] ?? '',
     contractId: json['contractId'] ?? '',
     contractNumber: json['contractNumber'] ?? '',
@@ -232,18 +249,19 @@ class BillingReport {
     otherPenalties: (json['otherPenalties'] ?? 0).toDouble(),
     totalDeduction: (json['totalDeduction'] ?? 0).toDouble(),
     finalPayable: (json['finalPayable'] ?? 0).toDouble(),
-    status: json['status'] ?? 'PENDING',
-    approvedBy: json['approvedBy'],
-    approvedAt: json['approvedAt'] != null ? DateTime.parse(json['approvedAt']) : null,
-    rejectionReason: json['rejectionReason'],
-    invoiceNumber: json['invoiceNumber'],
-    invoiceGeneratedAt: json['invoiceGeneratedAt'] != null ? DateTime.parse(json['invoiceGeneratedAt']) : null,
-    createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
-    generatedBy: json['generatedBy'] ?? '',
-    scoreBreakdown: json['scoreBreakdown'],
+    status: json['status']?.toString() ?? 'PENDING',
+    approvedBy: json['approvedBy'] is Map ? (json['approvedBy']['name'] ?? json['approvedBy']['uid']?.toString()) : json['approvedBy']?.toString(),
+    approvedAt: parseDate(json['approvedAt']),
+    rejectionReason: json['rejectionReason'] is Map ? (json['rejectionReason']['reason'] ?? json['rejectionReason'].toString()) : json['rejectionReason']?.toString(),
+    invoiceNumber: json['invoiceNumber'] is Map ? (json['invoiceNumber']['number'] ?? json['invoiceNumber'].toString()) : json['invoiceNumber']?.toString(),
+    invoiceGeneratedAt: parseDate(json['invoiceGeneratedAt']),
+    createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
+    generatedBy: json['generatedBy'] is Map ? (json['generatedBy']['name'] ?? json['generatedBy']['uid']?.toString() ?? '') : (json['generatedBy']?.toString() ?? ''),
+    scoreBreakdown: json['scoreBreakdown'] is Map ? Map<String, dynamic>.from(json['scoreBreakdown']) : null,
     deductions: (json['deductions'] as List?)?.map((e) => BillingDeductionItem.fromJson(e)).toList() ?? [],
     auditLog: (json['auditLog'] as List?)?.map((e) => BillingAuditEntry.fromJson(e)).toList() ?? [],
-  );
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'uid': uid,
@@ -332,13 +350,22 @@ class BillingAuditEntry {
     required this.details,
   });
 
-  factory BillingAuditEntry.fromJson(Map<String, dynamic> json) => BillingAuditEntry(
-    action: json['action'] ?? '',
-    performedBy: json['performedBy'] ?? '',
-    performedByName: json['performedByName'] ?? '',
-    timestamp: json['timestamp'] != null ? DateTime.parse(json['timestamp']) : DateTime.now(),
-    details: json['details'] ?? '',
-  );
+  factory BillingAuditEntry.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is String) return DateTime.tryParse(val);
+      if (val is Map) return DateTime.fromMillisecondsSinceEpoch((val['_seconds'] ?? 0) * 1000);
+      return null;
+    }
+
+    return BillingAuditEntry(
+      action: json['action'] ?? '',
+      performedBy: json['performedBy'] is Map ? (json['performedBy']['uid']?.toString() ?? '') : (json['performedBy']?.toString() ?? ''),
+      performedByName: json['performedByName'] is Map ? (json['performedByName']['name']?.toString() ?? '') : (json['performedByName']?.toString() ?? ''),
+      timestamp: parseDate(json['timestamp']) ?? DateTime.now(),
+      details: json['details'] ?? '',
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'action': action,

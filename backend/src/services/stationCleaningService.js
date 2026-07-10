@@ -14,7 +14,7 @@ class StationCleaningService {
     const data = {
       uid: ref.id, stationId,
       stationName: stationDoc.data().stationName || '',
-      areaName, areaType: body.areaType || 'Other',
+      areaName, name: areaName, areaType: body.areaType || 'Other',
       cleaningFrequency: body.cleaningFrequency || 'daily',
       priority: body.priority || 3,
       status: 'active',

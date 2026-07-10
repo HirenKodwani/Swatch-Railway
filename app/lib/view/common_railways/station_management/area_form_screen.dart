@@ -26,6 +26,7 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
   final _descCtrl = TextEditingController();
   final _orderCtrl = TextEditingController(text: '0');
   String? _selectedArea;
+  TextEditingController? _autocompleteController;
   bool _active = true;
 
   @override
@@ -107,8 +108,13 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                   return _areaTypes.where((a) => a.toLowerCase().contains(textEditingValue.text.toLowerCase()));
                 },
                 initialValue: TextEditingValue(text: _selectedArea ?? ''),
-                onSelected: (v) => _selectedArea = v,
+                onSelected: (v) {
+                  setState(() {
+                    _selectedArea = v;
+                  });
+                },
                 fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                  _autocompleteController = controller;
                   return TextFormField(
                     controller: controller,
                     focusNode: focusNode,
@@ -130,7 +136,12 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                 children: _areaTypes.map((a) => ChoiceChip(
                   label: Text(a, style: const TextStyle(fontSize: 11)),
                   selected: _selectedArea == a,
-                  onSelected: (v) => setState(() => _selectedArea = a),
+                  onSelected: (v) {
+                    setState(() {
+                      _selectedArea = a;
+                      _autocompleteController?.text = a;
+                    });
+                  },
                   selectedColor: kRailwayBlue,
                   labelStyle: TextStyle(color: _selectedArea == a ? Colors.white : Colors.black87),
                 )).toList(),

@@ -22,13 +22,13 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     _loadBill();
   }
 
-  Future<void> _loadBill() async {
-    setState(() { isLoading = true; error = null; });
+  Future<void> _loadBill({bool silent = false}) async {
+    if (!silent) setState(() { isLoading = true; error = null; });
     try {
       final result = await ApiService.getBillingReportDetail(widget.billId);
-      if (mounted) setState(() { bill = result; isLoading = false; });
+      if (mounted) setState(() { bill = result; if (!silent) isLoading = false; });
     } catch (e) {
-      if (mounted) setState(() { isLoading = false; error = e.toString(); });
+      if (mounted && !silent) setState(() { isLoading = false; error = e.toString(); });
     }
   }
 
@@ -244,7 +244,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     try {
       await ApiService.approveBill(widget.billId);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill approved'), backgroundColor: Colors.green));
-      _loadBill();
+      _loadBill(silent: true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
@@ -272,7 +272,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     try {
       await ApiService.rejectBill(widget.billId, reason: reason);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill rejected'), backgroundColor: Colors.red));
-      _loadBill();
+      _loadBill(silent: true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }

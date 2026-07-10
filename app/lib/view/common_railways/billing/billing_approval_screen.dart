@@ -29,13 +29,13 @@ class _BillingApprovalScreenState extends State<BillingApprovalScreen> with Sing
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() { isLoading = true; });
+  Future<void> _loadData({bool silent = false}) async {
+    if (!silent) setState(() { isLoading = true; });
     try {
       final reports = await ApiService.getBillingReports();
-      if (mounted) setState(() { allBills = reports; isLoading = false; });
+      if (mounted) setState(() { allBills = reports; if (!silent) isLoading = false; });
     } catch (e) {
-      if (mounted) setState(() { isLoading = false; });
+      if (mounted && !silent) setState(() { isLoading = false; });
     }
   }
 
@@ -184,7 +184,7 @@ class _BillingApprovalScreenState extends State<BillingApprovalScreen> with Sing
     try {
       await ApiService.approveBill(billId);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill approved'), backgroundColor: Colors.green));
-      _loadData();
+      _loadData(silent: true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
@@ -205,7 +205,7 @@ class _BillingApprovalScreenState extends State<BillingApprovalScreen> with Sing
     try {
       await ApiService.rejectBill(billId, reason: reason);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill rejected'), backgroundColor: Colors.red));
-      _loadData();
+      _loadData(silent: true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }

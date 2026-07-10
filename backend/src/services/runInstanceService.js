@@ -28,6 +28,9 @@ async function generateTaskInstancesForRun(runData) {
       const detailRef = db.collection('task_details').doc(detailId);
       batch.set(detailRef, { detailId, headerId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: taskTypeName, scheduledTime: timeSlot, scheduledDate: departureDate, toiletStatus: null, washBasinStatus: null, dustbinStatus: null, consumableStatus: null, status: 'PLANNED', beforePhoto: null, afterPhoto: null, gpsLatitude: null, gpsLongitude: null, employeeId: workerId, deviceId: null, mobileNumber: null, checklist: null, remarks: null, completionTime: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       opCount++;
+      const oldTaskRef1 = db.collection('task_instances').doc(detailId);
+      batch.set(oldTaskRef1, { taskId: detailId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: taskTypeName, taskName: displayName, frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
+      opCount++;
       batch.update(headerRef, { childTaskIds: admin.firestore.FieldValue.arrayUnion(detailId) });
       opCount++;
       taskCount++;
@@ -38,6 +41,9 @@ async function generateTaskInstancesForRun(runData) {
       const garbageRef = db.collection('garbage_tasks').doc(garbageId);
       batch.set(garbageRef, { id: garbageId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, scheduledTime: timeSlot, scheduledDate: departureDate, isPreTerminal: false, status: 'PENDING', beforePhoto: null, afterPhoto: null, gpsLatitude: null, gpsLongitude: null, completedAt: null, createdAt: new Date().toISOString() });
       opCount++;
+      const oldTaskRef2 = db.collection('task_instances').doc(garbageId);
+      batch.set(oldTaskRef2, { taskId: garbageId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: 'garbage', taskName: 'Garbage Collection', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
@@ -45,6 +51,9 @@ async function generateTaskInstancesForRun(runData) {
       const waterId = `${runData.runInstanceId}_water_${timeSlot.replace(':', '')}_${coachNo}`;
       const waterRef = db.collection('water_checks').doc(waterId);
       batch.set(waterRef, { id: waterId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, checkTime: timeSlot, checkDate: departureDate, waterStatus: 'pending', lowWaterAlert: false, wateringPointSchedule: null, status: 'PENDING', photoUrl: null, completedAt: null, createdAt: new Date().toISOString() });
+      opCount++;
+      const oldTaskRef3 = db.collection('task_instances').doc(waterId);
+      batch.set(oldTaskRef3, { taskId: waterId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: 'water', taskName: 'Water Check', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
       opCount++;
       taskCount++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
@@ -54,6 +63,9 @@ async function generateTaskInstancesForRun(runData) {
       const safetyRef = db.collection('safety_checks').doc(safetyId);
       batch.set(safetyRef, { id: safetyId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, scheduledTime: timeSlot, scheduledDate: departureDate, fireExtinguisherStatus: null, fsdsStatus: null, cctvStatus: null, emergencyEquipmentStatus: null, photos: [], deficiencyReports: [], status: 'PENDING', remarks: null, completedAt: null, createdAt: new Date().toISOString() });
       opCount++;
+      const oldTaskRef4 = db.collection('task_instances').doc(safetyId);
+      batch.set(oldTaskRef4, { taskId: safetyId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: 'safety', taskName: 'Safety Inspection', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
@@ -61,6 +73,9 @@ async function generateTaskInstancesForRun(runData) {
       const repairId = `${runData.runInstanceId}_repair_${timeSlot.replace(':', '')}_${coachNo}`;
       const repairRef = db.collection('petty_repairs').doc(repairId);
       batch.set(repairRef, { id: repairId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, workerId, workerName, inspectionTime: timeSlot, inspectionDate: departureDate, items: { latches: 'ok', windows: 'ok', doors: 'ok', seats: 'ok', lights: 'ok', fans: 'ok', taps: 'ok', flush: 'ok' }, isEscalated: false, escalatedTo: null, status: 'PENDING', remarks: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
+      const oldTaskRef5 = db.collection('task_instances').doc(repairId);
+      batch.set(oldTaskRef5, { taskId: repairId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId, workerName, taskType: 'repair', taskName: 'Petty Repair', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
       opCount++;
       taskCount++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
@@ -77,6 +92,9 @@ async function generateTaskInstancesForRun(runData) {
       const linenRef = db.collection('linen_tasks').doc(linenId);
       batch.set(linenRef, { id: linenId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, coachType: coach.coachType || 'AC', assignedTo: attendantId, assignedToName: attendantName, workerType: 'ATTENDANT', taskType: 'LINEN_CHANGE', displayName: 'Linen Change & Berth Setup', scheduledTime: timeSlot, scheduledDate: departureDate, status: 'PENDING', linenItemsChecklist: { bedsheet: false, pillowCover: false, blanket: false, towel: false }, beforePhoto: null, afterPhoto: null, remarks: null, completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       opCount++;
+      const oldTaskRef6 = db.collection('task_instances').doc(linenId);
+      batch.set(oldTaskRef6, { taskId: linenId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId: attendantId, workerName: attendantName, taskType: 'LINEN_CHANGE', taskName: 'Linen Change & Berth Setup', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
+      opCount++;
       taskCount++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
     }
@@ -84,6 +102,9 @@ async function generateTaskInstancesForRun(runData) {
       const berthId = `${runData.runInstanceId}_berth_${timeSlot.replace(':', '')}_${coachNo}`;
       const berthRef = db.collection('berth_inspections').doc(berthId);
       batch.set(berthRef, { id: berthId, runInstanceId: runData.runInstanceId, trainNo: runData.trainNo, coachNo, coachType: coach.coachType || 'AC', assignedTo: attendantId, assignedToName: attendantName, workerType: 'ATTENDANT', taskType: 'BERTH_INSPECTION', displayName: 'Berth & Cabin Inspection', scheduledTime: timeSlot, scheduledDate: departureDate, status: 'PENDING', berthChecklist: { cushionCondition: null, berthLatch: null, readingLight: null, acVent: null, windowBlind: null }, deficiencies: [], beforePhoto: null, afterPhoto: null, remarks: null, completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      opCount++;
+      const oldTaskRef7 = db.collection('task_instances').doc(berthId);
+      batch.set(oldTaskRef7, { taskId: berthId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId: attendantId, workerName: attendantName, taskType: 'BERTH_INSPECTION', taskName: 'Berth & Cabin Inspection', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
       opCount++;
       taskCount++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
@@ -109,6 +130,9 @@ async function generatePreTerminalGarbageTasks(runInstanceId) {
       const garbageId = `${runInstanceId}_garbage_${timeSlot}_${coachNo}`;
       const garbageRef = db.collection('garbage_tasks').doc(garbageId);
       batch.set(garbageRef, { id: garbageId, runInstanceId, trainNo: runData.trainNo, coachNo, workerId: effectiveWorkerId, workerName: coach.workerName || coach.janitorName || 'Unknown', scheduledTime: timeSlot, scheduledDate: new Date().toISOString().split('T')[0], isPreTerminal: true, status: 'PENDING', beforePhoto: null, afterPhoto: null, gpsLatitude: null, gpsLongitude: null, completedAt: null, createdAt: new Date().toISOString() });
+      opCount++;
+      const oldTaskRef = db.collection('task_instances').doc(garbageId);
+      batch.set(oldTaskRef, { taskId: garbageId, runInstanceId: runData.runInstanceId, isParentTask: false, trainNo: runData.trainNo, coachNo, workerId: effectiveWorkerId, workerName: coach.workerName || coach.janitorName || 'Unknown', taskType: 'garbage', taskName: 'Garbage Collection (Pre-Terminal)', frequencyIndex: timeSlot, scheduledTime: timeSlot, status: 'PENDING', createdAt: new Date().toISOString() });
       opCount++;
       count++;
       if (opCount >= CHUNK_SIZE) { await batch.commit(); batch = db.batch(); opCount = 0; }
@@ -166,7 +190,7 @@ class RunInstanceService {
       return { coachPosition: c.coachPosition || null, coachType: c.coachType || null, janitorId: actualJanitorId, janitorName, workerId: actualJanitorId, workerName: janitorName, attendantId: c.attendantId || null, attendantName: actualAttendantName, janitorTasks: c.janitorTasks || [], attendantTasks: c.attendantTasks || [], tasks: c.tasks || c.janitorTasks || [], attendanceStatus: 'Pending' };
     }));
 
-    const { uid, name, email, role } = creatorData;
+    const { uid, name, email, role, division: userDivision, zone: userZone } = creatorData;
     const workerCoachCount = {};
     for (const c of coachesWithNames) {
       if (c.workerId) {
@@ -188,16 +212,26 @@ class RunInstanceService {
     const newRunData = {
       runInstanceId: runInstanceRef.id, instanceId, departureDate, trainNo: pairData.trainNo,
       trainName: pairData.trainName, inboundTrainNo: pairData.inboundTrainNo, outboundTrainNo: pairData.outboundTrainNo,
-      parentTrainId: pairData.parentTrainId, division: trainData.division || null, zone: trainData.zone || null,
+      parentTrainId: pairData.parentTrainId, division: trainData.division || userDivision || null, zone: trainData.zone || userZone || null,
       depot: trainData.depot || null, journeyStartTime: pairData.journeyStartTime || null,
       journeyEndTime: pairData.journeyEndTime || null,
       scheduledDeparture: `${departureDate}T${pairData.journeyStartTime || '00:00:00'}.000Z`,
-      numberOfCoaches: coachesWithNames.length, coaches: coachesWithNames, status: 'PLANNED',
-      attendanceCaptured: false, taskExecutionScore: 0, actualDeparture: null, actualArrival: null,
+      numberOfCoaches: coachesWithNames.length, coaches: coachesWithNames, status: 'Active',
+      attendanceCaptured: false, taskExecutionScore: 0, actualDeparture: new Date().toISOString(), actualArrival: null,
       createdAt: new Date().toISOString(), createdBy: uid, createdByName: userName
     };
     await runInstanceRef.set(newRunData);
     await db.collection('TrainPairs').doc(instanceId).update({ status: 'Active', lastAssignedDate: departureDate });
+
+    // Generate tasks immediately for all assigned workers
+    try {
+      await generateTaskInstancesForRun(newRunData);
+      await generatePreTerminalGarbageTasks(runInstanceRef.id);
+      await generateTasksFromMasters(newRunData);
+      logger.info('RunInstance', `Tasks generated on creation for run ${runInstanceRef.id}`);
+    } catch (taskErr) {
+      logger.error('RunInstance', `Task generation failed for run ${runInstanceRef.id}:`, taskErr.message);
+    }
 
     return { message: 'Run Instance (Run Calendar Entry) created successfully', id: runInstanceRef.id, data: newRunData };
   }
@@ -272,10 +306,15 @@ class RunInstanceService {
     return { message: 'Run Instance updated successfully', runInstanceId: uid, data: { id: updatedDoc.id, ...updatedDoc.data() } };
   }
 
-  async getRunInstancesByDivision(division, status) {
-    let query = db.collection('RunInstance').where('division', '==', division);
+  async getRunInstancesByDivision(division, status, isSuperAdmin = false) {
+    let query = db.collection('RunInstance');
+    if (division) {
+      query = query.where('division', '==', division);
+    } else if (!isSuperAdmin) {
+      return { success: false, error: 'Division is required' };
+    }
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.limit(5000).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
     instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
@@ -285,7 +324,7 @@ class RunInstanceService {
   async getRunInstancesByZone(zone, status) {
     let query = db.collection('RunInstance').where('zone', '==', zone);
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.limit(5000).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
     instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));

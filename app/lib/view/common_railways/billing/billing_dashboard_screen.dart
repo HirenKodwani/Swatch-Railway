@@ -38,8 +38,8 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() { isLoading = true; error = null; });
+  Future<void> _loadData({bool silent = false}) async {
+    if (!silent) setState(() { isLoading = true; error = null; });
     try {
       final results = await Future.wait([
         ApiService.getBillingDashboard(),
@@ -49,11 +49,11 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
         setState(() {
           summary = results[0] as BillingDashboardSummary;
           recentBills = results[1] as List<BillingReport>;
-          isLoading = false;
+          if (!silent) isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() { isLoading = false; error = e.toString(); });
+      if (mounted && !silent) setState(() { isLoading = false; error = e.toString(); });
     }
   }
 
@@ -104,7 +104,7 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
               ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
                   const SizedBox(height: 16),
-                  Text('Error loading data', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+                  Text(error ?? 'Error loading data', style: TextStyle(fontSize: 16, color: Colors.grey.shade600), textAlign: TextAlign.center),
                   const SizedBox(height: 8),
                   ElevatedButton(onPressed: _loadData, child: const Text('Retry')),
                 ]))
@@ -336,7 +336,7 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
               try {
                 await ApiService.approveBill(billId);
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill approved successfully'), backgroundColor: Colors.green));
-                _loadData();
+                _loadData(silent: true);
               } catch (e) {
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
               }
@@ -374,9 +374,9 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
               if (reason.isEmpty) return;
               Navigator.pop(ctx);
               try {
-                await ApiService.rejectBill(billId, reason: reason);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill rejected'), backgroundColor: Colors.red));
-                _loadData();
+                await ApiService.rejectBill(billId, reason: reasonCtrl.text);
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill rejected successfully'), backgroundColor: Colors.green));
+                _loadData(silent: true);
               } catch (e) {
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
               }

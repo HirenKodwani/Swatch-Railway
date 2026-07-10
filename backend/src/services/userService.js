@@ -107,34 +107,39 @@ class UserService {
     }
 
     const newUid = userRecord.uid;
-    await db.collection('users').doc(newUid).set({
-      uid: newUid,
-      email: normalizedEmail,
-      password,
-      role,
-      userType: normalizedUserType,
-      fullName: fullName || null,
-      mobile: mobile || null,
-      designation: designation || null,
-      zone: zone || null,
-      division: division || null,
-      depot: depot || null,
-      entityId: entityId || null,
-      entityDetails: entityData,
-      trainId: trainId || null,
-      trainIds: trainIds || (trainId ? [trainId] : []),
-      worker_type: worker_type || null,
-      stationId: stationId || null,
-      platformId: platformId || null,
-      areaId: areaId || null,
-      createdBy: creatorId,
-      createdByName: creatorName,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-      submitted_at: new Date().toISOString()
-    });
+      const lowerCreatorRole = (creatorRole || '').toLowerCase();
+      const initialStatus = (lowerCreatorRole.includes('super admin') || lowerCreatorRole.includes('company master') || lowerCreatorRole.includes('admin')) 
+        ? 'ACTIVE' 
+        : 'PENDING';
 
-    console.log(`(Admin) User Created: ${fullName} by ${creatorName}`);
+      await db.collection('users').doc(newUid).set({
+        uid: newUid,
+        email: normalizedEmail,
+        password,
+        role,
+        userType: normalizedUserType,
+        fullName: fullName || null,
+        mobile: mobile || null,
+        designation: designation || null,
+        zone: zone || null,
+        division: division || null,
+        depot: depot || null,
+        entityId: entityId || null,
+        entityDetails: entityData,
+        trainId: trainId || null,
+        trainIds: trainIds || (trainId ? [trainId] : []),
+        worker_type: worker_type || null,
+        stationId: stationId || null,
+        platformId: platformId || null,
+        areaId: areaId || null,
+        createdBy: creatorId,
+        createdByName: creatorName,
+        status: initialStatus,
+        createdAt: new Date().toISOString(),
+        submitted_at: new Date().toISOString()
+      });
+
+      console.log(`(Admin) User Created: ${fullName} by ${creatorName} with status ${initialStatus}`);
     return { message: 'User created successfully.', uid: newUid };
   }
 
@@ -382,7 +387,7 @@ class UserService {
       query = query.where('division', '==', userDivision);
     }
 
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.limit(5000).get();
     let userList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
 
@@ -416,7 +421,7 @@ class UserService {
   async getRailwayWorkers(requesterData, filters) {
     const { status: filterStatus, division, zone } = filters;
     const { role: requesterRole, zone: requesterZone, division: requesterDivision } = requesterData;
-    const userRole = (requesterRole || '').trim().toLowerCase();
+    const userRole = (requesterRole || '').trim().toLowerCase().replace(/_/g, ' ');
 
     console.log(`[GET /api/admin/railway-workers] userRole: ${userRole}, requesterDivision: ${requesterDivision}`);
 
@@ -442,6 +447,10 @@ class UserService {
     if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
       if (requesterZone) {
         console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
+        let fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
+        if (requesterData.userType === 'contractor' && requesterData.entityId) {
+          fallbackQuery = fallbackQuery.where('entityId', '==', requesterData.entityId);
+        }
         const fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
         snapshot = await fallbackQuery.get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
@@ -455,6 +464,8 @@ class UserService {
     snapshot.forEach(doc => {
       const d = doc.data();
       const r = (d.role || '').toLowerCase();
+      const validWorkerRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
+      if (!validWorkerRoles.includes(r)) return;
       if (!validRoles.includes(r)) return;
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;

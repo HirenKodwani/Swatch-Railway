@@ -553,14 +553,55 @@ class DashboardService {
     return { count: snapshot.size, workers: snapshot.docs.map(d => ({ id: d.id, ...d.data() })) };
   }
 
-  async getAllFormsStats() {
-    const [coachSnap, premisesSnap, ctsSnap, cleaningSnap] = await Promise.all([
-      db.collection('coachForms').get(), db.collection('premisesForms').get(),
-      db.collection('ctsForms').get(), db.collection('cleaningForms').get()
-    ]);
-    return { coachForms: coachSnap.size, premisesForms: premisesSnap.size,
-      ctsForms: ctsSnap.size, cleaningForms: cleaningSnap.size,
-      total: coachSnap.size + premisesSnap.size + ctsSnap.size + cleaningSnap.size };
+  async getAllFormsStats(query = {}) {
+    const { formType, zone, division, entityId, days } = query;
+
+    if (!formType) {
+      const [coachSnap, premisesSnap, ctsSnap, cleaningSnap] = await Promise.all([
+        db.collection('coachForms').get(), db.collection('premisesForms').get(),
+        db.collection('ctsForms').get(), db.collection('cleaningForms').get()
+      ]);
+      return {
+        coachForms: coachSnap.size, premisesForms: premisesSnap.size,
+        ctsForms: ctsSnap.size, cleaningForms: cleaningSnap.size,
+        total: coachSnap.size + premisesSnap.size + ctsSnap.size + cleaningSnap.size
+      };
+    }
+
+    let collectionName = 'coachForms';
+    if (formType === 'premises') collectionName = 'premisesForms';
+    else if (formType === 'cts') collectionName = 'ctsForms';
+    else if (formType === 'cleaning') collectionName = 'cleaningForms';
+
+    let dbQuery = db.collection(collectionName);
+    if (zone) dbQuery = dbQuery.where('submittedByZone', '==', zone);
+    if (division) dbQuery = dbQuery.where('submittedByDivision', '==', division);
+    if (entityId) dbQuery = dbQuery.where('submittedByEntityId', '==', entityId);
+
+    const snapshot = await dbQuery.get();
+    let total = 0, pending = 0, manpowerApproved = 0, rejected = 0, scoringProgress = 0, autoApproved = 0, locked = 0;
+
+    const now = new Date();
+    const minDate = days ? new Date(now.setDate(now.getDate() - parseInt(days))) : null;
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      if (minDate && d.createdAt) {
+        if (new Date(d.createdAt) < minDate) return;
+      }
+      total++;
+      const s = (d.status || '').toLowerCase();
+      if (['pending', 'submitted', 're-submitted', 'draft'].includes(s)) pending++;
+      else if (['approved', 'approved_by_railway', 'manpower_approved'].includes(s)) manpowerApproved++;
+      else if (['rejected', 'rejected_by_railway'].includes(s)) rejected++;
+      else if (['scoring_progress', 'scoring_in_progress', 'scored'].includes(s)) scoringProgress++;
+      else if (['auto_approved', 'auto-approved'].includes(s)) autoApproved++;
+      else if (['locked', 'acknowledged', 'completed'].includes(s)) locked++;
+    });
+
+    return {
+      total, pending, manpowerApproved, rejected, scoringProgress, autoApproved, locked
+    };
   }
 }
 
