@@ -99,9 +99,9 @@ class ContractBillingRule {
       nonCompliancePenalty: (json['nonCompliancePenalty'] ?? 0).toDouble(),
       status: json['status'] ?? 'Active',
       createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
-      createdBy: json['createdBy'] ?? '',
+      createdBy: json['createdBy'] is Map ? (json['createdBy']['name'] ?? json['createdBy']['uid']?.toString() ?? '') : (json['createdBy']?.toString() ?? ''),
       updatedAt: parseDate(json['updatedAt']),
-      updatedBy: json['updatedBy'],
+      updatedBy: json['updatedBy'] is Map ? (json['updatedBy']['name'] ?? json['updatedBy']['uid']?.toString()) : json['updatedBy']?.toString(),
     );
   }
 
@@ -250,7 +250,7 @@ class BillingReport {
     totalDeduction: (json['totalDeduction'] ?? 0).toDouble(),
     finalPayable: (json['finalPayable'] ?? 0).toDouble(),
     status: json['status'] ?? 'PENDING',
-    approvedBy: json['approvedBy'],
+    approvedBy: json['approvedBy'] is Map ? (json['approvedBy']['name'] ?? json['approvedBy']['uid']?.toString()) : json['approvedBy']?.toString(),
     approvedAt: parseDate(json['approvedAt']),
     rejectionReason: json['rejectionReason'],
     invoiceNumber: json['invoiceNumber'],
@@ -360,8 +360,8 @@ class BillingAuditEntry {
 
     return BillingAuditEntry(
       action: json['action'] ?? '',
-      performedBy: json['performedBy'] ?? '',
-      performedByName: json['performedByName'] ?? '',
+      performedBy: json['performedBy'] is Map ? (json['performedBy']['uid']?.toString() ?? '') : (json['performedBy']?.toString() ?? ''),
+      performedByName: json['performedByName'] is Map ? (json['performedByName']['name']?.toString() ?? '') : (json['performedByName']?.toString() ?? ''),
       timestamp: parseDate(json['timestamp']) ?? DateTime.now(),
       details: json['details'] ?? '',
     );
