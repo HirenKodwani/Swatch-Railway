@@ -374,7 +374,7 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
               if (reason.isEmpty) return;
               Navigator.pop(ctx);
               try {
-                await ApiService.rejectBill(billId, reasonCtrl.text);
+                await ApiService.rejectBill(billId, reason: reasonCtrl.text);
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill rejected successfully'), backgroundColor: Colors.green));
                 _loadData(silent: true);
               } catch (e) {
