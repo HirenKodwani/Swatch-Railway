@@ -440,7 +440,7 @@ class UserService {
       query = query.where('entityId', '==', requesterData.entityId);
     }
 
-    let snapshot = await query.limit(200).get();
+    let snapshot = await query.limit(1000).get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 
     if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
@@ -450,7 +450,7 @@ class UserService {
         if (requesterData.userType === 'contractor' && requesterData.entityId) {
           fallbackQuery = fallbackQuery.where('entityId', '==', requesterData.entityId);
         }
-        snapshot = await fallbackQuery.limit(200).get();
+        snapshot = await fallbackQuery.limit(1000).get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
     }
