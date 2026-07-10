@@ -216,12 +216,22 @@ class RunInstanceService {
       depot: trainData.depot || null, journeyStartTime: pairData.journeyStartTime || null,
       journeyEndTime: pairData.journeyEndTime || null,
       scheduledDeparture: `${departureDate}T${pairData.journeyStartTime || '00:00:00'}.000Z`,
-      numberOfCoaches: coachesWithNames.length, coaches: coachesWithNames, status: 'PLANNED',
-      attendanceCaptured: false, taskExecutionScore: 0, actualDeparture: null, actualArrival: null,
+      numberOfCoaches: coachesWithNames.length, coaches: coachesWithNames, status: 'Active',
+      attendanceCaptured: false, taskExecutionScore: 0, actualDeparture: new Date().toISOString(), actualArrival: null,
       createdAt: new Date().toISOString(), createdBy: uid, createdByName: userName
     };
     await runInstanceRef.set(newRunData);
     await db.collection('TrainPairs').doc(instanceId).update({ status: 'Active', lastAssignedDate: departureDate });
+
+    // Generate tasks immediately for all assigned workers
+    try {
+      await generateTaskInstancesForRun(newRunData);
+      await generatePreTerminalGarbageTasks(runInstanceRef.id);
+      await generateTasksFromMasters(newRunData);
+      logger.info('RunInstance', `Tasks generated on creation for run ${runInstanceRef.id}`);
+    } catch (taskErr) {
+      logger.error('RunInstance', `Task generation failed for run ${runInstanceRef.id}:`, taskErr.message);
+    }
 
     return { message: 'Run Instance (Run Calendar Entry) created successfully', id: runInstanceRef.id, data: newRunData };
   }
