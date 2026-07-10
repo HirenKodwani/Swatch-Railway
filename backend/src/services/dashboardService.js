@@ -574,9 +574,9 @@ class DashboardService {
     else if (formType === 'cleaning') collectionName = 'cleaningForms';
 
     let dbQuery = db.collection(collectionName);
-    if (zone) dbQuery = dbQuery.where('zone', '==', zone);
-    if (division) dbQuery = dbQuery.where('division', '==', division);
-    if (entityId) dbQuery = dbQuery.where('entityId', '==', entityId);
+    if (zone) dbQuery = dbQuery.where('submittedByZone', '==', zone);
+    if (division) dbQuery = dbQuery.where('submittedByDivision', '==', division);
+    if (entityId) dbQuery = dbQuery.where('submittedByEntityId', '==', entityId);
 
     const snapshot = await dbQuery.get();
     let total = 0, pending = 0, manpowerApproved = 0, rejected = 0, scoringProgress = 0, autoApproved = 0, locked = 0;

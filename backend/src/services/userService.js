@@ -454,7 +454,8 @@ class UserService {
     snapshot.forEach(doc => {
       const d = doc.data();
       const r = (d.role || '').toLowerCase();
-      if (r.includes('admin') || r.includes('master') || r.includes('supervisor')) return;
+      const validWorkerRoles = ['worker', 'railway_worker', 'janitor', 'attendant', 'contractor_worker', 'obhs_staff', 'staff'];
+      if (!validWorkerRoles.includes(r)) return;
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;
       if (s === 'APPROVED') stats.approved++;
