@@ -420,7 +420,7 @@ class UserService {
 
     console.log(`[GET /api/admin/railway-workers] userRole: ${userRole}, requesterDivision: ${requesterDivision}`);
 
-    let query = db.collection('users').where('role', 'in', ['Worker', 'Railway Worker', 'RAILWAY_WORKER', 'janitor', 'Janitor', 'Contractor Worker', 'CONTRACTOR_WORKER']);
+    let query = db.collection('users');
 
     if (userRole === 'company master' || userRole === 'super admin' || userRole === 'admin') {
       if (zone) query = query.where('zone', '==', zone);
@@ -442,7 +442,7 @@ class UserService {
     if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
       if (requesterZone) {
         console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
-        const fallbackQuery = db.collection('users').where('role', 'in', ['Worker', 'Railway Worker', 'RAILWAY_WORKER', 'janitor', 'Janitor', 'Contractor Worker', 'CONTRACTOR_WORKER']).where('zone', '==', requesterZone);
+        const fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
         snapshot = await fallbackQuery.limit(200).get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
@@ -453,6 +453,8 @@ class UserService {
 
     snapshot.forEach(doc => {
       const d = doc.data();
+      const r = (d.role || '').toLowerCase();
+      if (r.includes('admin') || r.includes('master') || r.includes('supervisor')) return;
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;
       if (s === 'APPROVED') stats.approved++;
