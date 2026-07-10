@@ -2,6 +2,7 @@ import 'package:crm_train/model/billing_models.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:crm_train/view/common_railways/billing/monthly_bill_screen.dart';
+import 'package:crm_train/view/common_railways/billing/billing_report_screen.dart';
 import 'package:flutter/material.dart';
 
 class ContractorBillingDashboard extends StatefulWidget {
@@ -148,7 +149,7 @@ class _ContractorBillingDashboardState extends State<ContractorBillingDashboard>
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
         trailing: const Icon(Icons.download, color: kRailwayBlue),
-        onTap: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Downloading $title...'))),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BillingReportScreen())),
       ),
     );
   }

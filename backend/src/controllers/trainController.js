@@ -12,7 +12,7 @@ export const updateTrain = asyncHandler(async (req, res) => {
 });
 
 export const getTrains = asyncHandler(async (req, res) => {
-  const result = await trainService.getTrains({ ...req.user, ...req.query });
+  const result = await trainService.getTrains(req.user, req.query);
   res.status(200).json(result);
 });
 

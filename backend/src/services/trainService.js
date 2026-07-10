@@ -222,9 +222,9 @@ class TrainService {
     return { message: 'Train and associated TrainPairs updated successfully.', uid, calculatedInstances: newRequiredInstances, updatedData: updateData };
   }
 
-  async getTrains(filters) {
-    const { role, zone: userZone, division: userDivision, trainId: userTrainId } = filters;
-    const { status, zone: queryZone, division: queryDivision, applicableFor } = filters;
+  async getTrains(userData, queryParams) {
+    const { role, zone: userZone, division: userDivision, trainId: userTrainId } = userData;
+    const { status, zone: queryZone, division: queryDivision, applicableFor } = queryParams || {};
     const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let query = db.collection('trains');
