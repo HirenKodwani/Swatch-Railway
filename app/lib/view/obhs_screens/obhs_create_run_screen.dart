@@ -203,28 +203,20 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
     });
 
     try {
-      print('DEBUG: Calling OBHSRepository.getRailwayWorkers()');
       final workersList = await OBHSRepository.getRailwayWorkers();
-      print('DEBUG: OBHSRepository.getRailwayWorkers() returned ${workersList.length} workers');
       for (var w in workersList) {
-        print('DEBUG: Worker from API: ${w.fullName}, role: ${w.role}, status: ${w.status}, workerType: ${w.workerType}, designation: ${w.designation}, trainIds: ${w.trainIds}');
       }
       if (mounted) {
         setState(() {
           allWorkers = workersList.where((w) {
             final statusUpper = w.status.toUpperCase();
             final isApproved = statusUpper == 'APPROVED' || statusUpper == 'ACTIVE' || statusUpper == 'VERIFIED';
-            if (!isApproved) {
-              print('DEBUG: Filtered OUT ${w.fullName}: status=${w.status}, role=${w.role}, workerType=${w.workerType}, designation=${w.designation}');
-            }
             return isApproved;
           }).toList();
-          print('DEBUG: After filtering, allWorkers count: ${allWorkers.length}');
           _isLoadingWorkers = false;
         });
       }
     } catch (e) {
-      print('DEBUG: Error in _loadWorkers: $e');
       if (mounted) {
         setState(() {
           _workersError = e.toString().replaceAll('Exception: ', '');
@@ -1350,7 +1342,6 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        Text('Debug - Total Workers: ${allWorkers.length} | Filtered: ${filteredWorkers.length}', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: LinearProgressIndicator(
