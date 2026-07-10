@@ -166,7 +166,7 @@ class RunInstanceService {
       return { coachPosition: c.coachPosition || null, coachType: c.coachType || null, janitorId: actualJanitorId, janitorName, workerId: actualJanitorId, workerName: janitorName, attendantId: c.attendantId || null, attendantName: actualAttendantName, janitorTasks: c.janitorTasks || [], attendantTasks: c.attendantTasks || [], tasks: c.tasks || c.janitorTasks || [], attendanceStatus: 'Pending' };
     }));
 
-    const { uid, name, email, role } = creatorData;
+    const { uid, name, email, role, division: userDivision, zone: userZone } = creatorData;
     const workerCoachCount = {};
     for (const c of coachesWithNames) {
       if (c.workerId) {
@@ -188,7 +188,7 @@ class RunInstanceService {
     const newRunData = {
       runInstanceId: runInstanceRef.id, instanceId, departureDate, trainNo: pairData.trainNo,
       trainName: pairData.trainName, inboundTrainNo: pairData.inboundTrainNo, outboundTrainNo: pairData.outboundTrainNo,
-      parentTrainId: pairData.parentTrainId, division: trainData.division || null, zone: trainData.zone || null,
+      parentTrainId: pairData.parentTrainId, division: trainData.division || userDivision || null, zone: trainData.zone || userZone || null,
       depot: trainData.depot || null, journeyStartTime: pairData.journeyStartTime || null,
       journeyEndTime: pairData.journeyEndTime || null,
       scheduledDeparture: `${departureDate}T${pairData.journeyStartTime || '00:00:00'}.000Z`,
