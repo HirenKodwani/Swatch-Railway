@@ -654,6 +654,7 @@ class UserService {
   async getWorkers() {
     const snapshot = await db.collection('users')
       .where('role', 'in', ['Worker', 'Railway Worker', 'janitor', 'Janitor', 'Contractor Worker', 'CONTRACTOR_WORKER'])
+      .orderBy('createdAt', 'desc')
       .limit(200).get();
 
     if (snapshot.empty) {
