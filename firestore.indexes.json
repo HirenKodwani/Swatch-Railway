@@ -262,10 +262,6 @@
     { "collectionGroup": "stations", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "active", "order": "ASCENDING" },
       { "fieldPath": "stationName", "order": "ASCENDING" }
-    ]},
-    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
-      { "fieldPath": "role", "order": "ASCENDING" },
-      { "fieldPath": "createdAt", "order": "DESCENDING" }
     ]}
   ],
   "fieldOverrides": []
