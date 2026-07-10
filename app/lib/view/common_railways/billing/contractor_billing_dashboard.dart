@@ -2,6 +2,7 @@ import 'package:crm_train/model/billing_models.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:crm_train/view/common_railways/billing/monthly_bill_screen.dart';
+import 'package:crm_train/view/common_railways/billing/billing_report_screen.dart';
 import 'package:flutter/material.dart';
 
 class ContractorBillingDashboard extends StatefulWidget {

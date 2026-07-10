@@ -707,27 +707,30 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))],
           ),
           margin: const EdgeInsets.symmetric(vertical: 8),
-          child: ListTile(
-            title: Text(u.fullName ?? 'Unknown'),
-            subtitle: Text('${u.role ?? ''} • ${u.zone ?? ''}${u.division != null ? ' / ${u.division}' : ''}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove_red_eye),
-                  onPressed: () => _showUserDetail(u),
-                ),
-                if (canPerformActions) ...[
+          child: Material(
+            color: Colors.transparent,
+            child: ListTile(
+              title: Text(u.fullName ?? 'Unknown'),
+              subtitle: Text('${u.role ?? ''} • ${u.zone ?? ''}${u.division != null ? ' / ${u.division}' : ''}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    onPressed: () => _rejectUser(u.uid ?? ''),
+                    icon: const Icon(Icons.remove_red_eye),
+                    onPressed: () => _showUserDetail(u),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    onPressed: () => _approveUser(u.uid ?? ''),
-                  ),
+                  if (canPerformActions) ...[
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.red),
+                      onPressed: () => _rejectUser(u.uid ?? ''),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.check, color: Colors.green),
+                      onPressed: () => _approveUser(u.uid ?? ''),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -763,29 +766,32 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))],
           ),
           margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: Text(u.fullName ?? 'Unknown'),
-            subtitle: Text('${u.role ?? ''} • ${u.zone ?? ''}${u.division != null ? ' / ${u.division}' : ''}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(icon: const Icon(Icons.remove_red_eye), onPressed: () => _showUserDetail(u)),
-                if (canEdit && currentUser?.uid != u.uid)
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => UserEditScreen(user: u),
-                        ),
-                      );
-                      if (result == true) {
-                        loadAllUsers();
-                      }
-                    },
-                  ),
-              ],
+          child: Material(
+            color: Colors.transparent,
+            child: ListTile(
+              title: Text(u.fullName ?? 'Unknown'),
+              subtitle: Text('${u.role ?? ''} • ${u.zone ?? ''}${u.division != null ? ' / ${u.division}' : ''}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(icon: const Icon(Icons.remove_red_eye), onPressed: () => _showUserDetail(u)),
+                  if (canEdit && currentUser?.uid != u.uid)
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserEditScreen(user: u),
+                          ),
+                        );
+                        if (result == true) {
+                          loadAllUsers();
+                        }
+                      },
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -1034,42 +1040,45 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))],
           ),
           margin: const EdgeInsets.symmetric(vertical: 8),
-          child: ListTile(
-            title: Text(draft['fullName']?.isNotEmpty == true ? draft['fullName'] : 'Unnamed Draft'),
-            subtitle: Text('${draft['role'] ?? 'No role'} • ${draft['zone'] ?? 'No zone'}${draft['division'] != null ? ' / ${draft['division']}' : ''}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => _openDraft(draft),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Delete Draft'),
-                        content: const Text('Are you sure you want to delete this draft?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              _deleteDraft(draft['draftId']);
-                            },
-                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ],
+          child: Material(
+            color: Colors.transparent,
+            child: ListTile(
+              title: Text(draft['fullName']?.isNotEmpty == true ? draft['fullName'] : 'Unnamed Draft'),
+              subtitle: Text('${draft['role'] ?? 'No role'} • ${draft['zone'] ?? 'No zone'}${draft['division'] != null ? ' / ${draft['division']}' : ''}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _openDraft(draft),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Delete Draft'),
+                          content: const Text('Are you sure you want to delete this draft?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _deleteDraft(draft['draftId']);
+                              },
+                              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         );
