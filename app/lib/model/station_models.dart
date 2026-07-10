@@ -130,7 +130,7 @@ class StationArea {
   factory StationArea.fromJson(Map<String, dynamic> json) => StationArea(
     uid: json['uid'],
     stationId: json['stationId'] ?? '',
-    name: json['name'] ?? '',
+    name: (json['name'] != null && json['name'].toString().isNotEmpty) ? json['name'] : (json['areaName'] ?? ''),
     order: json['order'] ?? 0,
     description: json['description'] ?? '',
     active: json['active'] ?? true,
