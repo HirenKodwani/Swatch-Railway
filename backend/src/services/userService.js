@@ -436,13 +436,20 @@ class UserService {
       }
     }
 
+    if (requesterData.userType === 'contractor' && requesterData.entityId) {
+      query = query.where('entityId', '==', requesterData.entityId);
+    }
+
     let snapshot = await query.limit(200).get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 
     if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
       if (requesterZone) {
         console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
-        const fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
+        let fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
+        if (requesterData.userType === 'contractor' && requesterData.entityId) {
+          fallbackQuery = fallbackQuery.where('entityId', '==', requesterData.entityId);
+        }
         snapshot = await fallbackQuery.limit(200).get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
