@@ -104,7 +104,7 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> with Si
               ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
                   const SizedBox(height: 16),
-                  Text('Error loading data', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+                  Text(error ?? 'Error loading data', style: TextStyle(fontSize: 16, color: Colors.grey.shade600), textAlign: TextAlign.center),
                   const SizedBox(height: 8),
                   ElevatedButton(onPressed: _loadData, child: const Text('Retry')),
                 ]))
