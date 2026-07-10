@@ -441,10 +441,6 @@ class UserService {
       }
     }
 
-    if (requesterData.userType === 'contractor' && requesterData.entityId) {
-      query = query.where('entityId', '==', requesterData.entityId);
-    }
-
     let snapshot = await query.get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 
@@ -455,6 +451,7 @@ class UserService {
         if (requesterData.userType === 'contractor' && requesterData.entityId) {
           fallbackQuery = fallbackQuery.where('entityId', '==', requesterData.entityId);
         }
+        const fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
         snapshot = await fallbackQuery.get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
@@ -462,12 +459,14 @@ class UserService {
 
     let workerList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
+    const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
 
     snapshot.forEach(doc => {
       const d = doc.data();
       const r = (d.role || '').toLowerCase();
       const validWorkerRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
       if (!validWorkerRoles.includes(r)) return;
+      if (!validRoles.includes(r)) return;
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;
       if (s === 'APPROVED') stats.approved++;
