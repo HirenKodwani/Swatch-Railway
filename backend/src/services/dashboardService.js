@@ -591,12 +591,12 @@ class DashboardService {
       }
       total++;
       const s = (d.status || '').toLowerCase();
-      if (s === 'pending') pending++;
-      else if (s === 'approved' || s === 'manpower_approved') manpowerApproved++;
-      else if (s === 'rejected') rejected++;
-      else if (s === 'scoring_progress') scoringProgress++;
-      else if (s === 'auto_approved') autoApproved++;
-      else if (s === 'locked') locked++;
+      if (['pending', 'submitted', 're-submitted', 'draft'].includes(s)) pending++;
+      else if (['approved', 'approved_by_railway', 'manpower_approved'].includes(s)) manpowerApproved++;
+      else if (['rejected', 'rejected_by_railway'].includes(s)) rejected++;
+      else if (['scoring_progress', 'scoring_in_progress', 'scored'].includes(s)) scoringProgress++;
+      else if (['auto_approved', 'auto-approved'].includes(s)) autoApproved++;
+      else if (['locked', 'acknowledged', 'completed'].includes(s)) locked++;
     });
 
     return {
