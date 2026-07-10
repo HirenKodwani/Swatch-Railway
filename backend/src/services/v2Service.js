@@ -746,7 +746,7 @@ class V2Service {
     const attendantCoaches = myRun.coaches.filter(c => c.attendantId === workerId).map(c => c.coachPosition || c.coachNo);
     const assignedCoachNos = [...new Set([...janitorCoaches, ...attendantCoaches])];
 
-    const taskSnap = await taskQuery.limit(200).get();
+    const taskSnap = await taskQuery.limit(3000).get();
     let tasks = [];
     taskSnap.forEach(doc => tasks.push(doc.data()));
 

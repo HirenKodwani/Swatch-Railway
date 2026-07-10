@@ -304,7 +304,7 @@ class RunInstanceService {
       return { success: false, error: 'Division is required' };
     }
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.limit(5000).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
     instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
@@ -314,7 +314,7 @@ class RunInstanceService {
   async getRunInstancesByZone(zone, status) {
     let query = db.collection('RunInstance').where('zone', '==', zone);
     if (status) { query = query.where('status', '==', status); }
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.limit(5000).get();
     const instances = [];
     snapshot.forEach(doc => { instances.push({ id: doc.id, ...doc.data() }); });
     instances.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));

@@ -107,34 +107,39 @@ class UserService {
     }
 
     const newUid = userRecord.uid;
-    await db.collection('users').doc(newUid).set({
-      uid: newUid,
-      email: normalizedEmail,
-      password,
-      role,
-      userType: normalizedUserType,
-      fullName: fullName || null,
-      mobile: mobile || null,
-      designation: designation || null,
-      zone: zone || null,
-      division: division || null,
-      depot: depot || null,
-      entityId: entityId || null,
-      entityDetails: entityData,
-      trainId: trainId || null,
-      trainIds: trainIds || (trainId ? [trainId] : []),
-      worker_type: worker_type || null,
-      stationId: stationId || null,
-      platformId: platformId || null,
-      areaId: areaId || null,
-      createdBy: creatorId,
-      createdByName: creatorName,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-      submitted_at: new Date().toISOString()
-    });
+      const lowerCreatorRole = (creatorRole || '').toLowerCase();
+      const initialStatus = (lowerCreatorRole.includes('super admin') || lowerCreatorRole.includes('company master') || lowerCreatorRole.includes('admin')) 
+        ? 'ACTIVE' 
+        : 'PENDING';
 
-    console.log(`(Admin) User Created: ${fullName} by ${creatorName}`);
+      await db.collection('users').doc(newUid).set({
+        uid: newUid,
+        email: normalizedEmail,
+        password,
+        role,
+        userType: normalizedUserType,
+        fullName: fullName || null,
+        mobile: mobile || null,
+        designation: designation || null,
+        zone: zone || null,
+        division: division || null,
+        depot: depot || null,
+        entityId: entityId || null,
+        entityDetails: entityData,
+        trainId: trainId || null,
+        trainIds: trainIds || (trainId ? [trainId] : []),
+        worker_type: worker_type || null,
+        stationId: stationId || null,
+        platformId: platformId || null,
+        areaId: areaId || null,
+        createdBy: creatorId,
+        createdByName: creatorName,
+        status: initialStatus,
+        createdAt: new Date().toISOString(),
+        submitted_at: new Date().toISOString()
+      });
+
+      console.log(`(Admin) User Created: ${fullName} by ${creatorName} with status ${initialStatus}`);
     return { message: 'User created successfully.', uid: newUid };
   }
 
@@ -382,7 +387,7 @@ class UserService {
       query = query.where('division', '==', userDivision);
     }
 
-    const snapshot = await query.limit(200).get();
+    const snapshot = await query.limit(5000).get();
     let userList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
 
