@@ -416,7 +416,7 @@ class UserService {
   async getRailwayWorkers(requesterData, filters) {
     const { status: filterStatus, division, zone } = filters;
     const { role: requesterRole, zone: requesterZone, division: requesterDivision } = requesterData;
-    const userRole = (requesterRole || '').trim().toLowerCase();
+    const userRole = (requesterRole || '').trim().toLowerCase().replace(/_/g, ' ');
 
     console.log(`[GET /api/admin/railway-workers] userRole: ${userRole}, requesterDivision: ${requesterDivision}`);
 
