@@ -451,7 +451,6 @@ class UserService {
         if (requesterData.userType === 'contractor' && requesterData.entityId) {
           fallbackQuery = fallbackQuery.where('entityId', '==', requesterData.entityId);
         }
-        const fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
         snapshot = await fallbackQuery.get();
         console.log(`[GET /api/admin/railway-workers] Zone fallback query returned ${snapshot.size} users`);
       }
