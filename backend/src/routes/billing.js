@@ -16,5 +16,6 @@ router.get('/dashboard', verifyToken, billingController.dashboard);
 router.post('/generate-invoice/:uid', verifyToken, billingController.generateInvoice);
 router.get('/contractor', verifyToken, billingController.contractorReports);
 router.get('/supervisor', verifyToken, billingController.supervisorReports);
+router.get('/invoice-pdf/:uid', verifyToken, billingController.getInvoicePdf);
 
 export default router;

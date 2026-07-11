@@ -9,11 +9,11 @@ router.get('/', verifyToken, coachFormController.list);
 router.get('/submitted', verifyToken, coachFormController.getSubmitted);
 router.get('/pending/scoring', verifyToken, coachFormController.getPendingScoring);
 router.get('/:formId', verifyToken, coachFormController.getById);
-router.put('/:formId/approve-manpower', verifyToken, coachFormController.approveManpower);
-router.put('/:formId/scoring/draft', verifyToken, coachFormController.saveScoringDraft);
-router.put('/:formId/scoring', verifyToken, coachFormController.submitScoring);
-router.put('/:formId/accept-rating', verifyToken, coachFormController.acceptRating);
+router.post('/:formId/approve-manpower', verifyToken, coachFormController.approveManpower);
+router.put('/:formId/save-scoring-draft', verifyToken, coachFormController.saveScoringDraft);
+router.post('/:formId/submit-scoring', verifyToken, coachFormController.submitScoring);
+router.post('/:formId/accept-rating', verifyToken, coachFormController.acceptRating);
 router.put('/:formId/resubmit', verifyToken, coachFormController.resubmit);
-router.put('/:formId/reject', verifyToken, coachFormController.reject);
+router.post('/:formId/reject', verifyToken, coachFormController.reject);
 
 export default router;

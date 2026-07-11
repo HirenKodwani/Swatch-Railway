@@ -335,7 +335,7 @@ class V2Service {
   }
 
   async verifyTask(body, user) {
-    const { taskInstanceId, verified, remarks } = body;
+    const { taskInstanceId, verified, remarks, supervisorScore } = body;
     if (!taskInstanceId) throw new ValidationError('taskInstanceId required');
 
     const allowedRoles = ['CS', 'CTS', 'CA', 'CM'];
@@ -356,6 +356,7 @@ class V2Service {
       supervisorId: user.uid,
       supervisorName: user.fullName,
       supervisorRemarks: remarks || null,
+      supervisorScore: supervisorScore !== undefined ? Number(supervisorScore) : null,
       verifiedAt: new Date().toISOString(),
       status: newStatus,
       updatedAt: new Date().toISOString()
@@ -762,6 +763,17 @@ class V2Service {
     }
 
     if (filterStatus) tasks = tasks.filter(t => t.status === filterStatus);
+
+    const baseDate = myRun.actualDeparture || myRun.scheduledDeparture || new Date().toISOString();
+    const dateStr = baseDate.split('T')[0];
+    
+    tasks = tasks.map(t => {
+      let dueTime = null;
+      if (t.scheduledTime && t.scheduledTime.includes(':')) {
+        dueTime = `${dateStr}T${t.scheduledTime}:00.000Z`;
+      }
+      return { ...t, dueTime };
+    });
 
     return {
       success: true,

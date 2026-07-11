@@ -14,5 +14,6 @@ router.put('/:taskId', verifyToken, taskController.update);
 router.put('/:taskId/approve', verifyToken, taskController.approveTask);
 router.put('/:taskId/reject', verifyToken, taskController.rejectTask);
 router.delete('/:taskId', verifyToken, taskController.remove);
+router.post('/:taskId/passenger-feedback', taskController.submitPassengerFeedback);
 
 export default router;

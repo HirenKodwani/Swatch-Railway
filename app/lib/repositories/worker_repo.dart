@@ -454,6 +454,7 @@ class WorkerRepository {
           },
           body: jsonEncode({
             'taskId': taskId,
+            'taskInstanceId': taskId,
             'runInstanceId': runInstanceId,
             'taskType': taskType,
             'coachNo': coachNo,
@@ -461,8 +462,8 @@ class WorkerRepository {
             'beforePhoto': beforePhoto,
             'afterPhoto': afterPhoto,
             'comment': comment,
-            'gpsLatitude': gpsLatitude?.toString() ?? '',
-            'gpsLongitude': gpsLongitude?.toString() ?? '',
+            'gpsLatitude': gpsLatitude ?? 0.0,
+            'gpsLongitude': gpsLongitude ?? 0.0,
             'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
           }),
         ),

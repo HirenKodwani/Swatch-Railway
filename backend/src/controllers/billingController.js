@@ -60,3 +60,8 @@ export const supervisorReports = asyncHandler(async (req, res) => {
   const result = await billingService.getSupervisorDashboard(req.user);
   res.status(200).json(result);
 });
+
+export const getInvoicePdf = asyncHandler(async (req, res) => {
+  const filePath = await billingService.getInvoicePdf(req.params.uid);
+  res.download(filePath);
+});
