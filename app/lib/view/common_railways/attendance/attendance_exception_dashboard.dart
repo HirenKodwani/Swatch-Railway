@@ -42,7 +42,13 @@ class _AttendanceExceptionDashboardState extends State<AttendanceExceptionDashbo
     }
   }
 
-  Future<void> _takeAction(String exceptionId, String action, String? remark) async {
+  Future<void> _takeAction(String? exceptionId, String action, String? remark) async {
+    if (exceptionId == null || exceptionId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Exception ID is null or empty')),
+      );
+      return;
+    }
     try {
       final token = await ApiService.getToken();
       final response = await http.post(
@@ -121,13 +127,21 @@ class _AttendanceExceptionDashboardState extends State<AttendanceExceptionDashbo
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 TextButton(
-                                  onPressed: () => _takeAction(exc['uid'], 'REJECTED', 'Rejected by CTS'),
+                                  onPressed: () => _takeAction(
+                                    exc['exceptionId'] ?? exc['id'] ?? exc['uid'],
+                                    'REJECTED',
+                                    'Rejected by CTS',
+                                  ),
                                   style: TextButton.styleFrom(foregroundColor: Colors.red),
                                   child: const Text('Reject'),
                                 ),
                                 const SizedBox(width: 10),
                                 ElevatedButton(
-                                  onPressed: () => _takeAction(exc['uid'], 'APPROVED', 'Approved by CTS'),
+                                  onPressed: () => _takeAction(
+                                    exc['exceptionId'] ?? exc['id'] ?? exc['uid'],
+                                    'APPROVED',
+                                    'Approved by CTS',
+                                  ),
                                   style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                                   child: const Text('Approve', style: TextStyle(color: Colors.white)),
                                 ),
