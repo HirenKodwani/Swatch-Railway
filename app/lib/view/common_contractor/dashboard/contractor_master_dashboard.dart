@@ -30,6 +30,12 @@ import '../../common_railways/station_management/station_dashboard_screen.dart';
 import '../../common_railways/report/common_report_screen.dart';
 import '../../common_railways/attendance/attendance_exception_dashboard.dart';
 import '../../common_railways/ratings/admin_ratings_screen.dart';
+import '../../common_railways/station_management/area_list_screen.dart';
+import '../../common_railways/station_management/task_generation_screen.dart';
+import '../../common_railways/station_management/task_approval_screen.dart';
+import '../../common_railways/station_management/machine_master_list_screen.dart';
+import '../../common_railways/station_management/material_list_screen.dart';
+import '../../common_railways/station_management/area_performance_dashboard.dart';
 
 class ContractorMasterDashboard extends StatefulWidget {
   const ContractorMasterDashboard({super.key});
@@ -314,6 +320,20 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         ]
       },
       {
+        "icon": Icons.cleaning_services_rounded,
+        "title": "Station Cleaning",
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "children": [
+          {"title": "Dashboard", "route": "sc_dashboard"},
+          {"title": "Area Management", "route": "sc_areas"},
+          {"title": "Generate Tasks", "route": "sc_generate_tasks"},
+          {"title": "Task Approval", "route": "sc_approval"},
+          {"title": "Machines", "route": "sc_machines"},
+          {"title": "Materials", "route": "sc_materials"},
+          {"title": "Performance Reports", "route": "sc_performance"},
+        ]
+      },
+      {
         "icon": Icons.directions_run,
         "title": "OBHS",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
@@ -395,6 +415,27 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         break;
       case "station_cleaning_runs":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationCleaningRunsListScreen()));
+        break;
+      case "sc_dashboard":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "sc_areas":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaListScreen()));
+        break;
+      case "sc_generate_tasks":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskGenerationScreen()));
+        break;
+      case "sc_approval":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskApprovalScreen()));
+        break;
+      case "sc_machines":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MachineMasterListScreen()));
+        break;
+      case "sc_materials":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MaterialListScreen()));
+        break;
+      case "sc_performance":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaPerformanceDashboard()));
         break;
       case "obhs_attendance":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSAttendanceListScreen()));
