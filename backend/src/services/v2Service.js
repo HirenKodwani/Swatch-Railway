@@ -252,7 +252,7 @@ class V2Service {
     const { taskInstanceId, checklistResponses, beforePhoto, afterPhoto,
       gpsLatitude, gpsLongitude, deviceTimestamp, deviceId, mobileNumber, comment } = body;
 
-    if (!taskInstanceId || !beforePhoto || !afterPhoto || !gpsLatitude || !gpsLongitude) {
+    if (!taskInstanceId || !beforePhoto || !afterPhoto || gpsLatitude === undefined || gpsLongitude === undefined) {
       throw new ValidationError('taskInstanceId, beforePhoto, afterPhoto, gpsLatitude, gpsLongitude are mandatory');
     }
 

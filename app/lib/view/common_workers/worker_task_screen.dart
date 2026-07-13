@@ -19,6 +19,7 @@ class WorkerTaskModel {
   final String status;
   final bool requiresPhoto;
   final bool requiresComment;
+  final String taskSource;
 
   WorkerTaskModel({
     required this.taskId,
@@ -31,6 +32,7 @@ class WorkerTaskModel {
     required this.status,
     required this.requiresPhoto,
     required this.requiresComment,
+    this.taskSource = 'SCHEDULED',
   });
 
   factory WorkerTaskModel.fromJson(Map<String, dynamic> json) {
@@ -49,6 +51,7 @@ class WorkerTaskModel {
       status: _normalizeStatus(json),
       requiresPhoto: json['requiresPhoto'] as bool? ?? true,
       requiresComment: json['requiresComment'] as bool? ?? true,
+      taskSource: (json['taskSource'] ?? json['source'] ?? 'SCHEDULED').toString().toUpperCase(),
     );
   }
 
@@ -142,6 +145,14 @@ class _WorkerTaskScreenState extends State<WorkerTaskScreen>
         runInstanceId: runInstanceId,
       );
       final parsedTasks = _parseTasksBoard(response);
+
+      // Add passenger and emergency tasks
+      for (final t in controller.complaintTasks) {
+        try { parsedTasks.add(WorkerTaskModel.fromJson(t)); } catch (_) {}
+      }
+      for (final t in controller.emergencyTasks) {
+        try { parsedTasks.add(WorkerTaskModel.fromJson(t)); } catch (_) {}
+      }
 
       if (!mounted) return;
       setState(() {
@@ -430,6 +441,23 @@ class _WorkerTaskScreenState extends State<WorkerTaskScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (task.taskSource == 'PASSENGER' || task.taskSource == 'CTS')
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: task.taskSource == 'PASSENGER' ? Colors.orange.shade100 : Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            task.taskSource == 'PASSENGER' ? 'Passenger Request' : 'Emergency Task',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: task.taskSource == 'PASSENGER' ? Colors.orange.shade800 : Colors.red.shade800,
+                            ),
+                          ),
+                        ),
                       Text(
                         task.taskName,
                         style: const TextStyle(
