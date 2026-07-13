@@ -208,7 +208,6 @@ class PassengerService {
   async getTrainCoaches(trainNo) {
     const runsSnap = await db.collection('RunInstance')
       .where('trainNo', '==', trainNo)
-      .where('status', 'in', ['ACTIVE', 'RUNNING', 'ALLOCATED', 'READY'])
       .limit(200).get();
 
     if (runsSnap.empty) {
@@ -218,15 +217,26 @@ class PassengerService {
     const coachSet = new Set();
     runsSnap.forEach(doc => {
       const runData = doc.data();
+      const status = (runData.status || '').toUpperCase();
+      
+      // Skip completed or inactive runs
+      if (['COMPLETED', 'FINISHED', 'CLOSED', 'INACTIVE'].includes(status)) {
+        return;
+      }
+
       if (runData.coaches && Array.isArray(runData.coaches)) {
         runData.coaches.forEach(c => {
-          if (c.coachPosition) coachSet.add(c.coachPosition);
-          else if (c.coachNumber) coachSet.add(c.coachNumber);
+          const val = c.coachNumber || c.coachPosition || c.coachNo;
+          if (val !== undefined && val !== null && val !== '') {
+            coachSet.add(String(val).trim());
+          }
         });
       }
     });
 
-    const sortedCoaches = Array.from(coachSet).sort();
+    const sortedCoaches = Array.from(coachSet).sort((a, b) => {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
     return { success: true, coaches: sortedCoaches };
   }
 }
