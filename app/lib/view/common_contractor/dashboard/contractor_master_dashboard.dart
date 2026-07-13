@@ -13,6 +13,7 @@ import '../alert/contractor_master_alert_screen.dart';
 import '../profile/contractor_master_profile_screen.dart';
 import '../form_screen/forms/new_coach_form.dart';
 import '../form_screen/forms/new_premises_form.dart';
+import '../form_screen/contractor_master_forms_screen.dart';
 
 import '../../common_railways/entities/common_entity_managment_screen.dart';
 import '../../common_railways/trains/common_train_screen.dart';
