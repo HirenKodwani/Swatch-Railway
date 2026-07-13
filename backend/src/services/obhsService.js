@@ -48,21 +48,31 @@ class ObhsService {
       }
     } catch (winErr) { logger.error('OBHS', '(Attendance Timing Engine) Error:', winErr); }
 
-    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
-    const snapshot = await db.collection('obhs_attendance')
-      .where('workerId', '==', workerId)
-      .where('createdAt', '>=', sixteenHoursAgo)
-      .orderBy('createdAt', 'desc')
-      .limit(1)
-      .get();
-      
+    const getISTDateString = (date) => {
+      const ist = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
+      return ist.toISOString().split('T')[0];
+    };
+    const todayIST = getISTDateString(new Date());
+
+    const snapshot = await db.collection('obhs_attendance').where('workerId', '==', workerId).get();
+    let latestDoc = null;
+    let latestTime = 0;
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const time = new Date(data.createdAt).getTime();
+      if (time > latestTime) {
+        latestTime = time;
+        latestDoc = doc;
+      }
+    });
+
     let attendanceDocId = `${runInstanceId}_${workerId}`;
     let attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
     let attendanceDoc = await attendanceRef.get();
     
-    if (!snapshot.empty) {
-        attendanceDoc = snapshot.docs[0];
-        attendanceDocId = attendanceDoc.id;
+    if (latestDoc && getISTDateString(new Date(latestDoc.data().createdAt)) === todayIST) {
+        attendanceDoc = latestDoc;
+        attendanceDocId = latestDoc.id;
         attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
     }
     const attendanceEntry = {
@@ -164,18 +174,30 @@ class ObhsService {
     if (!workerId) {
       throw new ValidationError('workerId is required.');
     }
-    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
-    const snapshot = await db.collection('obhs_attendance')
-      .where('workerId', '==', workerId)
-      .where('createdAt', '>=', sixteenHoursAgo)
-      .orderBy('createdAt', 'desc')
-      .limit(1)
-      .get();
+    
+    const getISTDateString = (date) => {
+      const ist = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
+      return ist.toISOString().split('T')[0];
+    };
+    const todayIST = getISTDateString(new Date());
 
-    if (snapshot.empty) {
+    const snapshot = await db.collection('obhs_attendance').where('workerId', '==', workerId).get();
+    let latestData = null;
+    let latestTime = 0;
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const time = new Date(data.createdAt).getTime();
+      if (time > latestTime) {
+        latestTime = time;
+        latestData = data;
+      }
+    });
+
+    if (!latestData || getISTDateString(new Date(latestData.createdAt)) !== todayIST) {
       return { exists: false, isStartMarked: false, isMidMarked: false, isEndMarked: false, identityAuditStatus: null };
     }
-    const data = snapshot.docs[0].data();
+    
+    const data = latestData;
     return {
       exists: true,
       isStartMarked: data.isStartMarked || false,
