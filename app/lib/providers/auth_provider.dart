@@ -220,6 +220,7 @@ class AuthProvider extends ChangeNotifier {
 
     if (_token != null) {
       await prefs.setString('token', _token!);
+      await prefs.setString('auth_token', _token!);
     }
 
     if (_userData != null) {
@@ -236,7 +237,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> loadUserSession() async {
     final prefs = await SharedPreferences.getInstance();
 
-    _token = prefs.getString('token');
+    _token = prefs.getString('token') ?? prefs.getString('auth_token');
 
     final userDataStr = prefs.getString('userData');
     if (userDataStr != null) {
