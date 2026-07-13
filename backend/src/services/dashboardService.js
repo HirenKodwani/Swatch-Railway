@@ -654,9 +654,9 @@ class DashboardService {
     if (!formType) {
       // Return counts per type when no formType specified
       const [coachSnap, premisesSnap, ctsSnap] = await Promise.all([
-        buildQuery('coachForms').get(),
-        buildQuery('premisesForms').get(),
-        buildQuery('ctsForms').get(),
+        buildQuery('coachForms').select('status', 'createdAt').get(),
+        buildQuery('premisesForms').select('status', 'createdAt').get(),
+        buildQuery('ctsForms').select('status', 'createdAt').get(),
       ]);
       const coachStats = countStatuses(coachSnap, minDate);
       const premisesStats = countStatuses(premisesSnap, minDate);
@@ -670,7 +670,7 @@ class DashboardService {
     }
 
     const collectionName = getCollection(formType);
-    const snapshot = await buildQuery(collectionName).get();
+    const snapshot = await buildQuery(collectionName).select('status', 'createdAt').get();
     return countStatuses(snapshot, minDate);
   }
 }
