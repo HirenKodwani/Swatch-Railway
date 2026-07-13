@@ -405,8 +405,10 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonTrainScreen()));
         break;
       case "coach_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ContractorMasterFormsScreen(initialTabIndex: 0)));
+        break;
       case "premise_cleaning":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ContractorMasterFormsScreen(initialTabIndex: 1)));
         break;
       case "cts_cleaning":
         Navigator.push(context, MaterialPageRoute(builder: (context) => ContractorMasterFormsScreen(initialTabIndex: 2)));

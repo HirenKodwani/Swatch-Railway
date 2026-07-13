@@ -3600,7 +3600,47 @@ class ApiService {
         Uri.parse('$baseUrl/api/cleaning-forms/dashboard/data'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
-      if (response.statusCode == 200) return CleaningDashboardSummary.fromJson(jsonDecode(response.body));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        // Backend returns { count, forms } — compute summary stats locally
+        final formsList = (data['forms'] as List? ?? [])
+            .map((f) => CleaningForm.fromJson(f as Map<String, dynamic>))
+            .toList();
+        int draftForms = 0, submittedForms = 0, approvedForms = 0,
+            rejectedForms = 0, scoredForms = 0, lockedForms = 0;
+        double totalScore = 0;
+        int scoredCount = 0;
+        int totalManpower = 0, totalMachine = 0;
+        for (final f in formsList) {
+          switch (f.status) {
+            case CleaningFormStatus.draft: draftForms++; break;
+            case CleaningFormStatus.submitted: submittedForms++; break;
+            case CleaningFormStatus.approved:
+            case CleaningFormStatus.scoringInProgress:
+            case CleaningFormStatus.contractorApproved:
+            case CleaningFormStatus.autoApproved: approvedForms++; break;
+            case CleaningFormStatus.rejected: rejectedForms++; break;
+            case CleaningFormStatus.scored: scoredForms++; break;
+            case CleaningFormStatus.locked: lockedForms++; break;
+          }
+          if (f.score != null) { totalScore += f.score!; scoredCount++; }
+          totalManpower += f.manpowerCount;
+          totalMachine += f.machineCount;
+        }
+        return CleaningDashboardSummary(
+          draftForms: draftForms,
+          submittedForms: submittedForms,
+          approvedForms: approvedForms,
+          rejectedForms: rejectedForms,
+          scoredForms: scoredForms,
+          lockedForms: lockedForms,
+          pendingReview: submittedForms,
+          scoringPending: approvedForms,
+          averageScore: scoredCount > 0 ? totalScore / scoredCount : 0,
+          totalManpower: totalManpower.toDouble(),
+          totalMachine: totalMachine.toDouble(),
+        );
+      }
       throw Exception('Failed to fetch dashboard');
     } catch (e) {
       throw Exception('Error fetching dashboard: $e');

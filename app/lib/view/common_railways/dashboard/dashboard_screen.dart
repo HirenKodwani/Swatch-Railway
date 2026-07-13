@@ -564,8 +564,24 @@ class _CommonDashboardState extends State<CommonDashboard> {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonTrainScreen()));
         break;
       case "coach_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) {
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          return CommonFormScreen(
+            role: userRole ?? '',
+            userLevel: authProvider.currentUser?.userType ?? 'zone',
+            initialTabIndex: 0,
+          );
+        }));
+        break;
       case "premise_cleaning":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (context) {
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          return CommonFormScreen(
+            role: userRole ?? '',
+            userLevel: authProvider.currentUser?.userType ?? 'zone',
+            initialTabIndex: 1,
+          );
+        }));
         break;
       case "cts_cleaning":
         Navigator.push(context, MaterialPageRoute(builder: (context) {
