@@ -52,14 +52,6 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
 
         if (isEdit) {
           final inst = widget.editInstance!;
-<<<<<<< HEAD
-          _selectedStation = _stations.firstWhere((s) => s.uid == inst.stationId, orElse: () => _stations.first);
-          final validShifts = ['Morning', 'Evening', 'Night'];
-          _selectedShift = validShifts.firstWhere(
-            (s) => s.toLowerCase() == inst.shift.toLowerCase(), 
-            orElse: () => validShifts.first
-          );
-=======
           _selectedStation = _stations.any((s) => s.uid == inst.stationId)
               ? _stations.firstWhere((s) => s.uid == inst.stationId)
               : (_stations.isNotEmpty ? _stations.first : null);
@@ -73,8 +65,6 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
           } else {
             _selectedShift = 'Morning';
           }
-
->>>>>>> 08436a19fb3d8df77ac937569ddfaf23f6180159
           try { _selectedDate = DateFormat('yyyy-MM-dd').parse(inst.date); } catch(_) {}
           _assignments.addAll(inst.platforms);
           if (_selectedStation != null) {
