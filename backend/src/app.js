@@ -143,6 +143,7 @@ app.use(pestControlRoutes);                         // /api/pest-control/*
 app.use('/api/passenger', passengerRoutes);       // /api/passenger/*
 app.use('/api/public/passenger', passengerRoutes); // Hack for legacy public endpoint
 app.use('/api/run-instances', runInstancesRoutes); // Legacy
+app.use('/api/runInstances', runInstancesRoutes);
 app.use('/api/coach-forms', coachFormsRoutes);    // /api/coach-forms/*
 app.use('/api/premises-forms', premisesFormsRoutes); // /api/premises-forms/*
 app.use('/api/cts', ctsFormsRoutes);              // Hack for /api/cts/create-emergency-task

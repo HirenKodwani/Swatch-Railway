@@ -4,8 +4,8 @@ import * as v2Controller from '../controllers/v2Controller.js';
 
 const router = express.Router();
 
-router.get('/run-instances', verifyToken, v2Controller.listRunInstances);
-router.get('/run-instances/:runInstanceId', verifyToken, v2Controller.getRunInstance);
+router.get(['/run-instances', '/runInstances'], verifyToken, v2Controller.listRunInstances);
+router.get(['/run-instances/:runInstanceId', '/runInstances/:runInstanceId'], verifyToken, v2Controller.getRunInstance);
 router.get('/coach-forms', verifyToken, v2Controller.listCoachForms);
 router.get('/coach-forms/:formId', verifyToken, v2Controller.getCoachForm);
 router.get('/premises-forms', verifyToken, v2Controller.listPremisesForms);
