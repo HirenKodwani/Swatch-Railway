@@ -284,7 +284,7 @@ class FirebaseCountService {
         'Accepted': acceptedCount,
         'PENDING': pendingCount,
         'Completed Today': completedToday,
-        'locked': completedToday,
+        'locked': locked,
       };
     } catch (e) {
       print("Error fetching form counts: $e");
