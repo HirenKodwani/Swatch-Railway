@@ -402,28 +402,28 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "title": "Review Forms",
         "subtitle": "$pendingForms pending",
         "color": Colors.blue,
-        "roles": ["Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.event_note_sharp,
         "title": "Pending Scorecards",
         "subtitle": "$scoringProgressForms forms ready",
         "color": Colors.purple,
-        "roles": ["Company Master", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.train,
         "title": "Add New Train",
         "subtitle": "Register Train",
         "color": Colors.green,
-        "roles": ["Company Master", "Railway Master", "Station Master", "Area Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Station Master", "Area Master"]
       },
       {
         "icon": Icons.location_city_outlined,
         "title": "Add New Entity",
         "subtitle": "Entity Registration",
         "color": Colors.red,
-        "roles": ["Company Master", "Railway Master", "Station Master", "Area Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Station Master", "Area Master"]
       },
     ];
 
@@ -441,12 +441,12 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "icon": Icons.dashboard_rounded,
         "title": "Dashboard",
         "route": null,
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.admin_panel_settings,
         "title": "Masters",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Station Master", "Area Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Station Master", "Area Master"],
         "children": [
           {"title": "User Management", "route": "users"},
           {"title": "Entity Management", "route": "entities"},
@@ -460,7 +460,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.cleaning_services,
         "title": "Operations",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
         "children": [
           {"title": "Coach Cleaning", "route": "coach_cleaning"},
           {"title": "Premise Cleaning", "route": "premise_cleaning"},
@@ -474,7 +474,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.cleaning_services_rounded,
         "title": "Station Cleaning",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
         "children": [
           {"title": "Dashboard", "route": "sc_dashboard"},
           {"title": "Area Management", "route": "sc_areas"},
@@ -488,7 +488,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.directions_run,
         "title": "OBHS",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
         "children": [
           {"title": "Attendance", "route": "obhs_attendance"},
           {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
@@ -499,7 +499,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.analytics,
         "title": "Reports",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
         "children": [
           {"title": "Coach Reports", "route": "coach_reports"},
           {"title": "Premise Reports", "route": "premise_reports"},
@@ -511,24 +511,24 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "icon": Icons.receipt_long,
         "title": "Billing",
         "route": "billing",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.report_problem,
         "title": "Complaints",
         "route": "complaints",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.star_outline,
         "title": "Ratings",
         "route": "ratings",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.security,
         "title": "Audit & Compliance",
-        "roles": ["Super Admin", "Company Master", "Railway Master", "Railway Admin", "Station Master", "Area Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Station Master", "Area Master"],
         "children": [
           {"title": "Compliance & Security Tracking", "route": "audit_logs"},
           {"title": "Business Activities", "route": "activity_logs"},

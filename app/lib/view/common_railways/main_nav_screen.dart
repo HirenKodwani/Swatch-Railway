@@ -12,6 +12,7 @@ class MainNavScreen extends StatelessWidget {
       body: CommonNavBar(
         userLevel: user.zone ?? user.division ?? user.depot ?? 'All Zones',
         userRole: user.userType,
+        userDisplayRole: user.role,
       ),
     );
   }
