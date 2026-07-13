@@ -108,7 +108,7 @@ class UserService {
 
     const newUid = userRecord.uid;
       const lowerCreatorRole = (creatorRole || '').toLowerCase();
-      const initialStatus = (lowerCreatorRole.includes('super admin') || lowerCreatorRole.includes('company master') || lowerCreatorRole.includes('admin')) 
+      const initialStatus = (lowerCreatorRole === 'super_admin' || lowerCreatorRole === 'super admin' || lowerCreatorRole === 'master admin' || lowerCreatorRole === 'master_admin') 
         ? 'ACTIVE' 
         : 'PENDING';
 
