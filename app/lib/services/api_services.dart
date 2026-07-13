@@ -166,7 +166,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/master/pending-users'),
+        Uri.parse('$baseUrl/api/admin/users?status=PENDING'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -182,13 +182,6 @@ class ApiService {
             .map<UserRegistrationModel?>((u) {
               try {
                 final userMap = Map<String, dynamic>.from(u);
-                print('Parsing user: ${userMap['fullName']}');
-                print(
-                  'createdAt: ${userMap['createdAt']} (type: ${userMap['createdAt']?.runtimeType})',
-                );
-                print(
-                  'approved_at: ${userMap['approved_at']} (type: ${userMap['approved_at']?.runtimeType})',
-                );
                 final user = UserRegistrationModel.fromJson(userMap);
                 return user;
               } catch (err, stack) {
@@ -199,7 +192,7 @@ class ApiService {
             .whereType<UserRegistrationModel>()
             .toList();
 
-        print('Successfully parsed ${parsedUsers.length} users');
+        print('Successfully parsed ${parsedUsers.length} pending users');
         return parsedUsers;
       } else {
         final error = jsonDecode(response.body);

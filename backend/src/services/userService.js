@@ -85,11 +85,11 @@ class UserService {
         console.log(`(CreateUser) Checking Active Contract for Entity: ${entityId}`);
         const contractSnapshot = await db.collection('contracts')
           .where('entityId', '==', entityId)
-          .where('status', 'in', ['Active', 'active', 'APPROVED', 'ACTIVE'])
+          .where('status', 'not-in', ['Expired', 'EXPIRED', 'REJECTED', 'rejected', 'SUSPENDED', 'suspended'])
           .limit(1)
           .get();
         if (contractSnapshot.empty) {
-          throw new ForbiddenError(`Cannot create ${role}. No Active Contract found for this Company.`);
+          throw new ForbiddenError(`Cannot create ${role}. No valid Contract found for this Company. Please ensure a contract exists and is not expired or rejected.`);
         }
       }
     }
