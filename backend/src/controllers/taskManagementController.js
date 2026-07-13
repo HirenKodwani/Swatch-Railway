@@ -67,7 +67,7 @@ export const getSupervisorTasks = asyncHandler(async (req, res) => {
 });
 
 export const getPendingReview = asyncHandler(async (req, res) => {
-  const result = await taskManagementService.getPendingReviewTasks(req.query.supervisorId || req.query.supervisorId);
+  const result = await taskManagementService.getPendingReviewTasks(req.query.supervisorId, req.query.stationId);
   res.status(200).json(result);
 });
 

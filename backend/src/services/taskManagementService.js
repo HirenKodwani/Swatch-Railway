@@ -276,7 +276,7 @@ class TaskManagementService {
     return { message: 'Task rejected', taskId };
   }
 
-  async getPendingReviewTasks(supervisorId) {
+  async getPendingReviewTasks(supervisorId, stationId) {
     const snapshot = await db.collection('cleaningTasks')
       .orderBy('updatedAt', 'desc').limit(300).get();
     let tasks = [];
@@ -284,6 +284,9 @@ class TaskManagementService {
     tasks = tasks.filter(t => t.status === 'completed' || t.status === 'resubmitted');
     if (supervisorId) {
       tasks = tasks.filter(t => t.supervisorId === supervisorId);
+    }
+    if (stationId) {
+      tasks = tasks.filter(t => t.stationId === stationId);
     }
     return { count: tasks.length, tasks };
   }
