@@ -42,15 +42,22 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
       final stData = await ApiService.getStations();
       final wkData = await OBHSRepository.getWorkers();
       if (mounted) {
+        // Deduplicate workers by uid to prevent DropdownButton assertion errors
+        final seen = <String>{};
+        final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
         setState(() {
           _stations = stData;
-          _workers = wkData; // API already returns Railway Worker, janitor roles
+          _workers = uniqueWorkers;
         });
 
         if (isEdit) {
           final inst = widget.editInstance!;
           _selectedStation = _stations.firstWhere((s) => s.uid == inst.stationId, orElse: () => _stations.first);
-          _selectedShift = inst.shift;
+          final validShifts = ['Morning', 'Evening', 'Night'];
+          _selectedShift = validShifts.firstWhere(
+            (s) => s.toLowerCase() == inst.shift.toLowerCase(), 
+            orElse: () => validShifts.first
+          );
           try { _selectedDate = DateFormat('yyyy-MM-dd').parse(inst.date); } catch(_) {}
           _assignments.addAll(inst.platforms);
           await _loadPlatforms(_selectedStation!.uid!);
@@ -237,7 +244,17 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
                               ],
                             ),
                             DropdownButtonFormField<RailwayWorkerModel>(
-                              value: _workers.any((w) => w.uid == a.janitorId) ? _workers.firstWhere((w) => w.uid == a.janitorId) : null,
+                              key: ValueKey('janitor_${idx}_${a.platformNumber}'),
+                              value: a.janitorId.isEmpty
+                                  ? null
+                                  : _workers.firstWhere(
+                                      (w) => w.uid == a.janitorId,
+                                      orElse: () => _workers.isEmpty
+                                          ? RailwayWorkerModel(uid: '', email: '', role: '', userType: '', fullName: 'Unknown', mobile: '', status: '')
+                                          : _workers.first,
+                                    ).uid == a.janitorId
+                                      ? _workers.firstWhere((w) => w.uid == a.janitorId)
+                                      : null,
                               decoration: const InputDecoration(labelText: 'Assign Janitor'),
                               items: _workers.map((w) => DropdownMenuItem(value: w, child: Text('${w.fullName} (${w.role})'))).toList(),
                               onChanged: (v) {
@@ -245,7 +262,7 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
                                   setState(() {
                                     _assignments[idx] = StationPlatformAssignment(
                                       platformNumber: a.platformNumber,
-                                      janitorId: v.uid ?? '',
+                                      janitorId: v.uid,
                                       janitorName: v.fullName,
                                       status: a.status,
                                     );
