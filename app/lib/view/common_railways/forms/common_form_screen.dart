@@ -8,6 +8,8 @@ import 'package:get/get.dart' hide FormData;
 
 import '../../../model/coach_form_model.dart';
 import '../../../model/cts_form_model.dart';
+import '../forms_view/cts_form_view.dart';
+import '../../common_contractor/form_screen/select_from_screen.dart';
 import '../../../model/premises_form_model.dart';
 import '../../../model/user_entity_model.dart';
 import '../../../providers/auth_provider.dart';
@@ -305,6 +307,20 @@ class _CommonFormScreenState extends State<CommonFormScreen> with TickerProvider
           _buildCTSFormView(),
         ],
       ),
+      floatingActionButton: user?.role == 'Super Admin' ? FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SelectFormTypeScreen()),
+          );
+        },
+        backgroundColor: kRailwayBlue,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          "Create Form",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+        ),
+      ) : null,
     );
   }
 

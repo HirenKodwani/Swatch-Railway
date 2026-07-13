@@ -7,7 +7,8 @@ export class ReportService {
 
   async getAttendanceAuditData(runInstanceId, workerId) {
     // 1. Fetch RunInstance
-    const runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    let runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    if (!runDoc.exists) runDoc = await this.db.collection('RunInstance').doc(runInstanceId).get();
     if (!runDoc.exists) throw new Error('Run instance not found');
     const run = runDoc.data();
 
@@ -88,7 +89,8 @@ export class ReportService {
   }
 
   async getOperationalAuditData(runInstanceId) {
-    const runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    let runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    if (!runDoc.exists) runDoc = await this.db.collection('RunInstance').doc(runInstanceId).get();
     if (!runDoc.exists) throw new Error('Run instance not found');
     const run = runDoc.data();
 
@@ -143,7 +145,8 @@ export class ReportService {
   }
 
   async getWorkerActivityAuditData(runInstanceId, workerId) {
-    const runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    let runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    if (!runDoc.exists) runDoc = await this.db.collection('RunInstance').doc(runInstanceId).get();
     if (!runDoc.exists) throw new Error('Run instance not found');
     const run = runDoc.data();
 
@@ -196,7 +199,8 @@ export class ReportService {
   }
 
   async getComplaintAuditData(runInstanceId) {
-    const runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    let runDoc = await this.db.collection('obhsRunInstances').doc(runInstanceId).get();
+    if (!runDoc.exists) runDoc = await this.db.collection('RunInstance').doc(runInstanceId).get();
     if (!runDoc.exists) throw new Error('Run instance not found');
     const run = runDoc.data();
 
