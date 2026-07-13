@@ -44,6 +44,7 @@ import '../station_management/task_approval_screen.dart';
 import '../station_management/machine_master_list_screen.dart';
 import '../station_management/material_list_screen.dart';
 import '../station_management/area_performance_dashboard.dart';
+import '../forms/common_form_screen.dart';
 
 class CommonDashboard extends StatefulWidget {
   CommonDashboard({
