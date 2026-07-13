@@ -55,40 +55,40 @@ class RunInstanceModel {
 
   factory RunInstanceModel.fromJson(Map<String, dynamic> json) {
     return RunInstanceModel(
-      id: json['id'] as String?,
-      runInstanceId: json['runInstanceId'] as String?,
-      instanceId: json['instanceId'] as String? ?? '',
-      trainNo: json['trainNo'] as String?,
-      trainName: json['trainName'] as String?,
-      inboundTrainNo: json['inboundTrainNo'] as String?,
-      outboundTrainNo: json['outboundTrainNo'] as String?,
+      id: json['id']?.toString(),
+      runInstanceId: json['runInstanceId']?.toString(),
+      instanceId: json['instanceId']?.toString() ?? '',
+      trainNo: json['trainNo']?.toString(),
+      trainName: json['trainName']?.toString(),
+      inboundTrainNo: json['inboundTrainNo']?.toString(),
+      outboundTrainNo: json['outboundTrainNo']?.toString(),
       departureDate: json['departureDate'] != null
-          ? DateTime.tryParse(json['departureDate'] as String)
+          ? DateTime.tryParse(json['departureDate'].toString())
           : null,
-      parentTrainId: json['parentTrainId'] as String?,
+      parentTrainId: json['parentTrainId']?.toString(),
       coaches: (json['coaches'] as List<dynamic>?)
               ?.map((coach) => CoachAssignment.fromJson(coach as Map<String, dynamic>))
               .toList() ??
           [],
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+          ? DateTime.tryParse(json['createdAt'].toString())
           : null,
-      createdBy: json['createdBy'] as String?,
-      createdByName: json['createdByName'] as String?,
+      createdBy: json['createdBy']?.toString(),
+      createdByName: json['createdByName']?.toString(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+          ? DateTime.tryParse(json['updatedAt'].toString())
           : null,
-      updatedBy: json['updatedBy'] as String?,
-      updatedByName: json['updatedByName'] as String?,
-      status: json['status'] as String? ?? 'Active',
-      scheduledDeparture: json['scheduledDeparture'] as String?,
-      actualDeparture: json['actualDeparture'] as String?,
-      actualArrival: json['actualArrival'] as String?,
-      journeyStartTime: json['journeyStartTime'] as String?,
-      journeyEndTime: json['journeyEndTime'] as String?,
-      division: json['division'] as String?,
-      zone: json['zone'] as String?,
-      depot: json['depot'] as String?,
+      updatedBy: json['updatedBy']?.toString(),
+      updatedByName: json['updatedByName']?.toString(),
+      status: json['status']?.toString() ?? 'Active',
+      scheduledDeparture: json['scheduledDeparture']?.toString(),
+      actualDeparture: json['actualDeparture']?.toString(),
+      actualArrival: json['actualArrival']?.toString(),
+      journeyStartTime: json['journeyStartTime']?.toString(),
+      journeyEndTime: json['journeyEndTime']?.toString(),
+      division: json['division']?.toString(),
+      zone: json['zone']?.toString(),
+      depot: json['depot']?.toString(),
     );
   }
 
@@ -219,13 +219,13 @@ class CoachAssignment {
     }
     return CoachAssignment(
       coachPosition: parseCoachPosition(json['coachPosition']),
-      coachType: json['coachType'] as String? ?? '',
-      janitorId: (json['janitorId'] ?? json['workerId']) as String?,
-      janitorName: (json['janitorName'] ?? json['workerName']) as String?,
-      attendantId: json['attendantId'] as String?,
-      attendantName: json['attendantName'] as String?,
-      janitorTasks: (json['janitorTasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
-      attendantTasks: (json['attendantTasks'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      coachType: json['coachType']?.toString() ?? '',
+      janitorId: (json['janitorId'] ?? json['workerId'])?.toString(),
+      janitorName: (json['janitorName'] ?? json['workerName'])?.toString(),
+      attendantId: json['attendantId']?.toString(),
+      attendantName: json['attendantName']?.toString(),
+      janitorTasks: (json['janitorTasks'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      attendantTasks: (json['attendantTasks'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
     );
   }
 
