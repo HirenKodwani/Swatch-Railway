@@ -182,7 +182,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/runInstances'),
+          Uri.parse('$baseUrl/api/run-instances'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -300,7 +300,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.put(
-          Uri.parse('$baseUrl/api/runInstances/$runInstanceId'),
+          Uri.parse('$baseUrl/api/run-instances/$runInstanceId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -342,7 +342,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.delete(
-          Uri.parse('$baseUrl/api/runInstances/$runInstanceId'),
+          Uri.parse('$baseUrl/api/run-instances/$runInstanceId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -408,7 +408,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.get(
-          Uri.parse('$baseUrl/api/runInstances'),
+          Uri.parse('$baseUrl/api/run-instances'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -510,16 +510,15 @@ class OBHSRepository {
       final token = await _getToken();
       if (token == null) throw Exception('AUTH_ERROR');
 
-      final body = <String, dynamic>{'status': status};
-      if (passengerScore != null) body['passengerScore'] = passengerScore;
+      final body = <String, dynamic>{
+        'taskInstanceId': taskId,
+        'verified': status.toLowerCase() == 'approved',
+        'remarks': 'Reviewed via supervisor app'
+      };
       if (supervisorScore != null) body['supervisorScore'] = supervisorScore;
 
-      final url = status.toLowerCase() == 'approved' 
-        ? '$baseUrl/api/tasks/$taskId/approve'
-        : '$baseUrl/api/tasks/$taskId/reject';
-
-      final response = await _handleRequest(() => http.put(
-        Uri.parse(url),
+      final response = await _handleRequest(() => http.post(
+        Uri.parse('$baseUrl/api/v2/tasks/verify'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

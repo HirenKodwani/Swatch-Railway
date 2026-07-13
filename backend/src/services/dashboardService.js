@@ -145,11 +145,12 @@ class DashboardService {
     const cached = this._getCached(cacheKey);
     if (cached) return cached;
 
-    const [stationsSnap, zonesSnap, platformsSnap, areasSnap, tasksSnap, usersSnap] = await Promise.all([
+    const [stationsSnap, zonesSnap, platformsSnap, areasSnap, stationAreasSnap, tasksSnap, usersSnap] = await Promise.all([
       db.collection('stations').get(),
       db.collection('zones').get(),
       db.collection('platforms').get(),
       db.collection('areas').get(),
+      db.collection('stationAreas').get(),
       db.collection('cleaningTasks').limit(1000).get(),
       db.collection('users').get()
     ]);
@@ -179,13 +180,17 @@ class DashboardService {
     const totalWorkers = users.filter(u => u.userType === 'contractor' || u.role === 'CLEANING_STAFF' || u.role === 'WORKER').length;
     const totalSupervisors = users.filter(u => u.role === 'SUPERVISOR' || u.role === 'STATION_MASTER' || u.role === 'PLATFORM_MASTER').length;
 
+    const uniqueAreaIds = new Set();
+    areasSnap.forEach(doc => uniqueAreaIds.add(doc.id));
+    stationAreasSnap.forEach(doc => uniqueAreaIds.add(doc.id));
+
     const result = {
       level: 'admin',
       summary: {
         totalZones: zones.length,
         totalStations: stations.length,
         totalPlatforms: platformsSnap.size,
-        totalAreas: areasSnap.size,
+        totalAreas: uniqueAreaIds.size,
         totalWorkers,
         totalSupervisors
       },
@@ -380,9 +385,10 @@ class DashboardService {
     const cached = this._getCached(cacheKey);
     if (cached) return cached;
 
-    const [platformSnap, areasSnap, tasksSnap, runsSnap] = await Promise.all([
+    const [platformSnap, areasSnap, stationAreasSnap, tasksSnap, runsSnap] = await Promise.all([
       db.collection('platforms').doc(platformId).get(),
       db.collection('areas').where('platformId', '==', platformId).get(),
+      db.collection('stationAreas').where('platformId', '==', platformId).get(),
       db.collection('cleaningTasks').where('platformId', '==', platformId).where('scheduledDate', '==', targetDate).limit(500).get(),
       db.collection('stationCleaningRuns').where('platformId', '==', platformId).where('date', '==', targetDate).limit(200).get()
     ]);
@@ -391,6 +397,11 @@ class DashboardService {
 
     const areas = [];
     areasSnap.forEach(d => areas.push({ id: d.id, ...d.data() }));
+    stationAreasSnap.forEach(d => {
+      if (!areas.some(a => a.id === d.id)) {
+        areas.push({ id: d.id, ...d.data() });
+      }
+    });
 
     const tasks = [];
     tasksSnap.forEach(d => tasks.push(d.data()));
@@ -448,8 +459,13 @@ class DashboardService {
       db.collection('stationCleaningRuns').where('areaId', '==', areaId).where('date', '==', targetDate).limit(100).get()
     ]);
 
-    if (!areaSnap.exists) throw new ValidationError('Area not found');
-    const areaData = areaSnap.data();
+    let areaDoc = areaSnap;
+    if (!areaDoc.exists) {
+      areaDoc = await db.collection('stationAreas').doc(areaId).get();
+    }
+
+    if (!areaDoc.exists) throw new ValidationError('Area not found');
+    const areaData = areaDoc.data();
 
     const tasks = [];
     tasksSnap.forEach(d => tasks.push({ id: d.id, ...d.data() }));

@@ -197,8 +197,8 @@ class _OBHSReviewQueueScreenState extends State<OBHSReviewQueueScreen> {
                           } catch (_) {}
                         }
 
-                        final String beforePhoto = task['beforePhotoUrl'] ?? '';
-                        final String afterPhoto = task['afterPhotoUrl'] ?? '';
+                        final String beforePhoto = task['beforePhoto'] ?? task['beforePhotoUrl'] ?? '';
+                        final String afterPhoto = task['afterPhoto'] ?? task['afterPhotoUrl'] ?? '';
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),

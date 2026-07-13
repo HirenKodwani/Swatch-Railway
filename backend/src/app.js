@@ -141,15 +141,19 @@ app.use(pestControlRoutes);                         // /api/pest-control/*
 
 // Relative-path routes mounted with base prefixes
 app.use('/api/passenger', passengerRoutes);       // /api/passenger/*
-app.use('/api/runInstances', runInstancesRoutes); // /api/runInstances/*
+app.use('/api/public/passenger', passengerRoutes); // Hack for legacy public endpoint
+app.use('/api/run-instances', runInstancesRoutes); // Legacy
+app.use('/api/runInstances', runInstancesRoutes);
 app.use('/api/coach-forms', coachFormsRoutes);    // /api/coach-forms/*
 app.use('/api/premises-forms', premisesFormsRoutes); // /api/premises-forms/*
-app.use('/api/cts', ctsFormsRoutes);              // /api/cts/*
+app.use('/api/cts', ctsFormsRoutes);              // Hack for /api/cts/create-emergency-task
+app.use('/api/cts-forms', ctsFormsRoutes);        // /api/cts-forms/*
 app.use('/api/stations', stationRoutes);          // /api/stations/*
 app.use('/api/media', mediaRoutes);               // /api/media/*
 app.use('/api/tasks', tasksRoutes);               // /api/tasks/*
 app.use('/api/v2', v2Routes);                     // /api/v2/*
 app.use('/api/billing', billingRoutes);           // /api/billing/*
+app.use('/api/cleaning-form', cleaningFormRoutes);  // Legacy
 app.use('/api/cleaning-forms', cleaningFormRoutes); // /api/cleaning-forms/*
 app.use(dashboardRoutes);                         // /api/dashboard/stats /api/railway-dashboard-stats
 app.use(miscRoutes);                              // /api/health /api/divisions /api/zones etc.

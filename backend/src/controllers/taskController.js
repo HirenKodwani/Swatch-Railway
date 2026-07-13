@@ -37,8 +37,10 @@ export const history = asyncHandler(async (req, res) => {
 });
 
 export const pendingReview = asyncHandler(async (req, res) => {
-  const result = await taskService.getTasksForRun(req.user, req.query.runInstanceId, { ...req.query, status: 'PENDING_REVIEW' });
-  res.status(200).json(result);
+  const { v2Service } = await import('../services/v2Service.js');
+  const result = await v2Service.getTasks(req.query.runInstanceId, { status: 'COMPLETED' });
+  // Map result.tasks to result.data for backward compatibility for Flutter app
+  res.status(200).json({ success: true, count: result.count, data: result.tasks });
 });
 
 export const approveTask = asyncHandler(async (req, res) => {
@@ -49,4 +51,10 @@ export const approveTask = asyncHandler(async (req, res) => {
 export const rejectTask = asyncHandler(async (req, res) => {
   const result = await taskService.updateTaskStatus(req.user.uid, { ...req.body, action: 'REJECT' });
   res.status(200).json(result);
+});
+
+import { passengerService } from '../services/passengerService.js';
+export const submitPassengerFeedback = asyncHandler(async (req, res) => {
+  const result = await passengerService.submitTaskFeedback(req.user, { ...req.body, taskId: req.params.taskId });
+  res.status(201).json(result);
 });

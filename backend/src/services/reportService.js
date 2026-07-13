@@ -1,5 +1,7 @@
 import { db, admin } from '../database/index.js';
 import { ReportService as ReportServiceLegacy } from '../../report_service.js';
+import { PDFRenderer } from '../../pdf_renderer.js';
+import { ExcelGenerator } from '../../excel_generator.js';
 import { createWorkbook, addSummarySheet, addDataSheet, createPdf, drawPdfHeader, drawPdfSection, drawPdfTable } from '../reports/reportHelper.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../errors/index.js';
 import config from '../config/index.js';
@@ -685,10 +687,8 @@ class ReportService {
 
     let data;
     let pdfBuffer;
-    const PDFDocument = (await import('pdfkit')).default;
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    const buffers = [];
-
+    let excelBuffer;
+    
     if (reportType === 'ATTENDANCE_AUDIT') {
       data = await this.legacyService.getAttendanceAuditData(runInstanceId, workerId);
     } else if (reportType === 'WORKER_ACTIVITY') {
@@ -701,25 +701,24 @@ class ReportService {
       throw new ValidationError('Invalid reportType');
     }
 
-    return new Promise((resolve, reject) => {
-      doc.on('data', chunk => buffers.push(chunk));
-      doc.on('end', () => {
-        pdfBuffer = Buffer.concat(buffers);
-        resolve({ data, pdfBuffer, format });
-      });
-      doc.on('error', reject);
-
-      doc.fontSize(18).font('Helvetica-Bold').text('INDIAN RAILWAYS', { align: 'center' });
-      doc.fontSize(14).text(`OBHS ${reportType.replace(/_/g, ' ')} Report`, { align: 'center' });
-      doc.moveDown();
-      if (data?.meta) {
-        doc.fontSize(10).text(`Report ID: ${data.meta.reportId || 'N/A'}`);
-        doc.text(`Status: ${data.kpi?.overallStatus || 'N/A'}`);
+    if (format === 'excel') {
+      const excelGen = new ExcelGenerator();
+      excelGen.createSummarySheet(data, reportType.replace(/_/g, ' '));
+      excelBuffer = await excelGen.getBuffer();
+      return { data, excelBuffer, format };
+    } else {
+      const pdfRenderer = new PDFRenderer();
+      if (reportType === 'ATTENDANCE_AUDIT') {
+        pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
+      } else if (reportType === 'WORKER_ACTIVITY') {
+        pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
+      } else if (reportType === 'COMPLAINT_AUDIT') {
+        pdfBuffer = await pdfRenderer.generateComplaintAudit(data);
+      } else if (reportType === 'OPERATIONAL_AUDIT') {
+        pdfBuffer = await pdfRenderer.generateEnterpriseOperationalAudit(data);
       }
-      doc.moveDown();
-      doc.fontSize(9).text('Audit report generated successfully', { align: 'center' });
-      doc.end();
-    });
+      return { data, pdfBuffer, format };
+    }
   }
 
   async sendEmail(user, body) {
@@ -742,35 +741,21 @@ class ReportService {
       data = await this.legacyService.getOperationalAuditData(runInstanceId);
     }
 
-    const PDFDocument = (await import('pdfkit')).default;
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    const pdfBuffers = [];
-    await new Promise((resolve, reject) => {
-      doc.on('data', c => pdfBuffers.push(c));
-      doc.on('end', resolve);
-      doc.on('error', reject);
-      doc.fontSize(18).font('Helvetica-Bold').text('INDIAN RAILWAYS', { align: 'center' });
-      doc.fontSize(14).text(`OBHS ${reportType.replace(/_/g, ' ')} Report`, { align: 'center' });
-      doc.moveDown();
-      if (data?.meta) {
-        doc.fontSize(10).text(`Report ID: ${data.meta.reportId || 'N/A'}`);
-      }
-      doc.end();
-    });
-    const pdfBuffer = Buffer.concat(pdfBuffers);
+    const excelGen = new ExcelGenerator();
+    excelGen.createSummarySheet(data, reportType.replace(/_/g, ' '));
+    const excelBuffer = await excelGen.getBuffer();
 
-    const { default: ExcelJS } = await import('exceljs');
-    const wb = new ExcelJS.Workbook();
-    wb.creator = 'OBHS System';
-    const ws = wb.addWorksheet('Summary');
-    ws.columns = [
-      { header: 'Metric', key: 'metric', width: 30 },
-      { header: 'Value', key: 'value', width: 30 }
-    ];
-    if (data?.kpi?.metrics) {
-      data.kpi.metrics.forEach(m => ws.addRow({ metric: m.metric, value: m.value }));
+    let pdfBuffer;
+    const pdfRenderer = new PDFRenderer();
+    if (reportType === 'ATTENDANCE_AUDIT') {
+      pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
+    } else if (reportType === 'WORKER_ACTIVITY') {
+      pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
+    } else if (reportType === 'COMPLAINT_AUDIT') {
+      pdfBuffer = await pdfRenderer.generateComplaintAudit(data);
+    } else {
+      pdfBuffer = await pdfRenderer.generateEnterpriseOperationalAudit(data);
     }
-    const excelBuffer = await wb.xlsx.writeBuffer();
 
     let emailResponse = { id: 'simulated' };
     try {

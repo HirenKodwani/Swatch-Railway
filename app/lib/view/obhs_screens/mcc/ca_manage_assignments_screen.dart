@@ -4,7 +4,7 @@ import 'package:crm_train/model/run_instance_model.dart';
 import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
-import 'package:crm_train/view/obhs_screens/mcc/qr_feedback_generator_screen.dart';
+
 
 class CaManageAssignmentsScreen extends StatefulWidget {
   final UserModel user;
@@ -126,22 +126,6 @@ class _CaManageAssignmentsScreenState extends State<CaManageAssignmentsScreen> {
         backgroundColor: kRailwayBlue,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          if (currentInstance != null)
-            IconButton(
-              icon: const Icon(Icons.qr_code_2),
-              tooltip: 'Generate Feedback QR',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => QrFeedbackGeneratorScreen(instance: currentInstance!),
-                  ),
-                );
-              },
-            ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())

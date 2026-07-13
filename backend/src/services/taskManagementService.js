@@ -16,7 +16,10 @@ class TaskManagementService {
 
     for (const doc of assignmentsQuery.docs) {
       const assignment = doc.data();
-      const areaDoc = await db.collection('areas').doc(assignment.areaId).get();
+      let areaDoc = await db.collection('areas').doc(assignment.areaId).get();
+      if (!areaDoc.exists) {
+        areaDoc = await db.collection('stationAreas').doc(assignment.areaId).get();
+      }
       if (!areaDoc.exists) continue;
       const area = areaDoc.data();
 
@@ -357,10 +360,14 @@ class TaskManagementService {
     }
 
     for (const areaId of areaIds) {
-      const [workersSnap, areaDoc] = await Promise.all([
+      const [workersSnap, areaSnap] = await Promise.all([
         assignedWorker ? null : db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).limit(200).get(),
         db.collection('areas').doc(areaId).get()
       ]);
+      let areaDoc = areaSnap;
+      if (!areaDoc.exists) {
+        areaDoc = await db.collection('stationAreas').doc(areaId).get();
+      }
       const areaData = areaDoc.exists ? areaDoc.data() : {};
       const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(areaData.cleaningFrequency || 'daily');
       const areaName = areaData.areaName || areaData.name || '';

@@ -5,7 +5,7 @@ import config from '../config/index.js';
 import otpStore from '../utils/otpStore.js';
 
 class PassengerService {
-  async submitFeedback(userData, body) {
+  async submitTaskFeedback(userData, body) {
     const { taskId, passengerScore, passengerPhone, feedbackText } = body;
     if (!taskId) throw new ValidationError('taskId is required');
     const taskRef = db.collection('task_instances').doc(taskId);
@@ -24,6 +24,77 @@ class PassengerService {
       feedbackReceivedAt: new Date().toISOString()
     });
     return { success: true, message: 'Feedback submitted', consolidatedScore };
+  }
+
+  async submitPublicFeedback(body) {
+    const { passengerName, mobileNumber, coachNo, ratings, remarks, runInstanceId } = body;
+
+    if (!runInstanceId || !coachNo || !ratings) {
+      throw new ValidationError('Run Instance ID, Coach No, and Ratings are required.');
+    }
+
+    const { cleanliness, toiletHygiene, linenQuality, security, staffBehaviour } = ratings;
+    if (
+      cleanliness === undefined ||
+      toiletHygiene === undefined ||
+      linenQuality === undefined ||
+      security === undefined ||
+      staffBehaviour === undefined
+    ) {
+      throw new ValidationError('All 5 rating parameters must be provided.');
+    }
+
+    const runDoc = await db.collection('obhsRunInstances').doc(runInstanceId).get();
+    if (!runDoc.exists) {
+      // Try fallback to legacy RunInstance collection just in case
+      const legacyRunDoc = await db.collection('RunInstance').doc(runInstanceId).get();
+      if (!legacyRunDoc.exists) {
+        throw new NotFoundError('Journey not found.');
+      }
+    }
+    const runData = runDoc.exists ? runDoc.data() : (await db.collection('RunInstance').doc(runInstanceId).get()).data();
+
+    const totalStars =
+      Number(cleanliness) +
+      Number(toiletHygiene) +
+      Number(linenQuality) +
+      Number(security) +
+      Number(staffBehaviour);
+
+    const overallRating = parseFloat((totalStars / 5).toFixed(2));
+
+    const feedbackRef = db.collection('obhs_feedbacks').doc();
+
+    const feedbackData = {
+      feedbackId: feedbackRef.id,
+      feedbackType: 'QR_PASSENGER',
+      runInstanceId: runInstanceId,
+      trainNo: runData.trainNo || 'UNKNOWN',
+      trainName: runData.trainName || '',
+      coachNo: coachNo,
+      passengerName: passengerName || 'Anonymous',
+      mobileNumber: mobileNumber || 'N/A',
+      remarks: remarks || '',
+      ratings: {
+        cleanliness: Number(cleanliness),
+        toiletHygiene: Number(toiletHygiene),
+        linenQuality: Number(linenQuality),
+        security: Number(security),
+        staffBehaviour: Number(staffBehaviour)
+      },
+      overallRating: overallRating,
+      source: 'QR_CODE',
+      createdAt: new Date().toISOString(),
+      timestamp: Date.now()
+    };
+
+    await feedbackRef.set(feedbackData);
+
+    return {
+      success: true,
+      message: 'Thank you for your valuable feedback!',
+      overallRating: overallRating
+    };
   }
 
   async getFeedbackList(filters = {}) {
@@ -137,7 +208,6 @@ class PassengerService {
   async getTrainCoaches(trainNo) {
     const runsSnap = await db.collection('RunInstance')
       .where('trainNo', '==', trainNo)
-      .where('status', 'in', ['ACTIVE', 'RUNNING', 'ALLOCATED', 'READY'])
       .limit(200).get();
 
     if (runsSnap.empty) {
@@ -147,15 +217,26 @@ class PassengerService {
     const coachSet = new Set();
     runsSnap.forEach(doc => {
       const runData = doc.data();
+      const status = (runData.status || '').toUpperCase();
+      
+      // Skip completed or inactive runs
+      if (['COMPLETED', 'FINISHED', 'CLOSED', 'INACTIVE'].includes(status)) {
+        return;
+      }
+
       if (runData.coaches && Array.isArray(runData.coaches)) {
         runData.coaches.forEach(c => {
-          if (c.coachPosition) coachSet.add(c.coachPosition);
-          else if (c.coachNumber) coachSet.add(c.coachNumber);
+          const val = c.coachNumber || c.coachPosition || c.coachNo;
+          if (val !== undefined && val !== null && val !== '') {
+            coachSet.add(String(val).trim());
+          }
         });
       }
     });
 
-    const sortedCoaches = Array.from(coachSet).sort();
+    const sortedCoaches = Array.from(coachSet).sort((a, b) => {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
     return { success: true, coaches: sortedCoaches };
   }
 }

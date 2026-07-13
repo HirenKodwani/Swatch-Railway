@@ -16,5 +16,6 @@ router.post('/create-task', passengerController.createTask);
 router.get('/tasks', verifyToken, passengerController.getTasks);
 router.get('/train/:trainNo/coaches', passengerController.getTrainCoaches);
 router.post('/create-emergency-task', verifyToken, passengerController.createEmergencyTask);
+router.post('/submit-feedback', passengerController.submitFeedback);
 
 export default router;

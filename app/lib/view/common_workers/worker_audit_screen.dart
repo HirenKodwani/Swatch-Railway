@@ -22,7 +22,7 @@ class _WorkerAuditScreenState extends State<WorkerAuditScreen> {
 
   Future<String?> _getAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    return prefs.getString('auth_token') ?? prefs.getString('token');
   }
 
   @override

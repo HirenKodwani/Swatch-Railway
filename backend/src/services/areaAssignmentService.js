@@ -8,7 +8,10 @@ class AreaAssignmentService {
       throw new ValidationError('stationId, areaId, workerId, workerName, shift, startDate are required');
     }
 
-    const areaDoc = await db.collection('areas').doc(areaId).get();
+    let areaDoc = await db.collection('areas').doc(areaId).get();
+    if (!areaDoc.exists) {
+      areaDoc = await db.collection('stationAreas').doc(areaId).get();
+    }
     if (!areaDoc.exists) throw new NotFoundError('Area not found');
     if (areaDoc.data().stationId !== stationId) throw new ValidationError('Area does not belong to specified station');
 

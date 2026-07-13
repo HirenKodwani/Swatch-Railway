@@ -42,11 +42,13 @@ class ApiService {
   static Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', token);
+    await prefs.setString('auth_token', token);
   }
 
   static Future<void> clearToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
+    await prefs.remove('auth_token');
   }
 
   static Future<Map<String, dynamic>> createUser({

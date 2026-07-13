@@ -11,6 +11,7 @@ import '../../repositories/worker_repo.dart';
 import '../../repositories/obhs_repository.dart';
 import '../../model/railway_worker_model.dart';
 import '../../services/api_services.dart';
+import '../../services/passenger_service.dart';
 import '../../utills/app_colors.dart';
 
 // ─── Model ───────────────────────────────────────────────────────────────────
@@ -1053,7 +1054,12 @@ class SubmitRatingScreen extends StatefulWidget {
 }
 
 class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
-  final List<String> _coaches = ['S1', 'S2', 'F1', 'F2'];
+  // Train + coach selection (passenger mode)
+  final TextEditingController _trainNoController = TextEditingController();
+  final FocusNode _trainFocusNode = FocusNode();
+  List<String> _availableCoaches = [];
+  bool _isFetchingCoaches = false;
+
   String? _selectedCoach;
   double _overallRating = 0;
   final Map<String, double> _paramRatings = {};
@@ -1066,7 +1072,6 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
   final TextEditingController _passengerNameController =
       TextEditingController();
 
-
   List<RailwayWorkerModel> _workers = [];
   String? _selectedWorkerId;
   bool _isLoadingWorkers = false;
@@ -1076,6 +1081,39 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
     super.initState();
     if (widget.isOfficialMode) {
       _fetchWorkers();
+    } else {
+      _trainFocusNode.addListener(_onTrainFocusChange);
+    }
+  }
+
+  void _onTrainFocusChange() async {
+    if (!_trainFocusNode.hasFocus && _trainNoController.text.trim().isNotEmpty) {
+      setState(() {
+        _isFetchingCoaches = true;
+        _selectedCoach = null;
+        _availableCoaches = [];
+      });
+      try {
+        final coaches = await PassengerService.fetchCoachesForTrain(
+            _trainNoController.text.trim());
+        if (mounted) {
+          setState(() {
+            _availableCoaches = coaches;
+          });
+        }
+      } catch (e) {
+        debugPrint('Failed to fetch coaches: \$e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not fetch coaches: try again.'),
+              backgroundColor: kErrorRed,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isFetchingCoaches = false);
+      }
     }
   }
 
@@ -1097,10 +1135,12 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
 
   @override
   void dispose() {
+    _trainFocusNode.removeListener(_onTrainFocusChange);
+    _trainFocusNode.dispose();
+    _trainNoController.dispose();
     _remarksController.dispose();
     _inspectorController.dispose();
     _passengerNameController.dispose();
-
     super.dispose();
   }
 
@@ -1110,9 +1150,9 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
     if (widget.isOfficialMode) {
       if (_inspectorController.text.trim().isEmpty) return false;
       if (_selectedWorkerId == null) return false;
-    }
-    if (!widget.isOfficialMode) {
+    } else {
       if (_passengerNameController.text.trim().isEmpty) return false;
+      if (_trainNoController.text.trim().isEmpty) return false;
     }
     return true;
   }
@@ -1385,24 +1425,83 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // ── Train number (triggers coach fetch on focus-out) ──
+              _sectionTitle('Train Number'),
+              const SizedBox(height: 8),
+              _inputContainer(
+                child: TextField(
+                  controller: _trainNoController,
+                  focusNode: _trainFocusNode,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 12345',
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(12),
+                    prefixIcon: const Icon(Icons.train),
+                    suffixIcon: _isFetchingCoaches
+                        ? const Padding(
+                            padding: EdgeInsets.all(12.0),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
             ],
 
             // Coach selection
             _sectionTitle('Select Coach'),
             const SizedBox(height: 8),
-            _inputContainer(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedCoach,
-                  hint: const Text('Choose a coach'),
-                  isExpanded: true,
-                  items: _coaches
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedCoach = v),
+            // Passenger: dynamic list from train API; Official: free-text or fixed list
+            if (!widget.isOfficialMode)
+              _inputContainer(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedCoach,
+                    hint: Text(
+                      _trainNoController.text.trim().isEmpty
+                          ? 'Enter train number first'
+                          : _availableCoaches.isEmpty && !_isFetchingCoaches
+                              ? 'No coaches found – check train number'
+                              : 'Choose a coach',
+                    ),
+                    isExpanded: true,
+                    items: _availableCoaches
+                        .map((c) =>
+                            DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: _availableCoaches.isEmpty
+                        ? null
+                        : (v) => setState(() => _selectedCoach = v),
+                  ),
+                ),
+              )
+            else
+              _inputContainer(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedCoach,
+                    hint: const Text('Choose a coach'),
+                    isExpanded: true,
+                    items: const [
+                      'S1', 'S2', 'S3', 'S4', 'S5',
+                      'A1', 'A2', 'B1', 'B2',
+                      'F1', 'F2', 'G1', 'H1',
+                    ]
+                        .map((c) =>
+                            DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedCoach = v),
+                  ),
                 ),
               ),
-            ),
 
             const SizedBox(height: 20),
 

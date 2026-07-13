@@ -57,3 +57,8 @@ export const createEmergencyTask = asyncHandler(async (req, res) => {
   const result = await taskService.createEmergencyTask(req.user, req.body);
   res.status(201).json(result);
 });
+
+export const submitFeedback = asyncHandler(async (req, res) => {
+  const result = await passengerService.submitPublicFeedback(req.body);
+  res.status(201).json(result);
+});

@@ -7,11 +7,11 @@ const router = express.Router();
 router.post('/', verifyToken, runInstanceController.create);
 router.put('/:runInstanceId', verifyToken, runInstanceController.update);
 router.get('/', verifyToken, runInstanceController.list);
-router.get('/byTrain/:parentTrainId', verifyToken, runInstanceController.getByParentTrain);
+router.get('/train/:parentTrainId', verifyToken, runInstanceController.getByParentTrain);
 router.delete('/:runInstanceId', verifyToken, runInstanceController.remove);
 router.get('/obhs/:runId', verifyToken, runInstanceController.getObhsRun);
-router.put('/:runInstanceId/activate', verifyToken, runInstanceController.activateJourney);
-router.put('/:runInstanceId/complete', verifyToken, runInstanceController.completeJourney);
+router.post('/:runInstanceId/activate', verifyToken, runInstanceController.activateJourney);
+router.post('/:runInstanceId/complete', verifyToken, runInstanceController.completeJourney);
 router.get('/active-run', verifyToken, runInstanceController.getActiveRunForWorker);
 
 export default router;
