@@ -8,6 +8,7 @@ export function requirePermission(permission) {
     const permissions = ROLE_PERMISSIONS[normalizedRole] || [];
 
     if (!permissions.includes(permission)) {
+      console.log(`[AuthZ] Failed permission ${permission} for role "${role}" (normalized: "${normalizedRole}"). Permissions:`, permissions);
       throw new ForbiddenError(`Insufficient permissions. Required: ${permission}`);
     }
     next();

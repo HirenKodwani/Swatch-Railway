@@ -464,6 +464,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "children": [
           {"title": "Coach Cleaning", "route": "coach_cleaning"},
           {"title": "Premise Cleaning", "route": "premise_cleaning"},
+          {"title": "CTS Forms", "route": "cts_cleaning"},
           {"title": "Station Cleaning Forms", "route": "station_cleaning"},
           {"title": "Station Cleaning Runs", "route": "station_cleaning_runs"},
           {"title": "Pest Control", "route": "pest_control"},
@@ -564,6 +565,16 @@ class _CommonDashboardState extends State<CommonDashboard> {
       case "coach_cleaning":
       case "premise_cleaning":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()));
+        break;
+      case "cts_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) {
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          return CommonFormScreen(
+            role: userRole ?? '',
+            userLevel: authProvider.currentUser?.userType ?? 'zone',
+            initialTabIndex: 2,
+          );
+        }));
         break;
       case "station_cleaning":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
