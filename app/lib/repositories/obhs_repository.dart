@@ -182,7 +182,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$baseUrl/api/runInstances'),
+          Uri.parse('$baseUrl/api/run-instances'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -300,7 +300,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.put(
-          Uri.parse('$baseUrl/api/runInstances/$runInstanceId'),
+          Uri.parse('$baseUrl/api/run-instances/$runInstanceId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -342,7 +342,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.delete(
-          Uri.parse('$baseUrl/api/runInstances/$runInstanceId'),
+          Uri.parse('$baseUrl/api/run-instances/$runInstanceId'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -408,7 +408,7 @@ class OBHSRepository {
 
       final response = await _handleRequest(
         () => http.get(
-          Uri.parse('$baseUrl/api/runInstances'),
+          Uri.parse('$baseUrl/api/run-instances'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
