@@ -49,11 +49,25 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
 
         if (isEdit) {
           final inst = widget.editInstance!;
-          _selectedStation = _stations.firstWhere((s) => s.uid == inst.stationId, orElse: () => _stations.first);
-          _selectedShift = inst.shift;
+          _selectedStation = _stations.any((s) => s.uid == inst.stationId)
+              ? _stations.firstWhere((s) => s.uid == inst.stationId)
+              : (_stations.isNotEmpty ? _stations.first : null);
+          
+          String rawShift = inst.shift.trim();
+          if (rawShift.isNotEmpty) {
+            rawShift = rawShift[0].toUpperCase() + rawShift.substring(1).toLowerCase();
+          }
+          if (['Morning', 'Evening', 'Night'].contains(rawShift)) {
+            _selectedShift = rawShift;
+          } else {
+            _selectedShift = 'Morning';
+          }
+
           try { _selectedDate = DateFormat('yyyy-MM-dd').parse(inst.date); } catch(_) {}
           _assignments.addAll(inst.platforms);
-          await _loadPlatforms(_selectedStation!.uid!);
+          if (_selectedStation != null) {
+            await _loadPlatforms(_selectedStation!.uid!);
+          }
         }
       }
     } catch (e) {
