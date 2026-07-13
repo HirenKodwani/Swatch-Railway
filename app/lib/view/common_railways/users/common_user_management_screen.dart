@@ -402,12 +402,12 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
 
   Widget _buildFilterSection() {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final zones = DepotDatabase.zoneData.keys.toList();
+    final zones = DepotDatabase.zoneData.keys.toSet().toList();
     final divisions = selectedZoneFilter != null
-        ? (DepotDatabase.zoneData[selectedZoneFilter]?.keys.toList() ?? [])
+        ? (DepotDatabase.zoneData[selectedZoneFilter]?.keys.toSet().toList() ?? [])
         : [];
     final depots = (selectedZoneFilter != null && selectedDivisionFilter != null)
-        ? (DepotDatabase.zoneData[selectedZoneFilter]?[selectedDivisionFilter] ?? [])
+        ? (DepotDatabase.zoneData[selectedZoneFilter]?[selectedDivisionFilter]?.toSet().toList() ?? [])
         : [];
 
     return Container(

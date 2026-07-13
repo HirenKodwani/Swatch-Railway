@@ -50,6 +50,7 @@ class _SupervisorReviewScreenState extends State<SupervisorReviewScreen>
       final uri = Uri.parse('${ApiService.baseUrl}/api/tasks-v2/pending-review')
           .replace(queryParameters: {
         if (widget.supervisorId != null) 'supervisorId': widget.supervisorId!,
+        'stationId': widget.stationId,
       });
 
       final response = await http.get(

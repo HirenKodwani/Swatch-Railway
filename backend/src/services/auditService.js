@@ -7,18 +7,37 @@ class AuditService {
     const { action, actorId, targetId, startDate, endDate, limit = 50, offset = 0 } = filters;
     const maxLimit = Math.min(parseInt(limit), 200);
 
-    let query = db.collection('audit_logs').orderBy('createdAt', 'desc');
+    let query = db.collection('audit_logs').orderBy('timestamp', 'desc');
     if (action) query = query.where('action', '==', action);
-    if (actorId) query = query.where('actorId', '==', actorId);
+    
+    // Some services log 'userId', others log 'actorId'
+    if (actorId && !filters.userId) query = query.where('actorId', '==', actorId);
+    else if (filters.userId && !actorId) query = query.where('userId', '==', filters.userId);
+    else if (actorId && filters.userId) {
+      // If both are provided and they are the same (like in our route)
+      // Since Firestore doesn't support OR natively well on different fields in a single inequality,
+      // we'll just not use a where clause here and filter in memory if needed, or assume 'userId' or 'actorId'
+      // Actually we'll just filter in memory for the actorId/userId if both could be present.
+    }
+    
     if (targetId) query = query.where('targetId', '==', targetId);
 
     const snapshot = await query.limit(maxLimit).get();
     const logs = [];
     snapshot.forEach(doc => {
       const data = doc.data();
+      const ts = data.timestamp?.toDate?.()?.toISOString() || data.timestamp || data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null;
+      
+      // Memory filter if actorId/userId was passed but we couldn't query it directly due to OR condition
+      if ((actorId && filters.userId) && (data.actorId !== actorId && data.userId !== filters.userId)) {
+        return; // skip this log
+      }
+
       logs.push({
         ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null,
+        timestamp: ts,
+        createdAt: ts,
+        type: data.targetType || data.type || data.action || 'Activity'
       });
     });
 

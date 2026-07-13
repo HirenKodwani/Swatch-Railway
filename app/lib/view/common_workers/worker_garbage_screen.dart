@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 import '../../services/api_services.dart';
-
 class WorkerGarbageScreen extends StatefulWidget {
   final String? stationId;
   final String? stationName;
@@ -29,6 +30,8 @@ class _WorkerGarbageScreenState extends State<WorkerGarbageScreen> {
   final _disposalMethods = ['Landfill', 'Recycling', 'Composting', 'Incineration', 'Contractor pickup'];
 
   Future<String?> _getAuthToken() async {
+    final authProvider = context.read<AuthProvider>();
+    if (authProvider.token != null) return authProvider.token;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('auth_token') ?? prefs.getString('token');
   }

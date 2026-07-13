@@ -573,23 +573,34 @@ class DashboardService {
     const { formType, zone, division, entityId, days } = query;
 
     if (!formType) {
-      const [coachSnap, premisesSnap, ctsSnap, cleaningSnap] = await Promise.all([
-        db.collection('coachForms').get(), db.collection('premisesForms').get(),
-        db.collection('ctsForms').get(), db.collection('cleaningForms').get()
-      ]);
+      const snapshot = await db.collection('cleaningForms').get();
+      let coachForms = 0, premisesForms = 0, ctsForms = 0, cleaningFormsCount = 0;
+      snapshot.forEach(doc => {
+        const type = doc.data().formType;
+        if (type === 'coach') coachForms++;
+        else if (type === 'premises') premisesForms++;
+        else if (type === 'cts') ctsForms++;
+        else cleaningFormsCount++;
+      });
       return {
-        coachForms: coachSnap.size, premisesForms: premisesSnap.size,
-        ctsForms: ctsSnap.size, cleaningForms: cleaningSnap.size,
-        total: coachSnap.size + premisesSnap.size + ctsSnap.size + cleaningSnap.size
+        coachForms, premisesForms, ctsForms, cleaningForms: cleaningFormsCount,
+        total: snapshot.size
       };
     }
 
-    let collectionName = 'coachForms';
-    if (formType === 'premises') collectionName = 'premisesForms';
-    else if (formType === 'cts') collectionName = 'ctsForms';
-    else if (formType === 'cleaning') collectionName = 'cleaningForms';
-
+    const collectionName = 'cleaningForms';
     let dbQuery = db.collection(collectionName);
+    if (formType && formType !== 'cleaning') {
+        if (formType === 'premises' || formType === 'premise') {
+            dbQuery = dbQuery.where('formType', 'in', ['premises', 'premise', 'premise_cleaning']);
+        } else if (formType === 'coach') {
+            dbQuery = dbQuery.where('formType', 'in', ['coach', 'coach_cleaning']);
+        } else if (formType === 'cts') {
+            dbQuery = dbQuery.where('formType', 'in', ['cts', 'obhs']);
+        } else {
+            dbQuery = dbQuery.where('formType', '==', formType);
+        }
+    }
     if (zone) dbQuery = dbQuery.where('submittedByZone', '==', zone);
     if (division) dbQuery = dbQuery.where('submittedByDivision', '==', division);
     if (entityId) dbQuery = dbQuery.where('submittedByEntityId', '==', entityId);

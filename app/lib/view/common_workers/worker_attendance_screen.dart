@@ -51,22 +51,31 @@ class WorkerAttendanceScreen extends StatelessWidget {
                       icon: Icons.login,
                       type: 'start',
                     ),
-                    const SizedBox(height: 12),
-                    _buildAttendanceItem(
-                      controller: controller,
-                      title: 'Mid Check-in',
-                      subtitle: 'Unlocks after 3 completed tasks',
-                      icon: Icons.schedule,
-                      type: 'mid',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildAttendanceItem(
-                      controller: controller,
-                      title: 'End Attendance',
-                      subtitle: 'Unlocks after all assigned tasks',
-                      icon: Icons.logout,
-                      type: 'end',
-                    ),
+                    Obx(() {
+                      if (controller.startAttendance.value) {
+                        return Column(
+                          children: [
+                            const SizedBox(height: 12),
+                            _buildAttendanceItem(
+                              controller: controller,
+                              title: 'Mid Check-in',
+                              subtitle: 'Unlocks after 3 completed tasks',
+                              icon: Icons.schedule,
+                              type: 'mid',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildAttendanceItem(
+                              controller: controller,
+                              title: 'End Attendance',
+                              subtitle: 'Unlocks after all assigned tasks',
+                              icon: Icons.logout,
+                              type: 'end',
+                            ),
+                          ],
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }),
                   ],
                 ),
               ),

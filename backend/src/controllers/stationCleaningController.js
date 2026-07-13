@@ -103,37 +103,37 @@ export const deleteSchedule = asyncHandler(async (req, res) => {
 
 export const createStationRun = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.createStationRun(req.body, req.user);
-  res.status(201).json(result);
+  res.status(201).json({ success: true, data: result.data || result, message: result.message });
 });
 
 export const listStationRuns = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.listStationRuns(req.query, req.user);
-  res.status(200).json(result);
+  res.status(200).json({ success: true, data: result.runs || result.data || [], count: result.count });
 });
 
 export const updateStationRun = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.updateStationRun(req.params.runId, req.body);
-  res.status(200).json(result);
+  res.status(200).json({ success: true, data: result });
 });
 
 export const getMyStationRuns = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.getMyStationRuns(req.user.uid);
-  res.status(200).json(result);
+  res.status(200).json({ success: true, data: result.runs || result.data || [], count: result.count });
 });
 
 export const deleteStationRun = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.deleteStationRun(req.params.runId);
-  res.status(200).json(result);
+  res.status(200).json({ success: true, data: result });
 });
 
 export const getWorkerStationRuns = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.getWorkerStationRuns(req.params.workerId, req.user);
-  res.status(200).json(result);
+  res.status(200).json({ success: true, data: result.runs || result.data || [], count: result.count });
 });
 
 export const getSupervisorStationRuns = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.getSupervisorStationRuns(req.params.supervisorId, req.user);
-  res.status(200).json(result);
+  res.status(200).json({ success: true, data: result.runs || result.data || [], count: result.count });
 });
 
 export const submitStationTask = asyncHandler(async (req, res) => {

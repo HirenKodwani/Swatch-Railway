@@ -13,7 +13,7 @@ export const list = asyncHandler(async (req, res) => {
 
 export const getById = asyncHandler(async (req, res) => {
   const result = await cleaningFormService.getCleaningFormById(req.params.uid);
-  res.status(200).json(result);
+  res.status(200).json({ form: result });
 });
 
 export const saveDraft = asyncHandler(async (req, res) => {

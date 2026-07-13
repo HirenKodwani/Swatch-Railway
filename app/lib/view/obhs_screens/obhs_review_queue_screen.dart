@@ -176,18 +176,18 @@ class _OBHSReviewQueueScreenState extends State<OBHSReviewQueueScreen> {
                       padding: const EdgeInsets.all(12),
                       itemBuilder: (context, index) {
                         final task = _tasks[index];
-                        final String taskId = task['id'] ?? task['taskId'] ?? '';
-                        final String taskName = task['taskName'] ?? task['taskType'] ?? 'Unknown Task';
+                        final String taskId = (task['id'] ?? task['taskId'] ?? '').toString();
+                        final String taskName = (task['taskName'] ?? task['taskType'] ?? 'Unknown Task').toString();
                         
                         String workerName = 'Unknown Worker';
                         if (task['workerName'] != null) {
-                          workerName = task['workerName'];
+                          workerName = task['workerName'].toString();
                         } else if (task['submittedBy'] != null && task['submittedBy']['name'] != null) {
-                          workerName = task['submittedBy']['name'];
+                          workerName = task['submittedBy']['name'].toString();
                         }
 
-                        final String coachId = task['coachId'] ?? task['coachNo'] ?? 'Unknown Coach';
-                        final String submittedAt = task['submittedAt'] ?? task['serverCreatedAt'] ?? task['deviceTimestamp'] ?? '';
+                        final String coachId = (task['coachId'] ?? task['coachNo'] ?? 'Unknown Coach').toString();
+                        final String submittedAt = (task['submittedAt'] ?? task['serverCreatedAt'] ?? task['deviceTimestamp'] ?? '').toString();
                         
                         String formattedTime = 'Recently';
                         if (submittedAt.isNotEmpty) {

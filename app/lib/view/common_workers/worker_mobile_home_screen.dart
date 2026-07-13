@@ -446,22 +446,31 @@ class WorkerMobileHomeScreen extends StatelessWidget {
             icon: Icons.login,
             type: 'start',
           ),
-          const SizedBox(height: 12),
-          _buildAttendanceItem(
-            controller: controller,
-            title: 'Mid Check-in',
-            subtitle: 'Progress verification',
-            icon: Icons.schedule,
-            type: 'mid',
-          ),
-          const SizedBox(height: 12),
-          _buildAttendanceItem(
-            controller: controller,
-            title: 'End Attendance',
-            subtitle: 'Mark completion time',
-            icon: Icons.logout,
-            type: 'end',
-          ),
+          Obx(() {
+            if (controller.startAttendance.value) {
+              return Column(
+                children: [
+                  const SizedBox(height: 12),
+                  _buildAttendanceItem(
+                    controller: controller,
+                    title: 'Mid Check-in',
+                    subtitle: 'Progress verification',
+                    icon: Icons.schedule,
+                    type: 'mid',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildAttendanceItem(
+                    controller: controller,
+                    title: 'End Attendance',
+                    subtitle: 'Mark completion time',
+                    icon: Icons.logout,
+                    type: 'end',
+                  ),
+                ],
+              );
+            }
+            return const SizedBox.shrink();
+          }),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 8),
@@ -581,14 +590,17 @@ class WorkerMobileHomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              allTasksCompleted
-                  ? 'End attendance unlocked'
-                  : completed >= 3
-                  ? 'Mid check-in unlocked. Complete all assigned tasks for end attendance.'
-                  : 'Complete $nextTarget tasks to unlock mid check-in.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
+            Obx(() {
+              if (!controller.startAttendance.value) return const SizedBox.shrink();
+              return Text(
+                allTasksCompleted
+                    ? 'End attendance unlocked'
+                    : completed >= 3
+                    ? 'Mid check-in unlocked. Complete all assigned tasks for end attendance.'
+                    : 'Complete $nextTarget tasks to unlock mid check-in.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              );
+            }),
           ],
         ),
       );

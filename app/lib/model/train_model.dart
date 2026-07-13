@@ -88,42 +88,42 @@ class TrainModel {
 
   factory TrainModel.fromJson(Map<String, dynamic> json) {
     return TrainModel(
-      uid: json['uid'] as String?,
-      trainNo: json['trainNo'] as String?,
-      trainName: json['trainName'] as String?,
-      origin: json['origin'] as String?,
-      destination: json['destination'] as String?,
+      uid: json['uid']?.toString(),
+      trainNo: json['trainNo']?.toString(),
+      trainName: json['trainName']?.toString(),
+      origin: json['origin']?.toString(),
+      destination: json['destination']?.toString(),
       days:
           (json['days'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
           [],
-      zone: json['zone'] as String? ?? '',
-      division: json['division'] as String? ?? '',
-      depot: json['depot'] as String?,
-      status: json['status'] as String? ?? 'active',
+      zone: json['zone']?.toString() ?? '',
+      division: json['division']?.toString() ?? '',
+      depot: json['depot']?.toString(),
+      status: json['status']?.toString() ?? 'active',
       trainApplicableFor:
           (json['TrainApplicableFor'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
 
-      outboundTrainNo: json['outboundTrainNo'] as String?,
-      inboundTrainNo: json['inboundTrainNo'] as String?,
-      outboundDurationStr: json['outboundDurationStr'] as String?,
-      inboundDurationStr: json['inboundDurationStr'] as String?,
-      layoverDestStr: json['layoverDestStr'] as String?,
-      layoverOriginStr: json['layoverOriginStr'] as String?,
-      journeyStartTime: json['journeyStartTime'] as String?,
+      outboundTrainNo: json['outboundTrainNo']?.toString(),
+      inboundTrainNo: json['inboundTrainNo']?.toString(),
+      outboundDurationStr: json['outboundDurationStr']?.toString(),
+      inboundDurationStr: json['inboundDurationStr']?.toString(),
+      layoverDestStr: json['layoverDestStr']?.toString(),
+      layoverOriginStr: json['layoverOriginStr']?.toString(),
+      journeyStartTime: json['journeyStartTime']?.toString(),
 
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
+          ? DateTime.tryParse(json['createdAt'].toString())
           : null,
-      createdBy: json['createdBy'] as String?,
-      createdByName: json['createdByName'] as String?,
+      createdBy: json['createdBy']?.toString(),
+      createdByName: json['createdByName']?.toString(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
+          ? DateTime.tryParse(json['updatedAt'].toString())
           : null,
-      updatedBy: json['updatedBy'] as String?,
-      updatedByName: json['updatedByName'] as String?,
+      updatedBy: json['updatedBy']?.toString(),
+      updatedByName: json['updatedByName']?.toString(),
     );
   }
 
