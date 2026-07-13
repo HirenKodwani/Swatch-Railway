@@ -729,13 +729,13 @@ class ApiService {
     }
   }
 
-  static Future<List<ContractModel>> getContractsDetails(
-    String contractId,
+  static Future<ContractModel> getContractByNumber(
+    String contractNumber,
   ) async {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/contracts/number/$contractId'),
+        Uri.parse('$baseUrl/api/contracts/number/$contractNumber'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -744,20 +744,13 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
-        final List contract = data['contracts'] ?? [];
-
-        return contract
-            .map<ContractModel>(
-              (u) => ContractModel.fromJson(Map<String, dynamic>.from(u)),
-            )
-            .toList();
+        return ContractModel.fromJson(Map<String, dynamic>.from(data));
       } else {
         final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Failed to fetch pending users');
+        throw Exception(error['error'] ?? 'Failed to fetch contract');
       }
     } catch (e) {
-      throw Exception('Error fetching pending users: $e');
+      throw Exception('Error fetching contract: $e');
     }
   }
 

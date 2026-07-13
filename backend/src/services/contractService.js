@@ -44,7 +44,7 @@ class ContractService {
 
     const duplicateSnap = await db.collection('contracts')
       .where('entityId', '==', entityId)
-      .where('status', '==', 'active').get();
+      .where('status', '==', 'Active').get();
     if (!duplicateSnap.empty) {
       for (const doc of duplicateSnap.docs) {
         const existingStations = doc.data().stationIds || [];
@@ -76,7 +76,7 @@ class ContractService {
       contractValue: contractValue || 0,
       workCategories,
       remarks: remarks || null,
-      status: status || 'active',
+      status: status || 'Active',
       representative,
       assignedRailwayOfficials: assignedRailwayOfficials || [],
       assignedContractorUsers: assignedContractorUsers || [],
@@ -106,9 +106,7 @@ class ContractService {
     updateData.updatedBy = userId;
     updateData.updatedByName = editorName;
     updateData.updatedAt = new Date().toISOString();
-    if (!updateData.status || (updateData.status !== 'APPROVED' && updateData.status !== 'REJECTED')) {
-      updateData.status = 'PENDING';
-    }
+
 
     await docRef.update(updateData);
     return { message: 'Contract updated successfully', updates: updateData };
