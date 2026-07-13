@@ -591,7 +591,15 @@ class DashboardService {
     const collectionName = 'cleaningForms';
     let dbQuery = db.collection(collectionName);
     if (formType && formType !== 'cleaning') {
-        dbQuery = dbQuery.where('formType', '==', formType);
+        if (formType === 'premises' || formType === 'premise') {
+            dbQuery = dbQuery.where('formType', 'in', ['premises', 'premise', 'premise_cleaning']);
+        } else if (formType === 'coach') {
+            dbQuery = dbQuery.where('formType', 'in', ['coach', 'coach_cleaning']);
+        } else if (formType === 'cts') {
+            dbQuery = dbQuery.where('formType', 'in', ['cts', 'obhs']);
+        } else {
+            dbQuery = dbQuery.where('formType', '==', formType);
+        }
     }
     if (zone) dbQuery = dbQuery.where('submittedByZone', '==', zone);
     if (division) dbQuery = dbQuery.where('submittedByDivision', '==', division);

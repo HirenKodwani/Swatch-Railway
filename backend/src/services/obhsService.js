@@ -48,9 +48,23 @@ class ObhsService {
       }
     } catch (winErr) { logger.error('OBHS', '(Attendance Timing Engine) Error:', winErr); }
 
-    const attendanceDocId = `${runInstanceId}_${workerId}`;
-    const attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
-    const attendanceDoc = await attendanceRef.get();
+    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
+    const snapshot = await db.collection('obhs_attendance')
+      .where('workerId', '==', workerId)
+      .where('createdAt', '>=', sixteenHoursAgo)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+      
+    let attendanceDocId = `${runInstanceId}_${workerId}`;
+    let attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
+    let attendanceDoc = await attendanceRef.get();
+    
+    if (!snapshot.empty) {
+        attendanceDoc = snapshot.docs[0];
+        attendanceDocId = attendanceDoc.id;
+        attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
+    }
     const attendanceEntry = {
       photoUrl: imageUrl, deviceTimestamp, serverTimestamp: new Date().toISOString(),
       location: (latitude && longitude) ? { latitude, longitude } : null,
@@ -147,15 +161,21 @@ class ObhsService {
   }
 
   async getAttendanceStatus(runInstanceId, workerId) {
-    if (!runInstanceId || !workerId) {
-      throw new ValidationError('runInstanceId and workerId are required.');
+    if (!workerId) {
+      throw new ValidationError('workerId is required.');
     }
-    const attendanceDocId = `${runInstanceId}_${workerId}`;
-    const doc = await db.collection('obhs_attendance').doc(attendanceDocId).get();
-    if (!doc.exists) {
+    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
+    const snapshot = await db.collection('obhs_attendance')
+      .where('workerId', '==', workerId)
+      .where('createdAt', '>=', sixteenHoursAgo)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
       return { exists: false, isStartMarked: false, isMidMarked: false, isEndMarked: false, identityAuditStatus: null };
     }
-    const data = doc.data();
+    const data = snapshot.docs[0].data();
     return {
       exists: true,
       isStartMarked: data.isStartMarked || false,
@@ -166,7 +186,9 @@ class ObhsService {
       startAttendance: data.startAttendance || null,
       midAttendance: data.midAttendance || null,
       endAttendance: data.endAttendance || null,
-      uid: data.uid
+      uid: data.uid,
+      createdAt: data.createdAt,
+      runInstanceId: data.runInstanceId
     };
   }
 
