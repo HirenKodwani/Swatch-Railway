@@ -106,9 +106,8 @@ class UserService {
 
     const newUid = userRecord.uid;
       const lowerCreatorRole = (creatorRole || '').toLowerCase();
-      const initialStatus = (lowerCreatorRole === 'super_admin' || lowerCreatorRole === 'super admin' || lowerCreatorRole === 'master admin' || lowerCreatorRole === 'master_admin') 
-        ? 'ACTIVE' 
-        : 'PENDING';
+      // Ensure all users go for approval, even if created by a super admin
+      const initialStatus = 'PENDING';
 
       await db.collection('users').doc(newUid).set({
         uid: newUid,
