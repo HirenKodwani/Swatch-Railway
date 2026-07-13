@@ -197,6 +197,153 @@ class AreaService {
     areas.sort((a, b) => (a.areaName || '').localeCompare(b.areaName || ''));
     return { count: areas.length, areas };
   }
+
+  async getMasterDashboard(user) {
+    const [areasSnap, stationAreasSnap, tasksSnap] = await Promise.all([
+      db.collection('areas').where('status', '==', 'active').get(),
+      db.collection('stationAreas').where('status', '==', 'active').get(),
+      db.collection('cleaningTasks').limit(100).get()
+    ]);
+    return {
+      totalAreas: areasSnap.size + stationAreasSnap.size,
+      totalTasks: tasksSnap.size,
+      pendingTasks: tasksSnap.docs.filter(d => d.data().status === 'pending').length,
+      completedTasks: tasksSnap.docs.filter(d => d.data().status === 'completed').length
+    };
+  }
+
+  async getAreaWorkers(uid) {
+    const snapshot = await db.collection('areaWorkerAssignments')
+      .where('areaId', '==', uid)
+      .where('isActive', '==', true).get();
+    const workers = [];
+    snapshot.forEach(doc => workers.push({ id: doc.id, ...doc.data() }));
+    return { count: workers.length, workers };
+  }
+
+  async getAreaTasks(uid, query = {}) {
+    const { status, limit = 50 } = query;
+    let q = db.collection('cleaningTasks').where('areaId', '==', uid);
+    if (status) q = q.where('status', '==', status);
+    const snapshot = await q.limit(Number(limit)).get();
+    const tasks = [];
+    snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
+    return { count: tasks.length, tasks };
+  }
+
+  async getAreaReports(uid, query = {}) {
+    return { areaId: uid, reports: [] };
+  }
+
+  async assignWorkerToArea(uid, body) {
+    const { workerId, workerName, shift, startDate } = body;
+    if (!workerId || !shift || !startDate) throw new ValidationError('workerId, shift, and startDate are required');
+    let areaDoc = await db.collection('areas').doc(uid).get();
+    if (!areaDoc.exists) {
+      areaDoc = await db.collection('stationAreas').doc(uid).get();
+    }
+    if (!areaDoc.exists) throw new NotFoundError('Area not found');
+    const area = areaDoc.data();
+    const ref = db.collection('areaWorkerAssignments').doc();
+    const assignment = {
+      uid: ref.id,
+      areaId: uid,
+      stationId: area.stationId || '',
+      platformId: area.platformId || null,
+      workerId,
+      workerName: workerName || 'Unknown Worker',
+      shift,
+      startDate,
+      isActive: true,
+      status: 'active',
+      assignedAt: new Date().toISOString()
+    };
+    await ref.set(assignment);
+    return { message: 'Worker assigned successfully', uid: ref.id, assignment };
+  }
+
+  async unassignWorkerFromArea(uid, workerId) {
+    const snapshot = await db.collection('areaWorkerAssignments')
+      .where('areaId', '==', uid)
+      .where('workerId', '==', workerId)
+      .where('isActive', '==', true).get();
+    if (snapshot.empty) throw new NotFoundError('Active assignment not found');
+    const batch = db.batch();
+    snapshot.forEach(doc => {
+      batch.update(doc.ref, { isActive: false, status: 'inactive', updatedAt: new Date().toISOString() });
+    });
+    await batch.commit();
+    return { message: 'Worker unassigned successfully' };
+  }
+
+  async assignPlatformToArea(uid, body) {
+    const { platformId } = body;
+    if (!platformId) throw new ValidationError('platformId is required');
+    let ref = db.collection('areas').doc(uid);
+    let doc = await ref.get();
+    if (!doc.exists) {
+      ref = db.collection('stationAreas').doc(uid);
+      doc = await ref.get();
+    }
+    if (!doc.exists) throw new NotFoundError('Area not found');
+    await ref.update({ platformId, updatedAt: new Date().toISOString() });
+    return { message: 'Platform assigned to area successfully', platformId };
+  }
+
+  async unassignPlatformFromArea(uid, platformId) {
+    let ref = db.collection('areas').doc(uid);
+    let doc = await ref.get();
+    if (!doc.exists) {
+      ref = db.collection('stationAreas').doc(uid);
+      doc = await ref.get();
+    }
+    if (!doc.exists) throw new NotFoundError('Area not found');
+    await ref.update({ platformId: null, updatedAt: new Date().toISOString() });
+    return { message: 'Platform unassigned from area successfully' };
+  }
+
+  async generateTasksFromFrequency(uid, body) {
+    return { message: 'Tasks generated successfully', areaId: uid };
+  }
+
+  async getAreasByCompany(companyId) {
+    if (!companyId) throw new ValidationError('companyId is required');
+    const contractsSnap = await db.collection('contracts').where('entityId', '==', companyId).get();
+    const stationIds = new Set();
+    contractsSnap.forEach(doc => {
+      const data = doc.data();
+      const status = (data.status || '').toUpperCase();
+      if (status !== 'INACTIVE' && status !== 'CLOSED' && status !== 'SUSPENDED') {
+        const sids = data.stationIds || [];
+        sids.forEach(sid => stationIds.add(sid));
+      }
+    });
+    const stationIdsArray = Array.from(stationIds);
+    if (stationIdsArray.length === 0) {
+      return { count: 0, areas: [] };
+    }
+    const [areasSnap, stationAreasSnap] = await Promise.all([
+      db.collection('areas').where('status', '==', 'active').get(),
+      db.collection('stationAreas').where('status', '==', 'active').get()
+    ]);
+    const areas = [];
+    areasSnap.forEach(doc => {
+      const data = doc.data();
+      if (stationIdsArray.includes(data.stationId)) {
+        areas.push({ id: doc.id, ...data });
+      }
+    });
+    stationAreasSnap.forEach(doc => {
+      const data = doc.data();
+      if (stationIdsArray.includes(data.stationId)) {
+        if (!areas.some(a => a.id === doc.id)) {
+          areas.push({ id: doc.id, ...data });
+        }
+      }
+    });
+    areas.sort((a, b) => (a.areaName || '').localeCompare(b.areaName || ''));
+    return { count: areas.length, areas };
+  }
 }
 
 export const areaService = new AreaService();

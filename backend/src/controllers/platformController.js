@@ -88,3 +88,13 @@ export const getZonePlatforms = asyncHandler(async (req, res) => {
   const result = await platformService.getZonePlatforms(req.user);
   res.status(200).json(result);
 });
+
+export const getPlatformsByZone = asyncHandler(async (req, res) => {
+  const result = await platformService.getPlatformsByZone(req.params.zoneId);
+  res.status(200).json(result);
+});
+
+export const getPlatformsByCompany = asyncHandler(async (req, res) => {
+  const result = await platformService.getPlatformsByCompany(req.params.companyId);
+  res.status(200).json(result);
+});
