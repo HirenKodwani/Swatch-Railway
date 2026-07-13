@@ -37,11 +37,6 @@ export const getAreaTasks = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
-export const generateTasksFromFrequency = asyncHandler(async (req, res) => {
-  const result = await frequencyService.generateTasksFromFrequency(req.params.uid, req.body);
-  res.status(200).json(result);
-});
-
 export const getTaskSystemReport = asyncHandler(async (req, res) => {
   const result = await frequencyService.getTaskSystemReport(req.query);
   res.status(200).json(result);
@@ -62,8 +57,7 @@ export const calculateTasksFromFrequency = asyncHandler(async (req, res) => {
 
 export const generateTasksFromFrequency = asyncHandler(async (req, res) => {
   const { frequencyId, areaId, platformId, stationId, startDate, endDate, assignedTo } = req.body;
-  const result = await frequencyService.generateTasksFromFrequency(req.user, {
-    frequencyId,
+  const result = await frequencyService.generateTasksFromFrequency(frequencyId, {
     areaId,
     platformId,
     stationId,
