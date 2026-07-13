@@ -42,6 +42,7 @@ class CleaningFormService {
     let firestoreQuery = db.collection('cleaningForms');
 
     if (userType === 'contractor') {
+      if (!entityId) return { count: 0, forms: [] };
       firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
     } else if ((role || '').toLowerCase().includes('supervisor')) {
       firestoreQuery = firestoreQuery.where('division', '==', userDiv);
