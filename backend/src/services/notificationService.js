@@ -5,23 +5,58 @@ import logger from '../logger/index.js';
 class NotificationService {
   // Requires composite Firestore index: collection `notifications`, fields `userId` ASC, `createdAt` DESC
   async getNotifications(userId, limit = 50, offset = 0) {
-    const snapshot = await db.collection('notifications')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .offset(offset)
-      .limit(limit)
-      .get();
+    try {
+      const snapshot = await db.collection('notifications')
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .offset(offset)
+        .limit(limit)
+        .get();
 
-    const notifications = [];
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      notifications.push({
-        ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null,
+      const notifications = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        notifications.push({
+          ...data,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null,
+        });
       });
-    });
 
-    return { count: notifications.length, notifications };
+      return { count: notifications.length, notifications };
+    } catch (err) {
+      // Fallback: If composite index is missing, fetch all notifications for user and sort in-memory
+      if (
+        err.code === 9 ||
+        (typeof err.code === 'string' && ['failed_precondition', 'failed-precondition', 'FAILED_PRECONDITION'].includes(err.code)) ||
+        (err.message && (err.message.includes('FAILED_PRECONDITION') || err.message.toLowerCase().includes('index')))
+      ) {
+        logger.warn('NotificationService', 'Missing index for notifications, using in-memory sort fallback', { userId });
+        const fallbackSnapshot = await db.collection('notifications')
+          .where('userId', '==', userId)
+          .get();
+
+        const notifications = [];
+        fallbackSnapshot.forEach(doc => {
+          const data = doc.data();
+          notifications.push({
+            ...data,
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null,
+          });
+        });
+
+        // Sort by createdAt descending
+        notifications.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
+
+        // Slice for pagination
+        const sliced = notifications.slice(offset, offset + limit);
+        return { count: sliced.length, notifications: sliced };
+      }
+      throw err;
+    }
   }
 
   async markAsRead(notificationId, userId) {
