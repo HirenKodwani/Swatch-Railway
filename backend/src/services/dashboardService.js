@@ -33,17 +33,24 @@ class DashboardService {
     }
   }
 
-  async getDashboardStats(requesterData) {
+  async getDashboardStats(requesterData, query = {}) {
     const { role, userType, zone: userZone, division: userDiv } = requesterData;
     const cacheKey = this._cacheKey('stats', { role, userZone, userDiv });
     const cached = this._getCached(cacheKey);
     if (cached) return cached;
 
-    const [userSnap, entitySnap, trainSnap, contractSnap] = await Promise.all([
+    const { zone: queryZone, division: queryDivision } = query;
+    const filterZone = queryZone || userZone;
+    const filterDivision = queryDivision || userDiv;
+
+    const [userSnap, entitySnap, trainSnap, contractSnap, coachSnap, premisesSnap, ctsSnap] = await Promise.all([
       db.collection('users').get(),
       db.collection('entities').get(),
       db.collection('trains').get(),
-      db.collection('contracts').get()
+      db.collection('contracts').get(),
+      (() => { let q = db.collection('coachForms'); if (filterZone) q = q.where('submittedByZone', '==', filterZone); if (filterDivision) q = q.where('submittedByDivision', '==', filterDivision); return q.get(); })(),
+      (() => { let q = db.collection('premisesForms'); if (filterZone) q = q.where('submittedByZone', '==', filterZone); if (filterDivision) q = q.where('submittedByDivision', '==', filterDivision); return q.get(); })(),
+      (() => { let q = db.collection('ctsForms'); if (filterZone) q = q.where('submittedByZone', '==', filterZone); if (filterDivision) q = q.where('submittedByDivision', '==', filterDivision); return q.get(); })()
     ]);
 
     const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
@@ -80,14 +87,45 @@ class DashboardService {
       if (visible) { stats.train.total++; if (d.status === 'ACTIVE' || d.status === 'active') stats.train.active++; }
     });
 
+    const countStatuses = (snapshot) => {
+      let total = 0, pending = 0, manpowerApproved = 0, rejected = 0,
+          scoringProgress = 0, autoApproved = 0, locked = 0;
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        total++;
+        const s = (d.status || '').toUpperCase().replace(/-/g, '_');
+        if (['PENDING', 'SUBMITTED', 'RE_SUBMITTED', 'RESUBMITTED', 'DRAFT'].includes(s)) pending++;
+        else if (['APPROVED', 'APPROVED_BY_RAILWAY', 'MANPOWER_APPROVED'].includes(s)) manpowerApproved++;
+        else if (['REJECTED', 'REJECTED_BY_RAILWAY'].includes(s)) rejected++;
+        else if (['SCORING_PROGRESS', 'SCORING_IN_PROGRESS', 'SCORED'].includes(s)) scoringProgress++;
+        else if (['AUTO_APPROVED'].includes(s)) autoApproved++;
+        else if (['LOCKED', 'ACKNOWLEDGED', 'COMPLETED'].includes(s)) locked++;
+      });
+      return { total, pending, manpowerApproved, rejected, scoringProgress, autoApproved, locked };
+    };
+
+    const coachFormStats = countStatuses(coachSnap);
+    const premisesFormStats = countStatuses(premisesSnap);
+    const ctsFormStats = countStatuses(ctsSnap);
+    const totalForms = coachFormStats.total + premisesFormStats.total + ctsFormStats.total;
+
     const result = {
       systemOverview: {
         railwayEmployees: stats.user.railway, contractorEmployees: stats.user.contractor,
         totalRegisteredEntities: stats.entity.total,
         activeContracts: contractSnap.docs.filter(c => c.data().status === 'ACTIVE').length,
-        totalFormsProcessed: 0
+        totalFormsProcessed: totalForms
       },
-      userOverview: stats.user, entityOverview: stats.entity, trainOverview: stats.train
+      userOverview: stats.user, entityOverview: stats.entity, trainOverview: stats.train,
+      formsOverview: {
+        total: totalForms,
+        pending: coachFormStats.pending + premisesFormStats.pending + ctsFormStats.pending,
+        manpowerApproved: coachFormStats.manpowerApproved + premisesFormStats.manpowerApproved + ctsFormStats.manpowerApproved,
+        rejected: coachFormStats.rejected + premisesFormStats.rejected + ctsFormStats.rejected,
+        scoringProgress: coachFormStats.scoringProgress + premisesFormStats.scoringProgress + ctsFormStats.scoringProgress,
+        autoApproved: coachFormStats.autoApproved + premisesFormStats.autoApproved + ctsFormStats.autoApproved,
+        locked: coachFormStats.locked + premisesFormStats.locked + ctsFormStats.locked
+      }
     };
     this._setCache(cacheKey, result);
     return result;
