@@ -108,8 +108,3 @@ export const getAreasByCompany = asyncHandler(async (req, res) => {
   const result = await areaService.getAreasByCompany(req.params.companyId);
   res.status(200).json(result);
 });
-
-export const getMasterDashboard = asyncHandler(async (req, res) => {
-  const result = await areaService.getMasterDashboard(req.user);
-  res.status(200).json(result);
-});
