@@ -143,8 +143,8 @@ class WorkerController extends GetxController {
       }
 
 
-      complaintTasks.value = collectedComplaints;
-      emergencyTasks.value = collectedEmergency;
+      complaintTasks.assignAll(collectedComplaints);
+      emergencyTasks.assignAll(collectedEmergency);
 
     } catch (e) {
       debugPrint('Error fetching categorized tasks: $e');

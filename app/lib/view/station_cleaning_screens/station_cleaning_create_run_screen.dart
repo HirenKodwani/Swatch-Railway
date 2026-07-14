@@ -42,18 +42,34 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
       final stData = await ApiService.getStations();
       final wkData = await OBHSRepository.getWorkers();
       if (mounted) {
+        // Deduplicate workers by uid to prevent DropdownButton assertion errors
+        final seen = <String>{};
+        final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
         setState(() {
           _stations = stData;
-          _workers = wkData; // API already returns Railway Worker, janitor roles
+          _workers = uniqueWorkers;
         });
 
         if (isEdit) {
           final inst = widget.editInstance!;
-          _selectedStation = _stations.firstWhere((s) => s.uid == inst.stationId, orElse: () => _stations.first);
-          _selectedShift = inst.shift;
+          _selectedStation = _stations.any((s) => s.uid == inst.stationId)
+              ? _stations.firstWhere((s) => s.uid == inst.stationId)
+              : (_stations.isNotEmpty ? _stations.first : null);
+          
+          String rawShift = inst.shift.trim();
+          if (rawShift.isNotEmpty) {
+            rawShift = rawShift[0].toUpperCase() + rawShift.substring(1).toLowerCase();
+          }
+          if (['Morning', 'Evening', 'Night'].contains(rawShift)) {
+            _selectedShift = rawShift;
+          } else {
+            _selectedShift = 'Morning';
+          }
           try { _selectedDate = DateFormat('yyyy-MM-dd').parse(inst.date); } catch(_) {}
           _assignments.addAll(inst.platforms);
-          await _loadPlatforms(_selectedStation!.uid!);
+          if (_selectedStation != null) {
+            await _loadPlatforms(_selectedStation!.uid!);
+          }
         }
       }
     } catch (e) {
@@ -237,7 +253,17 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
                               ],
                             ),
                             DropdownButtonFormField<RailwayWorkerModel>(
-                              value: _workers.any((w) => w.uid == a.janitorId) ? _workers.firstWhere((w) => w.uid == a.janitorId) : null,
+                              key: ValueKey('janitor_${idx}_${a.platformNumber}'),
+                              value: a.janitorId.isEmpty
+                                  ? null
+                                  : _workers.firstWhere(
+                                      (w) => w.uid == a.janitorId,
+                                      orElse: () => _workers.isEmpty
+                                          ? RailwayWorkerModel(uid: '', email: '', role: '', userType: '', fullName: 'Unknown', mobile: '', status: '')
+                                          : _workers.first,
+                                    ).uid == a.janitorId
+                                      ? _workers.firstWhere((w) => w.uid == a.janitorId)
+                                      : null,
                               decoration: const InputDecoration(labelText: 'Assign Janitor'),
                               items: _workers.map((w) => DropdownMenuItem(value: w, child: Text('${w.fullName} (${w.role})'))).toList(),
                               onChanged: (v) {
@@ -245,7 +271,7 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
                                   setState(() {
                                     _assignments[idx] = StationPlatformAssignment(
                                       platformNumber: a.platformNumber,
-                                      janitorId: v.uid ?? '',
+                                      janitorId: v.uid,
                                       janitorName: v.fullName,
                                       status: a.status,
                                     );

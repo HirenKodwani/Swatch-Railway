@@ -222,7 +222,9 @@ class StationCleaningService {
     let q = db.collection('stationRuns').limit(200);
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
-    const runs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const runs = snapshot.docs
+      .filter(d => d.data().status !== 'deleted')
+      .map(d => ({ id: d.id, ...d.data() }));
     return { count: runs.length, runs };
   }
 

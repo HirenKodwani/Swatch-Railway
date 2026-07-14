@@ -122,9 +122,9 @@ class FirebaseCountService {
         query = query.where('depot', isEqualTo: depot);
       }
 
-      final snapshot = await query.get().timeout(const Duration(seconds: 4));
+      final snapshot = await query.count().get().timeout(const Duration(seconds: 4));
 
-      return snapshot.size;
+      return snapshot.count ?? 0;
     } catch (e) {
       return 0;
     }
@@ -149,9 +149,9 @@ class FirebaseCountService {
         query = query.where('depot', isEqualTo: depot);
       }
 
-      final snapshot = await query.get().timeout(const Duration(seconds: 4));
+      final snapshot = await query.count().get().timeout(const Duration(seconds: 4));
 
-      return snapshot.size;
+      return snapshot.count ?? 0;
     } catch (e) {
       return 0;
     }
@@ -160,9 +160,9 @@ class FirebaseCountService {
   static Future<int> getTotalEntityRegistered() async {
     try {
       final firestore = FirebaseFirestore.instance;
-      final snapshot = await firestore.collection('entities').get().timeout(const Duration(seconds: 4));
+      final snapshot = await firestore.collection('entities').count().get().timeout(const Duration(seconds: 4));
 
-      return snapshot.size;
+      return snapshot.count ?? 0;
     } catch (e) {
       return 0;
     }
@@ -187,9 +187,9 @@ class FirebaseCountService {
         query = query.where('depot', isEqualTo: depot);
       }
 
-      final snapshot = await query.get().timeout(const Duration(seconds: 4));
+      final snapshot = await query.count().get().timeout(const Duration(seconds: 4));
 
-      return snapshot.size;
+      return snapshot.count ?? 0;
     } catch (e) {
       print("Error fetching active contracts count: $e");
       return 0;
@@ -216,10 +216,10 @@ class FirebaseCountService {
         coachQuery = coachQuery.where('submittedByDivision', isEqualTo: division);
       }
 
-      final premisesSnapshot = await premisesQuery.get().timeout(const Duration(seconds: 4));
-      final coachSnapshot = await coachQuery.get().timeout(const Duration(seconds: 4));
+      final premisesSnapshot = await premisesQuery.count().get().timeout(const Duration(seconds: 4));
+      final coachSnapshot = await coachQuery.count().get().timeout(const Duration(seconds: 4));
 
-      final total = premisesSnapshot.size + coachSnapshot.size;
+      final total = (premisesSnapshot.count ?? 0) + (coachSnapshot.count ?? 0);
 
       return total;
     } catch (e) {
@@ -284,7 +284,7 @@ class FirebaseCountService {
         'Accepted': acceptedCount,
         'PENDING': pendingCount,
         'Completed Today': completedToday,
-        'locked': completedToday,
+        'locked': locked,
       };
     } catch (e) {
       print("Error fetching form counts: $e");

@@ -7,10 +7,7 @@ import '../view/obhs_screens/mcc/obhs_mcc_router.dart';
 
 void navigateUser(BuildContext context, UserModel user) {
   final mccRoles = [
-    'CM', 'Company Master', 'Contractor Master', 'COMPANY_MASTER', 'CONTRACTOR_MASTER',
-    'CA', 'Contractor Admin', 'CONTRACTOR_ADMIN',
     'CTS',
-    'CS', 'Contractor Supervisor', 'CONTRACTOR_SUPERVISOR',
     'Janitor', 'JANITOR',
     'Attendant', 'ATTENDANT'
   ];

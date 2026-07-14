@@ -33,17 +33,24 @@ class DashboardService {
     }
   }
 
-  async getDashboardStats(requesterData) {
+  async getDashboardStats(requesterData, query = {}) {
     const { role, userType, zone: userZone, division: userDiv } = requesterData;
     const cacheKey = this._cacheKey('stats', { role, userZone, userDiv });
     const cached = this._getCached(cacheKey);
     if (cached) return cached;
 
-    const [userSnap, entitySnap, trainSnap, contractSnap] = await Promise.all([
+    const { zone: queryZone, division: queryDivision } = query;
+    const filterZone = queryZone || userZone;
+    const filterDivision = queryDivision || userDiv;
+
+    const [userSnap, entitySnap, trainSnap, contractSnap, coachSnap, premisesSnap, ctsSnap] = await Promise.all([
       db.collection('users').get(),
       db.collection('entities').get(),
       db.collection('trains').get(),
-      db.collection('contracts').get()
+      db.collection('contracts').get(),
+      (() => { let q = db.collection('coachForms'); if (filterZone) q = q.where('submittedByZone', '==', filterZone); if (filterDivision) q = q.where('submittedByDivision', '==', filterDivision); return q.get(); })(),
+      (() => { let q = db.collection('premisesForms'); if (filterZone) q = q.where('submittedByZone', '==', filterZone); if (filterDivision) q = q.where('submittedByDivision', '==', filterDivision); return q.get(); })(),
+      (() => { let q = db.collection('ctsForms'); if (filterZone) q = q.where('submittedByZone', '==', filterZone); if (filterDivision) q = q.where('submittedByDivision', '==', filterDivision); return q.get(); })()
     ]);
 
     const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
@@ -80,14 +87,45 @@ class DashboardService {
       if (visible) { stats.train.total++; if (d.status === 'ACTIVE' || d.status === 'active') stats.train.active++; }
     });
 
+    const countStatuses = (snapshot) => {
+      let total = 0, pending = 0, manpowerApproved = 0, rejected = 0,
+          scoringProgress = 0, autoApproved = 0, locked = 0;
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        total++;
+        const s = (d.status || '').toUpperCase().replace(/-/g, '_');
+        if (['PENDING', 'SUBMITTED', 'RE_SUBMITTED', 'RESUBMITTED', 'DRAFT'].includes(s)) pending++;
+        else if (['APPROVED', 'APPROVED_BY_RAILWAY', 'MANPOWER_APPROVED'].includes(s)) manpowerApproved++;
+        else if (['REJECTED', 'REJECTED_BY_RAILWAY'].includes(s)) rejected++;
+        else if (['SCORING_PROGRESS', 'SCORING_IN_PROGRESS', 'SCORED'].includes(s)) scoringProgress++;
+        else if (['AUTO_APPROVED'].includes(s)) autoApproved++;
+        else if (['LOCKED', 'ACKNOWLEDGED', 'COMPLETED'].includes(s)) locked++;
+      });
+      return { total, pending, manpowerApproved, rejected, scoringProgress, autoApproved, locked };
+    };
+
+    const coachFormStats = countStatuses(coachSnap);
+    const premisesFormStats = countStatuses(premisesSnap);
+    const ctsFormStats = countStatuses(ctsSnap);
+    const totalForms = coachFormStats.total + premisesFormStats.total + ctsFormStats.total;
+
     const result = {
       systemOverview: {
         railwayEmployees: stats.user.railway, contractorEmployees: stats.user.contractor,
         totalRegisteredEntities: stats.entity.total,
         activeContracts: contractSnap.docs.filter(c => c.data().status === 'ACTIVE').length,
-        totalFormsProcessed: 0
+        totalFormsProcessed: totalForms
       },
-      userOverview: stats.user, entityOverview: stats.entity, trainOverview: stats.train
+      userOverview: stats.user, entityOverview: stats.entity, trainOverview: stats.train,
+      formsOverview: {
+        total: totalForms,
+        pending: coachFormStats.pending + premisesFormStats.pending + ctsFormStats.pending,
+        manpowerApproved: coachFormStats.manpowerApproved + premisesFormStats.manpowerApproved + ctsFormStats.manpowerApproved,
+        rejected: coachFormStats.rejected + premisesFormStats.rejected + ctsFormStats.rejected,
+        scoringProgress: coachFormStats.scoringProgress + premisesFormStats.scoringProgress + ctsFormStats.scoringProgress,
+        autoApproved: coachFormStats.autoApproved + premisesFormStats.autoApproved + ctsFormStats.autoApproved,
+        locked: coachFormStats.locked + premisesFormStats.locked + ctsFormStats.locked
+      }
     };
     this._setCache(cacheKey, result);
     return result;
@@ -572,63 +610,68 @@ class DashboardService {
   async getAllFormsStats(query = {}) {
     const { formType, zone, division, entityId, days } = query;
 
-    if (!formType) {
-      const snapshot = await db.collection('cleaningForms').get();
-      let coachForms = 0, premisesForms = 0, ctsForms = 0, cleaningFormsCount = 0;
+    // Helper to count statuses from a Firestore snapshot
+    const countStatuses = (snapshot, minDate) => {
+      let total = 0, pending = 0, manpowerApproved = 0, rejected = 0,
+          scoringProgress = 0, autoApproved = 0, locked = 0;
       snapshot.forEach(doc => {
-        const type = doc.data().formType;
-        if (type === 'coach') coachForms++;
-        else if (type === 'premises') premisesForms++;
-        else if (type === 'cts') ctsForms++;
-        else cleaningFormsCount++;
-      });
-      return {
-        coachForms, premisesForms, ctsForms, cleaningForms: cleaningFormsCount,
-        total: snapshot.size
-      };
-    }
-
-    const collectionName = 'cleaningForms';
-    let dbQuery = db.collection(collectionName);
-    if (formType && formType !== 'cleaning') {
-        if (formType === 'premises' || formType === 'premise') {
-            dbQuery = dbQuery.where('formType', 'in', ['premises', 'premise', 'premise_cleaning']);
-        } else if (formType === 'coach') {
-            dbQuery = dbQuery.where('formType', 'in', ['coach', 'coach_cleaning']);
-        } else if (formType === 'cts') {
-            dbQuery = dbQuery.where('formType', 'in', ['cts', 'obhs']);
-        } else {
-            dbQuery = dbQuery.where('formType', '==', formType);
+        const d = doc.data();
+        if (minDate && d.createdAt) {
+          if (new Date(d.createdAt) < minDate) return;
         }
-    }
-    if (zone) dbQuery = dbQuery.where('submittedByZone', '==', zone);
-    if (division) dbQuery = dbQuery.where('submittedByDivision', '==', division);
-    if (entityId) dbQuery = dbQuery.where('submittedByEntityId', '==', entityId);
-
-    const snapshot = await dbQuery.get();
-    let total = 0, pending = 0, manpowerApproved = 0, rejected = 0, scoringProgress = 0, autoApproved = 0, locked = 0;
+        total++;
+        const s = (d.status || '').toUpperCase().replace(/-/g, '_');
+        if (['PENDING', 'SUBMITTED', 'RE_SUBMITTED', 'RESUBMITTED', 'DRAFT'].includes(s)) pending++;
+        else if (['APPROVED', 'APPROVED_BY_RAILWAY', 'MANPOWER_APPROVED'].includes(s)) manpowerApproved++;
+        else if (['REJECTED', 'REJECTED_BY_RAILWAY'].includes(s)) rejected++;
+        else if (['SCORING_PROGRESS', 'SCORING_IN_PROGRESS', 'SCORED'].includes(s)) scoringProgress++;
+        else if (['AUTO_APPROVED'].includes(s)) autoApproved++;
+        else if (['LOCKED', 'ACKNOWLEDGED', 'COMPLETED'].includes(s)) locked++;
+      });
+      return { total, pending, manpowerApproved, rejected, scoringProgress, autoApproved, locked };
+    };
 
     const now = new Date();
     const minDate = days ? new Date(now.setDate(now.getDate() - parseInt(days))) : null;
 
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      if (minDate && d.createdAt) {
-        if (new Date(d.createdAt) < minDate) return;
-      }
-      total++;
-      const s = (d.status || '').toLowerCase();
-      if (['pending', 'submitted', 're-submitted', 'draft'].includes(s)) pending++;
-      else if (['approved', 'approved_by_railway', 'manpower_approved'].includes(s)) manpowerApproved++;
-      else if (['rejected', 'rejected_by_railway'].includes(s)) rejected++;
-      else if (['scoring_progress', 'scoring_in_progress', 'scored'].includes(s)) scoringProgress++;
-      else if (['auto_approved', 'auto-approved'].includes(s)) autoApproved++;
-      else if (['locked', 'acknowledged', 'completed'].includes(s)) locked++;
-    });
-
-    return {
-      total, pending, manpowerApproved, rejected, scoringProgress, autoApproved, locked
+    // Map formType to its Firestore collection
+    const getCollection = (type) => {
+      if (type === 'coach') return 'coachForms';
+      if (type === 'premises' || type === 'premise') return 'premisesForms';
+      if (type === 'cts') return 'ctsForms';
+      return 'cleaningForms';
     };
+
+    const buildQuery = (collectionName) => {
+      let q = db.collection(collectionName);
+      // All form collections use submittedByZone / submittedByDivision / submittedByEntityId
+      if (zone) q = q.where('submittedByZone', '==', zone);
+      if (division) q = q.where('submittedByDivision', '==', division);
+      if (entityId) q = q.where('submittedByEntityId', '==', entityId);
+      return q;
+    };
+
+    if (!formType) {
+      // Return counts per type when no formType specified
+      const [coachSnap, premisesSnap, ctsSnap] = await Promise.all([
+        buildQuery('coachForms').select('status', 'createdAt').get(),
+        buildQuery('premisesForms').select('status', 'createdAt').get(),
+        buildQuery('ctsForms').select('status', 'createdAt').get(),
+      ]);
+      const coachStats = countStatuses(coachSnap, minDate);
+      const premisesStats = countStatuses(premisesSnap, minDate);
+      const ctsStats = countStatuses(ctsSnap, minDate);
+      return {
+        coachForms: coachStats.total,
+        premisesForms: premisesStats.total,
+        ctsForms: ctsStats.total,
+        total: coachStats.total + premisesStats.total + ctsStats.total
+      };
+    }
+
+    const collectionName = getCollection(formType);
+    const snapshot = await buildQuery(collectionName).select('status', 'createdAt').get();
+    return countStatuses(snapshot, minDate);
   }
 }
 

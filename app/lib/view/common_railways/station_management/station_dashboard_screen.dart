@@ -132,6 +132,8 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
           all = all.where((s) => s.division == user?.division).toList();
         } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
           all = all.where((s) => s.uid == user?.stationId).toList();
+        } else if (role == 'Contractor Admin' || role == 'Contractor' || role == 'Contractor Master') {
+          all = all.where((s) => s.uid == user?.stationId).toList();
         }
         setState(() {
           _allStations = all;
@@ -154,7 +156,7 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
         List<StationCleaningForm> all = data;
         if (role == 'Railway Supervisor') {
           all = all.where((f) => f.division == user?.division).toList();
-        } else if (role == 'Contractor' || role == 'Contractor Master') {
+        } else if (role == 'Contractor Admin' || role == 'Contractor' || role == 'Contractor Master') {
           all = all.where((f) => f.submittedBy == user?.uid).toList();
         } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
           all = all.where((f) => f.stationId == user?.stationId).toList();
@@ -389,7 +391,7 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final role = Provider.of<AuthProvider>(context).currentUser?.role ?? '';
-    final isAdmin = role == 'SUPER_ADMIN' || role == 'Super Admin' || role == 'Railway Admin' || role == 'Railway Master' || role == 'Company Master';
+    final isAdmin = role == 'SUPER_ADMIN' || role == 'Super Admin' || role == 'Railway Admin' || role == 'Railway Master' || role == 'Company Master' || role == 'Contractor Admin';
     final isSupervisor = role == 'Railway Supervisor';
 
     return Scaffold(

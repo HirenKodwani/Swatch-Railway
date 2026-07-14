@@ -187,4 +187,14 @@ class RailwayWorkerModel {
 
   // Helper getter for display name in dropdowns
   String get displayName => fullName;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RailwayWorkerModel &&
+          runtimeType == other.runtimeType &&
+          uid == other.uid;
+
+  @override
+  int get hashCode => uid.hashCode;
 }

@@ -252,7 +252,7 @@ class V2Service {
     const { taskInstanceId, checklistResponses, beforePhoto, afterPhoto,
       gpsLatitude, gpsLongitude, deviceTimestamp, deviceId, mobileNumber, comment } = body;
 
-    if (!taskInstanceId || !beforePhoto || !afterPhoto || !gpsLatitude || !gpsLongitude) {
+    if (!taskInstanceId || !beforePhoto || !afterPhoto || gpsLatitude === undefined || gpsLongitude === undefined) {
       throw new ValidationError('taskInstanceId, beforePhoto, afterPhoto, gpsLatitude, gpsLongitude are mandatory');
     }
 
@@ -263,6 +263,23 @@ class V2Service {
     const taskData = doc.data();
     if (['COMPLETED', 'VERIFIED', 'CLOSED', 'NOT_APPLICABLE'].includes(taskData.status)) {
       throw new ValidationError(`Task already in final state: ${taskData.status}`);
+    }
+
+    if (taskData.scheduledTime) {
+      const now = new Date();
+      const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const [sh, sm] = taskData.scheduledTime.split(':').map(Number);
+      const scheduledMinutes = sh * 60 + (sm || 0);
+      const currentMinutes = istNow.getHours() * 60 + istNow.getMinutes();
+      
+      let diff = currentMinutes - scheduledMinutes;
+      if (diff < -12 * 60) diff += 24 * 60; // Rollover handling
+      
+      if (diff > 120 && diff < 12 * 60) {
+        if (!comment || comment.trim().length < 5) {
+           throw new ValidationError('Task is OVERDUE (grace period exceeded). A delay remark/comment is mandatory to unlock evidence submission.');
+        }
+      }
     }
 
     const updateData = {

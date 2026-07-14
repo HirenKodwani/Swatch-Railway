@@ -13,6 +13,7 @@ import '../alert/contractor_master_alert_screen.dart';
 import '../profile/contractor_master_profile_screen.dart';
 import '../form_screen/forms/new_coach_form.dart';
 import '../form_screen/forms/new_premises_form.dart';
+import '../form_screen/contractor_master_forms_screen.dart';
 
 import '../../common_railways/entities/common_entity_managment_screen.dart';
 import '../../common_railways/trains/common_train_screen.dart';
@@ -30,6 +31,12 @@ import '../../common_railways/station_management/station_dashboard_screen.dart';
 import '../../common_railways/report/common_report_screen.dart';
 import '../../common_railways/attendance/attendance_exception_dashboard.dart';
 import '../../common_railways/ratings/admin_ratings_screen.dart';
+import '../../common_railways/station_management/area_list_screen.dart';
+import '../../common_railways/station_management/task_generation_screen.dart';
+import '../../common_railways/station_management/task_approval_screen.dart';
+import '../../common_railways/station_management/machine_master_list_screen.dart';
+import '../../common_railways/station_management/material_list_screen.dart';
+import '../../common_railways/station_management/area_performance_dashboard.dart';
 
 class ContractorMasterDashboard extends StatefulWidget {
   const ContractorMasterDashboard({super.key});
@@ -308,8 +315,23 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "children": [
           {"title": "Coach Cleaning", "route": "coach_cleaning"},
           {"title": "Premise Cleaning", "route": "premise_cleaning"},
+          {"title": "CTS Forms", "route": "cts_cleaning"},
           {"title": "Station Cleaning Forms", "route": "station_cleaning"},
           {"title": "Station Cleaning Runs", "route": "station_cleaning_runs"},
+        ]
+      },
+      {
+        "icon": Icons.cleaning_services_rounded,
+        "title": "Station Cleaning",
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "children": [
+          {"title": "Dashboard", "route": "sc_dashboard"},
+          {"title": "Area Management", "route": "sc_areas"},
+          {"title": "Generate Tasks", "route": "sc_generate_tasks"},
+          {"title": "Task Approval", "route": "sc_approval"},
+          {"title": "Machines", "route": "sc_machines"},
+          {"title": "Materials", "route": "sc_materials"},
+          {"title": "Performance Reports", "route": "sc_performance"},
         ]
       },
       {
@@ -383,14 +405,40 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const CommonTrainScreen()));
         break;
       case "coach_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ContractorMasterFormsScreen(initialTabIndex: 0)));
+        break;
       case "premise_cleaning":
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const CleaningFormDashboardScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ContractorMasterFormsScreen(initialTabIndex: 1)));
+        break;
+      case "cts_cleaning":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ContractorMasterFormsScreen(initialTabIndex: 2)));
         break;
       case "station_cleaning":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
         break;
       case "station_cleaning_runs":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationCleaningRunsListScreen()));
+        break;
+      case "sc_dashboard":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));
+        break;
+      case "sc_areas":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaListScreen()));
+        break;
+      case "sc_generate_tasks":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskGenerationScreen()));
+        break;
+      case "sc_approval":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskApprovalScreen()));
+        break;
+      case "sc_machines":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MachineMasterListScreen()));
+        break;
+      case "sc_materials":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MaterialListScreen()));
+        break;
+      case "sc_performance":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AreaPerformanceDashboard()));
         break;
       case "obhs_attendance":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const OBHSAttendanceListScreen()));

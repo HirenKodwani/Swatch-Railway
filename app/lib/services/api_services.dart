@@ -166,7 +166,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/master/pending-users'),
+        Uri.parse('$baseUrl/api/admin/users?status=PENDING'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -182,13 +182,6 @@ class ApiService {
             .map<UserRegistrationModel?>((u) {
               try {
                 final userMap = Map<String, dynamic>.from(u);
-                print('Parsing user: ${userMap['fullName']}');
-                print(
-                  'createdAt: ${userMap['createdAt']} (type: ${userMap['createdAt']?.runtimeType})',
-                );
-                print(
-                  'approved_at: ${userMap['approved_at']} (type: ${userMap['approved_at']?.runtimeType})',
-                );
                 final user = UserRegistrationModel.fromJson(userMap);
                 return user;
               } catch (err, stack) {
@@ -199,7 +192,7 @@ class ApiService {
             .whereType<UserRegistrationModel>()
             .toList();
 
-        print('Successfully parsed ${parsedUsers.length} users');
+        print('Successfully parsed ${parsedUsers.length} pending users');
         return parsedUsers;
       } else {
         final error = jsonDecode(response.body);
@@ -736,13 +729,13 @@ class ApiService {
     }
   }
 
-  static Future<List<ContractModel>> getContractsDetails(
-    String contractId,
+  static Future<ContractModel> getContractByNumber(
+    String contractNumber,
   ) async {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/contracts/number/$contractId'),
+        Uri.parse('$baseUrl/api/contracts/number/$contractNumber'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -751,20 +744,13 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
-        final List contract = data['contracts'] ?? [];
-
-        return contract
-            .map<ContractModel>(
-              (u) => ContractModel.fromJson(Map<String, dynamic>.from(u)),
-            )
-            .toList();
+        return ContractModel.fromJson(Map<String, dynamic>.from(data));
       } else {
         final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Failed to fetch pending users');
+        throw Exception(error['error'] ?? 'Failed to fetch contract');
       }
     } catch (e) {
-      throw Exception('Error fetching pending users: $e');
+      throw Exception('Error fetching contract: $e');
     }
   }
 
@@ -3614,7 +3600,47 @@ class ApiService {
         Uri.parse('$baseUrl/api/cleaning-forms/dashboard/data'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
-      if (response.statusCode == 200) return CleaningDashboardSummary.fromJson(jsonDecode(response.body));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        // Backend returns { count, forms } — compute summary stats locally
+        final formsList = (data['forms'] as List? ?? [])
+            .map((f) => CleaningForm.fromJson(f as Map<String, dynamic>))
+            .toList();
+        int draftForms = 0, submittedForms = 0, approvedForms = 0,
+            rejectedForms = 0, scoredForms = 0, lockedForms = 0;
+        double totalScore = 0;
+        int scoredCount = 0;
+        int totalManpower = 0, totalMachine = 0;
+        for (final f in formsList) {
+          switch (f.status) {
+            case CleaningFormStatus.draft: draftForms++; break;
+            case CleaningFormStatus.submitted: submittedForms++; break;
+            case CleaningFormStatus.approved:
+            case CleaningFormStatus.scoringInProgress:
+            case CleaningFormStatus.contractorApproved:
+            case CleaningFormStatus.autoApproved: approvedForms++; break;
+            case CleaningFormStatus.rejected: rejectedForms++; break;
+            case CleaningFormStatus.scored: scoredForms++; break;
+            case CleaningFormStatus.locked: lockedForms++; break;
+          }
+          if (f.score != null) { totalScore += f.score!; scoredCount++; }
+          totalManpower += f.manpowerCount;
+          totalMachine += f.machineCount;
+        }
+        return CleaningDashboardSummary(
+          draftForms: draftForms,
+          submittedForms: submittedForms,
+          approvedForms: approvedForms,
+          rejectedForms: rejectedForms,
+          scoredForms: scoredForms,
+          lockedForms: lockedForms,
+          pendingReview: submittedForms,
+          scoringPending: approvedForms,
+          averageScore: scoredCount > 0 ? totalScore / scoredCount : 0,
+          totalManpower: totalManpower.toDouble(),
+          totalMachine: totalMachine.toDouble(),
+        );
+      }
       throw Exception('Failed to fetch dashboard');
     } catch (e) {
       throw Exception('Error fetching dashboard: $e');

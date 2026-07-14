@@ -34,10 +34,9 @@ class DonutChart extends StatelessWidget {
             sectionsSpace: 2,
             sections: total == 0
                 ? [
-
                     PieChartSectionData(
                       value: 1,
-                      color: Colors.grey.shade300,
+                      color: Colors.grey.shade200,
                       showTitle: false,
                       radius: 40,
                     ),

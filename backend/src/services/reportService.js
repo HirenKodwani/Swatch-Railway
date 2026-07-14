@@ -710,7 +710,7 @@ class ReportService {
       const pdfRenderer = new PDFRenderer();
       if (reportType === 'ATTENDANCE_AUDIT') {
         pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
-      } else if (reportType === 'WORKER_ACTIVITY') {
+      } else if (reportType === 'WORKER_ACTIVITY_AUDIT') {
         pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
       } else if (reportType === 'COMPLAINT_AUDIT') {
         pdfBuffer = await pdfRenderer.generateComplaintAudit(data);
@@ -749,7 +749,7 @@ class ReportService {
     const pdfRenderer = new PDFRenderer();
     if (reportType === 'ATTENDANCE_AUDIT') {
       pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
-    } else if (reportType === 'WORKER_ACTIVITY') {
+    } else if (reportType === 'WORKER_ACTIVITY_AUDIT') {
       pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
     } else if (reportType === 'COMPLAINT_AUDIT') {
       pdfBuffer = await pdfRenderer.generateComplaintAudit(data);
@@ -762,7 +762,7 @@ class ReportService {
       const { autoEmailService } = await import('./autoEmailService.js');
       emailResponse = await autoEmailService._sendEmail({
         subject: `OBHS Compliance Report | ${data?.trainInfo?.['Train Name'] || ''} | ${data?.meta?.auditStatus || ''}`,
-        to: 'hirenkodwani@gmail.com',
+        to: emailTo,
         html: `
           <h2>OBHS Official Audit Report</h2>
           <p>Please find attached the latest <b>${reportType.replace(/_/g, ' ')}</b> for Run Instance ID: ${runInstanceId}.</p>

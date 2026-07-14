@@ -39,9 +39,10 @@ class CleaningFormService {
     const { status, formType, contractId: queryContractId, division: queryDivision } = query;
     const { role, division: userDiv, entityId, userType } = user;
 
-    let firestoreQuery = db.collection('cleaningForms').orderBy('createdAt', 'desc');
+    let firestoreQuery = db.collection('cleaningForms');
 
     if (userType === 'contractor') {
+      if (!entityId) return { count: 0, forms: [] };
       firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
     } else if ((role || '').toLowerCase().includes('supervisor')) {
       firestoreQuery = firestoreQuery.where('division', '==', userDiv);
@@ -56,6 +57,7 @@ class CleaningFormService {
     const snapshot = await firestoreQuery.limit(200).get();
     const forms = [];
     snapshot.forEach(doc => forms.push(doc.data()));
+    forms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     return { count: forms.length, forms };
   }
 

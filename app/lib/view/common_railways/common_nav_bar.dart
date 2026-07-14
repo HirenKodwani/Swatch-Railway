@@ -18,11 +18,13 @@ import 'forms/common_form_screen.dart';
 class CommonNavBar extends StatelessWidget {
   final String userRole;
   final String userLevel;
+  final String? userDisplayRole;
 
   const CommonNavBar({
     super.key,
     required this.userRole,
     required this.userLevel,
+    this.userDisplayRole,
   });
 
   List<Widget> _contractorScreens() => [
@@ -127,7 +129,8 @@ class CommonNavBar extends StatelessWidget {
     final navController = Get.put(ContractorNavController());
 
 
-    final isContractor = userRole.toLowerCase() == "contractor";
+    final isContractor = userRole.toLowerCase() == "contractor" ||
+        (userDisplayRole != null && (userDisplayRole!.contains("Contractor") || userDisplayRole == "Company Master"));
 
     return GetBuilder<ContractorNavController>(
       builder: (controller) {
