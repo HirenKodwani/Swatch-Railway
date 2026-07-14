@@ -71,6 +71,25 @@ class AutoEmailService {
     if (sgMail && config.sendgrid?.apiKey) {
       try { return await sgMail.send(msg); } catch (e) { logger.warn('AutoEmail', 'SendGrid failed', e.message); }
     }
+    
+    // Fallback to Resend if available
+    if (config.resend?.apiKey) {
+      try {
+        const { Resend } = await import('resend');
+        const resend = new Resend(config.resend.apiKey);
+        const resendData = await resend.emails.send({
+          from: msg.from,
+          to: msg.to,
+          subject: msg.subject,
+          html: msg.html,
+          attachments: msg.attachments
+        });
+        if (resendData.error) throw resendData.error;
+        return resendData.data;
+      } catch (e) {
+        logger.warn('AutoEmail', 'Resend failed', e.message);
+      }
+    }
     /* fallback: log instead of send */
     logger.info('AutoEmail', `[SIMULATED] Email to ${msg.to.join(',')} subject="${subject}"`);
     return { messageId: 'simulated' };
