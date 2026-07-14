@@ -509,17 +509,6 @@ class _CommonDashboardState extends State<CommonDashboard> {
           {"title": "OBHS Reports", "route": "obhs_reports"},
         ]
       },
-      {
-        "icon": Icons.receipt_long,
-        "title": "Billing",
-        "route": "billing",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
-      },
-      {
-        "icon": Icons.report_problem,
-        "title": "Complaints",
-        "route": "complaints",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
       },
       {
         "icon": Icons.star_outline,

@@ -307,7 +307,7 @@ class _CommonFormScreenState extends State<CommonFormScreen> with TickerProvider
           _buildCTSFormView(),
         ],
       ),
-      floatingActionButton: widget.role == 'Super Admin' ? FloatingActionButton.extended(
+      floatingActionButton: (Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Super Admin' || widget.role == 'Super Admin') ? FloatingActionButton.extended(
         onPressed: () {
           Navigator.push(
             context,
