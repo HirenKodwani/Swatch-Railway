@@ -88,10 +88,13 @@ class UserService {
           .get();
           
         const invalidStatuses = ['Expired', 'EXPIRED', 'REJECTED', 'rejected', 'SUSPENDED', 'suspended'];
-        const hasValidContract = contractSnapshot.docs.some(doc => !invalidStatuses.includes(doc.data().status));
+        const hasValidContract = contractSnapshot.docs.some(doc => {
+          const d = doc.data();
+          return !invalidStatuses.includes(d.status) && d.zone === zone && d.division === division;
+        });
 
         if (!hasValidContract) {
-          throw new ForbiddenError(`Cannot create ${role}. No valid Contract found for this Company. Please ensure a contract exists and is not expired or rejected.`);
+          throw new ForbiddenError(`Cannot create ${role}. No valid Contract found for this Company in Zone: ${zone}, Division: ${division}. Please ensure a contract exists and is not expired or rejected.`);
         }
       }
     }
@@ -372,14 +375,23 @@ class UserService {
   async getUsers(requesterData, filters) {
     const { status: filterStatus, division, zone, depot } = filters;
     const { uid: requesterUid, role, zone: userZone, division: userDivision } = requesterData;
-    const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
+    const userRole = (role || "").trim().toUpperCase().replace(/\s+/g, '_');
+
+    const ROLE_HIERARCHY = {
+      'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
+      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
+    };
+    const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
 
     let query = db.collection('users');
 
-    if (userRole === 'company master' || userRole === 'super admin' || userRole === 'admin') {
+    if (requesterLevel >= 70) {
       if (zone) query = query.where('zone', '==', zone);
       if (division) query = query.where('division', '==', division);
-    } else if (userRole === 'railway master') {
+    } else if (requesterLevel >= 60) {
       query = query.where('zone', '==', userZone);
       if (division) query = query.where('division', '==', division);
     } else {
@@ -392,13 +404,12 @@ class UserService {
 
     snapshot.forEach(doc => {
       const d = doc.data();
-      const targetRole = (d.role || '').toLowerCase();
+      const targetRole = (d.role || '').toUpperCase().replace(/\s+/g, '_');
+      const targetLevel = ROLE_HIERARCHY[targetRole] || 0;
+      
       if (doc.id === requesterUid) return;
 
-      if (userRole.includes('supervisor') && !(!userRole.includes("super admin") && userRole.includes("admin"))) {
-        const highLevelRoles = ['admin', 'super admin', 'company master', 'railway master'];
-        if (highLevelRoles.some(r => targetRole.includes(r))) return;
-      }
+      if (targetLevel > requesterLevel) return;
 
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;
@@ -420,16 +431,25 @@ class UserService {
   async getRailwayWorkers(requesterData, filters) {
     const { status: filterStatus, division, zone } = filters;
     const { role: requesterRole, zone: requesterZone, division: requesterDivision } = requesterData;
-    const userRole = (requesterRole || '').trim().toLowerCase().replace(/_/g, ' ');
+    const userRole = (requesterRole || '').trim().toUpperCase().replace(/\s+/g, '_');
+
+    const ROLE_HIERARCHY = {
+      'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
+      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
+    };
+    const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
 
     console.log(`[GET /api/admin/railway-workers] userRole: ${userRole}, requesterDivision: ${requesterDivision}`);
 
     let query = db.collection('users');
 
-    if (userRole === 'company master' || userRole === 'super admin' || userRole === 'admin') {
+    if (requesterLevel >= 70) {
       if (zone) query = query.where('zone', '==', zone);
       if (division) query = query.where('division', '==', division);
-    } else if (userRole === 'railway master' || userRole === 'contractor master') {
+    } else if (requesterLevel >= 60 || userRole === 'CONTRACTOR_MASTER') {
       if (requesterZone) query = query.where('zone', '==', requesterZone);
       if (division) query = query.where('division', '==', division);
     } else {
@@ -443,7 +463,7 @@ class UserService {
     let snapshot = await query.get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 
-    if (snapshot.empty && userRole !== 'company master' && userRole !== 'super admin' && userRole !== 'admin') {
+    if (snapshot.empty && requesterLevel < 70) {
       if (requesterZone) {
         console.log(`[GET /api/admin/railway-workers] Initial query was empty. Trying zone fallback: ${requesterZone}`);
         let fallbackQuery = db.collection('users').where('zone', '==', requesterZone);
@@ -462,9 +482,8 @@ class UserService {
     snapshot.forEach(doc => {
       const d = doc.data();
       const r = (d.role || '').toLowerCase();
-      const validWorkerRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
-      if (!validWorkerRoles.includes(r)) return;
       if (!validRoles.includes(r)) return;
+
       const s = (d.status || '').toUpperCase();
       if (s === 'PENDING') stats.pending++;
       if (s === 'APPROVED') stats.approved++;
@@ -685,8 +704,19 @@ class UserService {
   }
 
   async getRailwaySupervisors(zone, division, role) {
-    const userRole = (role || "").toLowerCase().replace(/_/g, " ");
-    const isMaster = userRole.includes('master');
+    const userRole = (role || "").toUpperCase().replace(/\s+/g, '_');
+    
+    const ROLE_HIERARCHY = {
+      'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
+      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
+    };
+    const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
+    
+    // Master or Admin levels
+    const isMaster = requesterLevel >= 60;
 
     let query = db.collection('users')
       .where('role', '==', 'Railway Supervisor')

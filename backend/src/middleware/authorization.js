@@ -143,30 +143,40 @@ export function requirePlatformMasterAccess(req, res, next) {
 
 export function requireDashboardLevelAccess(level) {
   return (req, res, next) => {
-    const role = (req.user?.role || '').toUpperCase();
+    const role = (req.user?.role || '').toUpperCase().replace(/\s+/g, '_');
+    const roleHierarchy = {
+      'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
+      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
+    };
+    
+    const userRoleLevel = roleHierarchy[role] || 0;
+
     switch (level) {
       case 'admin':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER'].includes(role)) {
+        if (userRoleLevel < 60 && role !== 'COMPANY_MASTER') {
           throw new ForbiddenError('Admin dashboard access requires admin privileges');
         }
         break;
       case 'zone':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER'].includes(role)) {
+        if (userRoleLevel < 48) { // Area Master and above
           throw new ForbiddenError('Zone dashboard access requires zone-level privileges');
         }
         break;
       case 'station':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER'].includes(role)) {
+        if (userRoleLevel < 48) { // Area Master and above
           throw new ForbiddenError('Station dashboard access requires station-level privileges');
         }
         break;
       case 'platform':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER', 'PLATFORM_MASTER'].includes(role)) {
+        if (userRoleLevel < 35) { // Platform Master and above
           throw new ForbiddenError('Platform dashboard access requires platform-level privileges');
         }
         break;
       case 'area':
-        if (!['SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'STATION_MASTER', 'AREA_MASTER', 'PLATFORM_MASTER', 'WORKER', 'JANITOR'].includes(role)) {
+        if (userRoleLevel < 35) { // Platform Master and above. Workers (10) are restricted.
           throw new ForbiddenError('Area dashboard access requires area-level privileges');
         }
         break;
