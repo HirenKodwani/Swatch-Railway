@@ -509,7 +509,6 @@ class _CommonDashboardState extends State<CommonDashboard> {
           {"title": "OBHS Reports", "route": "obhs_reports"},
         ]
       },
-      },
       {
         "icon": Icons.star_outline,
         "title": "Ratings",
