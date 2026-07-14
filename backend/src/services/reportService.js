@@ -710,7 +710,7 @@ class ReportService {
       const pdfRenderer = new PDFRenderer();
       if (reportType === 'ATTENDANCE_AUDIT') {
         pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
-      } else if (reportType === 'WORKER_ACTIVITY') {
+      } else if (reportType === 'WORKER_ACTIVITY_AUDIT') {
         pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
       } else if (reportType === 'COMPLAINT_AUDIT') {
         pdfBuffer = await pdfRenderer.generateComplaintAudit(data);
@@ -749,7 +749,7 @@ class ReportService {
     const pdfRenderer = new PDFRenderer();
     if (reportType === 'ATTENDANCE_AUDIT') {
       pdfBuffer = await pdfRenderer.generateAttendanceAudit(data);
-    } else if (reportType === 'WORKER_ACTIVITY') {
+    } else if (reportType === 'WORKER_ACTIVITY_AUDIT') {
       pdfBuffer = await pdfRenderer.generateWorkerActivityAudit(data);
     } else if (reportType === 'COMPLAINT_AUDIT') {
       pdfBuffer = await pdfRenderer.generateComplaintAudit(data);

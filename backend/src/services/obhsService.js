@@ -287,7 +287,8 @@ class ObhsService {
       coachNo, category, description, photoUrl: photoUrl || null,
       status: 'OPEN', date: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
-      submittedBy: { uid: workerId, name: workerName, role: userData.role || 'Railway Worker' }
+      submittedBy: { uid: workerId, name: workerName, role: userData.role || 'Railway Worker' },
+      assignedToSupervisor: runData.supervisorId || runData.contractorSupervisorId || null
     });
     return { success: true, message: 'Complaint registered successfully', complaintId: complaintsRef.id };
   }

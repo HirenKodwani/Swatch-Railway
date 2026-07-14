@@ -24,10 +24,11 @@ export class ReportService {
     }
 
     // 3. Fetch Attendance
-    const attQuery = await this.db.collection('obhsAttendance')
-      .where('runInstanceId', '==', runInstanceId)
-      .where('userId', '==', workerId)
-      .get();
+    let attQueryRef = this.db.collection('obhsAttendance').where('runInstanceId', '==', runInstanceId);
+    if (workerId) {
+      attQueryRef = attQueryRef.where('userId', '==', workerId);
+    }
+    const attQuery = await attQueryRef.get();
       
     const attendanceList = attQuery.docs.map(d => {
       const data = d.data();
