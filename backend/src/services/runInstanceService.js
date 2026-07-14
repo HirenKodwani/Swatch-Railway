@@ -218,13 +218,25 @@ class RunInstanceService {
       if (c.workerId) {
         workerCoachCount[c.workerId] = (workerCoachCount[c.workerId] || 0) + 1;
         if (workerCoachCount[c.workerId] > 2) {
-          throw new ValidationError('Coach Assignment Limit', `Worker ${c.workerId} has been assigned to more than 2 coaches. Maximum 2 coaches per janitor allowed.`);
+          throw new ValidationError('Coach Assignment Limit', `Worker ${c.workerId} has been assigned to more than 2 coaches. Maximum 2 coaches per worker allowed.`);
         }
       }
-      if (c.coachPosition) {
-        const isAC = /^[ABHME]/i.test(c.coachPosition) || (c.coachType && c.coachType.toUpperCase().includes('AC'));
-        if (isAC && !c.attendantId) {
-          throw new ValidationError('Train Formation Error', `AC Coach ${c.coachPosition} must have an Attendant assigned.`);
+      if (c.attendantId) {
+        workerCoachCount[c.attendantId] = (workerCoachCount[c.attendantId] || 0) + 1;
+        if (workerCoachCount[c.attendantId] > 2) {
+          throw new ValidationError('Coach Assignment Limit', `Worker ${c.attendantId} has been assigned to more than 2 coaches. Maximum 2 coaches per worker allowed.`);
+        }
+      }
+      
+      if (c.coachPosition || c.coachType) {
+        const isAC = /^[ABHME]/i.test(c.coachPosition || '') || (c.coachType && c.coachType.toUpperCase().includes('AC'));
+        
+        if (!isAC && c.attendantId) {
+          throw new ValidationError('Assignment Error', `Attendants can only be assigned to AC coaches. Coach ${c.coachPosition || c.coachType} is not an AC coach.`);
+        }
+        
+        if (isAC && (!c.attendantId || !c.workerId)) {
+          throw new ValidationError('Train Formation Error', `AC Coach ${c.coachPosition || c.coachType} must have BOTH an Attendant and a Janitor assigned for their distinct tasks.`);
         }
       }
     }

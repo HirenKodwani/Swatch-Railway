@@ -61,10 +61,13 @@ class UserService {
     }
 
     const normalizedUserType = userType.toLowerCase();
-    if (roleUpper.includes('WORKER')) {
-      if (!worker_type || !['Janitor', 'Attendant'].includes(worker_type)) {
-        throw new ValidationError("worker_type (Janitor or Attendant) is mandatory for workers.");
+    const isWorkerRole = roleUpper.includes('WORKER') || roleUpper === 'JANITOR' || roleUpper === 'ATTENDANT';
+    if (isWorkerRole) {
+      const explicitWorkerType = worker_type || (roleUpper === 'JANITOR' ? 'Janitor' : (roleUpper === 'ATTENDANT' ? 'Attendant' : null));
+      if (!explicitWorkerType || !['Janitor', 'Attendant'].includes(explicitWorkerType)) {
+        throw new ValidationError("Invalid worker category. Only 'Janitor' and 'Attendant' categories are permitted for workers.");
       }
+      userData.worker_type = explicitWorkerType; // ensure it is set correctly
     }
 
     let entityData = null;
@@ -194,7 +197,12 @@ class UserService {
     if (userType !== undefined) updateData.userType = userType.toLowerCase();
     if (trainId !== undefined) updateData.trainId = trainId;
     if (trainIds !== undefined) updateData.trainIds = trainIds;
-    if (worker_type !== undefined) updateData.worker_type = worker_type;
+    if (worker_type !== undefined) {
+      if (!['Janitor', 'Attendant'].includes(worker_type)) {
+        throw new ValidationError("Invalid worker category. Only 'Janitor' and 'Attendant' categories are permitted for workers.");
+      }
+      updateData.worker_type = worker_type;
+    }
     if (stationId !== undefined) updateData.stationId = stationId;
     if (platformId !== undefined) updateData.platformId = platformId;
     if (areaId !== undefined) updateData.areaId = areaId;

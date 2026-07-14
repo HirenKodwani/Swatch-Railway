@@ -762,7 +762,7 @@ class ReportService {
       const { autoEmailService } = await import('./autoEmailService.js');
       emailResponse = await autoEmailService._sendEmail({
         subject: `OBHS Compliance Report | ${data?.trainInfo?.['Train Name'] || ''} | ${data?.meta?.auditStatus || ''}`,
-        to: 'hirenkodwani@gmail.com',
+        to: emailTo,
         html: `
           <h2>OBHS Official Audit Report</h2>
           <p>Please find attached the latest <b>${reportType.replace(/_/g, ' ')}</b> for Run Instance ID: ${runInstanceId}.</p>
