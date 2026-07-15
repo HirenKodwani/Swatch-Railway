@@ -13,7 +13,8 @@ import '../../../model/platform_model.dart';
 import '../../../repositories/platform_repository.dart';
 import '../widgets/approve_entity_dropdown.dart';
 import 'package:file_picker/file_picker.dart';
-
+import 'package:signature/signature.dart';
+import 'dart:convert';
 
 class UserRegistrationScreen extends StatefulWidget {
   final Map<String, dynamic>? draftData;
@@ -32,6 +33,11 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   final TextEditingController _email = TextEditingController();
   final TextEditingController _mobile = TextEditingController();
   final TextEditingController _password = TextEditingController();
+  final SignatureController _signatureController = SignatureController(
+    penStrokeWidth: 3,
+    penColor: Colors.black,
+    exportBackgroundColor: Colors.transparent,
+  );
 
   String _selectedUserType = 'railway';
   String? _selectedRole;
@@ -786,6 +792,37 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
               const SizedBox(height: 24),
 
+              const Text(
+                'Signature',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: kRailwayBlue,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Signature(
+                  controller: _signatureController,
+                  height: 150,
+                  backgroundColor: Colors.grey[200]!,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _signatureController.clear(),
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: const Text('Clear Signature'),
+                ),
+              ),
+              const SizedBox(height: 24),
+
               Row(
                 children: [
                   Expanded(
@@ -1038,6 +1075,14 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     try {
       final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      
+      String? base64Signature;
+      if (_signatureController.isNotEmpty) {
+        final signatureBytes = await _signatureController.toPngBytes();
+        if (signatureBytes != null) {
+          base64Signature = base64Encode(signatureBytes);
+        }
+      }
 
       final result = await ApiService.createUser(
         userType: _selectedUserType,
@@ -1058,6 +1103,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         stationId: _selectedStationId,
         areaId: _selectedAreaId,
         platformId: _selectedPlatformId,
+        signatureBase64: base64Signature,
       );
 
       setState(() => _isLoading = false);
@@ -1098,6 +1144,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     _email.dispose();
     _mobile.dispose();
     _password.dispose();
+    _signatureController.dispose();
     super.dispose();
   }
 }
