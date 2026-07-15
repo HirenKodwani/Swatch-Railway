@@ -39,7 +39,7 @@ class _ObhsTaskExecutionSheetState extends State<ObhsTaskExecutionSheet> {
     super.dispose();
   }
 
-  Future<String?> _pickAndUploadPhoto() async {
+  Future<Map<String, dynamic>?> _pickAndUploadPhoto() async {
     final source = await showDialog<ImageSource>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -73,7 +73,7 @@ class _ObhsTaskExecutionSheetState extends State<ObhsTaskExecutionSheet> {
       url = await WorkerRepository.uploadMedia(picked.path);
     } catch (_) {}
 
-    return url;
+    return { 'url': url, 'file': file };
   }
 
   Future<Position?> _captureGps() async {
@@ -225,14 +225,24 @@ class _ObhsTaskExecutionSheetState extends State<ObhsTaskExecutionSheet> {
   Widget _buildCurrentStepContent() {
     switch (currentStep) {
       case 0: return _buildPhotoStep('Before Cleaning Photo', _beforePhoto, () async {
-        final url = await _pickAndUploadPhoto();
-        if (url != null) setState(() { _beforeUrl = url; });
+        final result = await _pickAndUploadPhoto();
+        if (result != null) {
+          setState(() { 
+            _beforePhoto = result['file'];
+            if (result['url'] != null) _beforeUrl = result['url']; 
+          });
+        }
       });
       case 1: return _buildGpsStep();
       case 2: return _buildCommentStep();
       case 3: return _buildPhotoStep('After Cleaning Photo', _afterPhoto, () async {
-        final url = await _pickAndUploadPhoto();
-        if (url != null) setState(() { _afterUrl = url; });
+        final result = await _pickAndUploadPhoto();
+        if (result != null) {
+          setState(() { 
+            _afterPhoto = result['file'];
+            if (result['url'] != null) _afterUrl = result['url']; 
+          });
+        }
       });
       case 4: return _buildSubmitStep();
       default: return const SizedBox.shrink();
