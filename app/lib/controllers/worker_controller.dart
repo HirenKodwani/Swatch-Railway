@@ -886,11 +886,12 @@ class WorkerController extends GetxController {
         msg = 'Face detection mismatch/issue. Please use the correct face.';
       }
 
-      if (type == 'start' &&
-          msg.toLowerCase().contains('already') &&
+      if (msg.toLowerCase().contains('already') &&
           msg.toLowerCase().contains('submitted')) {
-        startAttendance.value = true;
-        await _saveAttendanceState('start');
+        if (type == 'start') startAttendance.value = true;
+        if (type == 'mid') midCheckin.value = true;
+        if (type == 'end') endAttendance.value = true;
+        await _saveAttendanceState(type);
         await loadWorkerStatistics();
         Get.snackbar(
           'Already Submitted',
