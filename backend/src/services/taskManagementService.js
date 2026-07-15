@@ -357,9 +357,10 @@ class TaskManagementService {
     let assignedWorker = null;
     if (workerId) {
       const workerDoc = await db.collection('users').doc(workerId).get();
-      if (workerDoc.exists) {
-        assignedWorker = workerDoc.data();
+      if (!workerDoc.exists) {
+        throw new NotFoundError(`Worker with ID ${workerId} not found`);
       }
+      assignedWorker = { uid: workerDoc.id, ...workerDoc.data() };
     }
 
     for (const areaId of areaIds) {
@@ -372,7 +373,8 @@ class TaskManagementService {
         areaDoc = await db.collection('stationAreas').doc(areaId).get();
       }
       const areaData = areaDoc.exists ? areaDoc.data() : {};
-      const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(areaData.cleaningFrequency || 'daily');
+      const cleaningFrequency = areaData.cleaningFrequency || areaData.frequency || 'daily';
+      const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
       const areaName = areaData.areaName || areaData.name || '';
       const areaCode = areaData.areaCode || '';
 
@@ -394,7 +396,7 @@ class TaskManagementService {
             supervisorId: areaData.supervisorId || null,
             assignmentId: null,
             activityType: areaData.areaType || 'Cleaning',
-            frequency: areaData.cleaningFrequency || 'daily',
+            frequency: cleaningFrequency,
             date: targetDate,
             scheduledDate: targetDate,
             scheduledTime,
@@ -430,7 +432,7 @@ class TaskManagementService {
               supervisorId: areaData.supervisorId || null,
               assignmentId: assignment.uid,
               activityType: areaData.areaType || 'Cleaning',
-              frequency: areaData.cleaningFrequency || 'daily',
+              frequency: cleaningFrequency,
               date: targetDate,
               scheduledDate: targetDate,
               scheduledTime,

@@ -1,13 +1,14 @@
 import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/repositories/station_billing_repository.dart';
+import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class BillingSupportPackScreen extends StatefulWidget {
-  final String contractId;
+  final String? contractId;
   final String stationId;
   final String stationName;
-  const BillingSupportPackScreen({super.key, required this.contractId, required this.stationId, required this.stationName});
+  const BillingSupportPackScreen({super.key, this.contractId, required this.stationId, required this.stationName});
 
   @override
   State<BillingSupportPackScreen> createState() => _BillingSupportPackScreenState();
@@ -20,6 +21,36 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
 
   StationBillingPack? _billingPack;
   final TextEditingController _rejectionReasonCtrl = TextEditingController();
+  String? _resolvedContractId;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvedContractId = widget.contractId;
+    if (_resolvedContractId == null || _resolvedContractId!.isEmpty) {
+      _resolveContractId();
+    }
+  }
+
+  Future<void> _resolveContractId() async {
+    setState(() => _isLoading = true);
+    try {
+      final contracts = await ApiService.getActiveContracts();
+      final contract = contracts.firstWhere(
+        (c) => c.stationIds.contains(widget.stationId),
+        orElse: () => throw Exception('No active contract found for this station'),
+      );
+      setState(() {
+        _resolvedContractId = contract.uid;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to resolve contract: $e'), backgroundColor: kErrorRed),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -28,10 +59,15 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
   }
 
   Future<void> _fetchOrGenerate() async {
+    if (_resolvedContractId == null || _resolvedContractId!.isEmpty) {
+      await _resolveContractId();
+    }
+    if (_resolvedContractId == null || _resolvedContractId!.isEmpty) return;
+
     setState(() => _isLoading = true);
     try {
       final pack = await StationBillingRepository.generate(
-        widget.contractId,
+        _resolvedContractId!,
         widget.stationId,
         _selectedMonth,
         _selectedYear,

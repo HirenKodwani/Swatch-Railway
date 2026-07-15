@@ -204,14 +204,27 @@ class StationCleaningService {
     const { stationId } = body;
     if (!stationId) throw new ValidationError('stationId is required');
     const ref = db.collection('stationRuns').doc();
+    
+    const runDate = body.date || body.runDate || new Date().toISOString().split('T')[0];
+    const shiftType = body.shift || body.shiftType || 'morning';
+    const runInstanceId = body.runInstanceId || ref.id;
+
     const data = {
-      uid: ref.id, stationId,
-      runDate: body.runDate || new Date().toISOString().split('T')[0],
-      shiftType: body.shiftType || 'morning',
+      ...body,
+      uid: ref.id,
+      runInstanceId,
+      stationId,
+      stationName: body.stationName || '',
+      date: runDate,
+      runDate,
+      shift: shiftType,
+      shiftType: shiftType.toLowerCase(),
+      platforms: body.platforms || [],
       supervisorId: body.supervisorId || (user && user.uid) || null,
-      status: 'active',
+      status: body.status || 'active',
       createdBy: user && user.uid,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     await ref.set(data);
     return { message: 'Station run created', uid: ref.id, data };
@@ -232,14 +245,49 @@ class StationCleaningService {
     const ref = db.collection('stationRuns').doc(runId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station run not found');
-    await ref.update({ ...body, updatedAt: new Date().toISOString() });
+    
+    const runDate = body.date || body.runDate || new Date().toISOString().split('T')[0];
+    const shiftType = body.shift || body.shiftType || 'morning';
+
+    await ref.update({
+      ...body,
+      date: runDate,
+      runDate,
+      shift: shiftType,
+      shiftType: shiftType.toLowerCase(),
+      updatedAt: new Date().toISOString()
+    });
     return { message: 'Station run updated', runId };
   }
 
   async getMyStationRuns(userId) {
-    const snapshot = await db.collection('stationRuns')
-      .where('supervisorId', '==', userId).limit(100).get();
-    const runs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const [supervisorSnap, allRunsSnap] = await Promise.all([
+      db.collection('stationRuns').where('supervisorId', '==', userId).limit(100).get(),
+      db.collection('stationRuns').limit(300).get()
+    ]);
+    
+    const runsMap = new Map();
+    
+    supervisorSnap.forEach(d => {
+      runsMap.set(d.id, { id: d.id, ...d.data() });
+    });
+    
+    allRunsSnap.forEach(d => {
+      const runData = d.data();
+      if (runData.platforms && Array.isArray(runData.platforms)) {
+        const isAssigned = runData.platforms.some(p => p.janitorId === userId);
+        if (isAssigned && !runsMap.has(d.id)) {
+          const workerPlatforms = runData.platforms.filter(p => p.janitorId === userId);
+          runsMap.set(d.id, {
+            id: d.id,
+            ...runData,
+            platforms: workerPlatforms
+          });
+        }
+      }
+    });
+
+    const runs = Array.from(runsMap.values()).filter(r => r.status !== 'deleted');
     return { count: runs.length, runs };
   }
 
@@ -252,45 +300,55 @@ class StationCleaningService {
   }
 
   async getWorkerStationRuns(workerId, user) {
-    const snapshot = await db.collection('stationRuns')
-      .where('workerId', '==', workerId).limit(100).get();
-    const runs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const snapshot = await db.collection('stationRuns').limit(300).get();
+    const runs = [];
+    snapshot.forEach(d => {
+      const runData = d.data();
+      if (runData.status === 'deleted') return;
+      if (runData.platforms && Array.isArray(runData.platforms)) {
+        const workerPlatforms = runData.platforms.filter(p => p.janitorId === workerId);
+        if (workerPlatforms.length > 0) {
+          runs.push({ id: d.id, ...runData, platforms: workerPlatforms });
+        }
+      }
+    });
     return { count: runs.length, runs };
   }
 
   async getSupervisorStationRuns(supervisorId, user) {
     const snapshot = await db.collection('stationRuns')
       .where('supervisorId', '==', supervisorId).limit(100).get();
-    const runs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const runs = snapshot.docs
+      .filter(d => d.data().status !== 'deleted')
+      .map(d => ({ id: d.id, ...d.data() }));
     return { count: runs.length, runs };
   }
 
   // ─── Station Tasks ──────────────────────────────────────────────────────────
   async submitStationTask(body) {
     const { stationId, areaId, workerId } = body;
-    // stationId is now validated above
-    const ref = db.collection('stationTasks').doc();
+    const ref = db.collection('cleaningTasks').doc();
     const data = {
       uid: ref.id, stationId, areaId: areaId || null,
       workerId: workerId || null,
       taskType: body.taskType || 'cleaning',
-      status: 'submitted',
+      status: 'pending',
       afterPhoto: body.afterPhoto || null,
       remarks: body.remarks || '',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
     await ref.set(data);
-    return { message: 'Task submitted', uid: ref.id, data };
+    return { message: 'Task created', uid: ref.id, data };
   }
 
   async getStationTask(taskId) {
-    const doc = await db.collection('stationTasks').doc(taskId).get();
+    const doc = await db.collection('cleaningTasks').doc(taskId).get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     return { id: doc.id, ...doc.data() };
   }
 
   async updateStationTask(taskId, body) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     await ref.update({ ...body, updatedAt: new Date().toISOString() });
@@ -298,7 +356,7 @@ class StationCleaningService {
   }
 
   async deleteStationTask(taskId) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     await ref.delete();
@@ -306,11 +364,115 @@ class StationCleaningService {
   }
 
   async listPendingStationTasks(runInstanceId) {
-    let q = db.collection('stationTasks').where('status', '==', 'submitted').limit(200);
-    if (runInstanceId) q = q.where('runInstanceId', '==', runInstanceId);
-    const snapshot = await q.get();
-    const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    return { count: tasks.length, tasks };
+    const pendingStatuses = ['completed', 'submitted', 'resubmitted'];
+    let allTasks = [];
+    for (const status of pendingStatuses) {
+      let q = db.collection('cleaningTasks').where('status', '==', status).limit(200);
+      if (runInstanceId) q = q.where('runInstanceId', '==', runInstanceId);
+      const snapshot = await q.get();
+      snapshot.forEach(d => allTasks.push({ id: d.id, ...d.data() }));
+    }
+    return { count: allTasks.length, tasks: allTasks };
+  }
+
+  // ─── Task State Machine (Full Lifecycle) ─────────────────────────────────
+  async startTask(taskId, user) {
+    const ref = db.collection('cleaningTasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station task not found');
+    const task = doc.data();
+    if (task.status !== 'pending') throw new ValidationError('Only pending tasks can be started');
+    await ref.update({
+      status: 'started',
+      startedBy: user?.uid || null,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Task started', taskId };
+  }
+
+  async completeTask(taskId, body, user) {
+    const ref = db.collection('cleaningTasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station task not found');
+    const task = doc.data();
+    if (task.status !== 'started') throw new ValidationError('Only started tasks can be completed');
+    await ref.update({
+      status: 'completed',
+      afterPhoto: body.afterPhoto || task.afterPhoto || null,
+      completedRemarks: body.remarks || '',
+      completedBy: user?.uid || null,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Task completed', taskId };
+  }
+
+  async submitTaskForReview(taskId, user) {
+    const ref = db.collection('cleaningTasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station task not found');
+    const task = doc.data();
+    if (task.status !== 'completed') throw new ValidationError('Only completed tasks can be submitted for review');
+    await ref.update({
+      status: 'submitted',
+      submittedBy: user?.uid || null,
+      submittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Task submitted for review', taskId };
+  }
+
+  async approveTask(taskId, body, user) {
+    const ref = db.collection('cleaningTasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station task not found');
+    const task = doc.data();
+    if (task.status !== 'submitted') throw new ValidationError('Only submitted tasks can be approved');
+    await ref.update({
+      status: 'approved',
+      supervisorNotes: body.supervisorNotes || body.notes || '',
+      approvedBy: user?.uid || null,
+      approvedByName: user?.fullName || null,
+      approvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Task approved', taskId };
+  }
+
+  async rejectTask(taskId, body, user) {
+    const ref = db.collection('cleaningTasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station task not found');
+    const task = doc.data();
+    if (task.status !== 'submitted') throw new ValidationError('Only submitted tasks can be rejected');
+    const reason = body.reason || body.rejectionReason || 'No reason provided';
+    await ref.update({
+      status: 'rejected',
+      rejectionReason: reason,
+      rejectedBy: user?.uid || null,
+      rejectedByName: user?.fullName || null,
+      rejectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Task rejected', taskId };
+  }
+
+  async resubmitTask(taskId, body, user) {
+    const ref = db.collection('cleaningTasks').doc(taskId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station task not found');
+    const task = doc.data();
+    if (task.status !== 'rejected') throw new ValidationError('Only rejected tasks can be resubmitted');
+    await ref.update({
+      status: 'pending',
+      afterPhoto: body.afterPhoto || task.afterPhoto || null,
+      resubmittedRemarks: body.remarks || '',
+      resubmittedBy: user?.uid || null,
+      resubmittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Task resubmitted', taskId };
   }
 
   // ─── Station Cleaning Forms ─────────────────────────────────────────────────

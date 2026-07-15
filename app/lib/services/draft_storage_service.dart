@@ -109,7 +109,7 @@ class DraftStorageService {
       final drafts = await getUserDrafts(currentUserId);
       return drafts.firstWhere(
         (d) => d['draftId'] == draftId,
-        orElse: () => {},
+        orElse: () => <String, dynamic>{},
       );
     } catch (e) {
       return null;
@@ -206,7 +206,7 @@ class DraftStorageService {
       final drafts = await getTrainDrafts(currentUserId);
       return drafts.firstWhere(
         (d) => d['draftId'] == draftId,
-        orElse: () => {},
+        orElse: () => <String, dynamic>{},
       );
     } catch (e) {
       return null;
@@ -301,7 +301,7 @@ class DraftStorageService {
       final drafts = await getEntityDrafts(currentUserId);
       return drafts.firstWhere(
         (d) => d['draftId'] == draftId,
-        orElse: () => {},
+        orElse: () => <String, dynamic>{},
       );
     } catch (e) {
       return null;
