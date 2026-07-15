@@ -545,11 +545,9 @@ class WorkerController extends GetxController {
   }
 
   dynamic _statusPayload(Map<String, dynamic> response) {
-    return response['attendance'] ??
-        response['attendanceStatus'] ??
-        response['status'] ??
-        response['data'] ??
-        response;
+    if (response['attendance'] is Map) return response['attendance'];
+    if (response['data'] is Map) return response['data'];
+    return response;
   }
 
   bool _truthy(dynamic source, List<String> keys) {
