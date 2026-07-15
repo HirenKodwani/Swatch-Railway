@@ -727,7 +727,7 @@ class UserService {
     const isMaster = requesterLevel >= 60;
 
     let query = db.collection('users')
-      .where('role', '==', 'Railway Supervisor')
+      .where('role', 'in', ['Railway Supervisor', 'Station Master', 'Railway Admin', 'Area Master', 'Platform Master'])
       .where('status', '==', 'APPROVED');
 
     if (isMaster) {
