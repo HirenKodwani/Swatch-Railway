@@ -177,11 +177,11 @@ class StationZone {
   };
 
   factory StationZone.fromJson(Map<String, dynamic> json) => StationZone(
-    uid: json['uid'],
+    uid: json['uid'] ?? json['id'] ?? '',
     stationId: json['stationId'] ?? '',
     areaId: json['areaId'] ?? '',
     areaName: json['areaName'] ?? '',
-    name: json['name'] ?? '',
+    name: json['name'] ?? json['zoneName'] ?? '',
     description: json['description'] ?? '',
     active: json['active'] ?? true,
   );

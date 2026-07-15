@@ -545,11 +545,9 @@ class WorkerController extends GetxController {
   }
 
   dynamic _statusPayload(Map<String, dynamic> response) {
-    return response['attendance'] ??
-        response['attendanceStatus'] ??
-        response['status'] ??
-        response['data'] ??
-        response;
+    if (response['attendance'] is Map) return response['attendance'];
+    if (response['data'] is Map) return response['data'];
+    return response;
   }
 
   bool _truthy(dynamic source, List<String> keys) {
@@ -888,11 +886,12 @@ class WorkerController extends GetxController {
         msg = 'Face detection mismatch/issue. Please use the correct face.';
       }
 
-      if (type == 'start' &&
-          msg.toLowerCase().contains('already') &&
+      if (msg.toLowerCase().contains('already') &&
           msg.toLowerCase().contains('submitted')) {
-        startAttendance.value = true;
-        await _saveAttendanceState('start');
+        if (type == 'start') startAttendance.value = true;
+        if (type == 'mid') midCheckin.value = true;
+        if (type == 'end') endAttendance.value = true;
+        await _saveAttendanceState(type);
         await loadWorkerStatistics();
         Get.snackbar(
           'Already Submitted',

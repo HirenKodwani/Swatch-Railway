@@ -10,8 +10,12 @@ export const createStationAreaSchema = z.object({
 export const createStationZoneSchema = z.object({
   stationId: z.string().min(1),
   areaId: z.string().min(1),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).optional(),
+  zoneName: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
+}).refine(data => data.name || data.zoneName, {
+  message: "Either 'name' or 'zoneName' must be provided",
+  path: ['name'],
 });
 
 export const createScheduleSchema = z.object({

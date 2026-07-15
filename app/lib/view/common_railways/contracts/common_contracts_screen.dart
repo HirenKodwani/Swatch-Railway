@@ -94,7 +94,7 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
     List<ContractModel> inactiveContracts =
     contracts.where((c) => !(c.isActive ?? false)).toList();
 
-    bool canAddEdit = widget.userRole == "Company Master" || widget.userRole == "Contractor Admin";
+    bool canAddEdit = widget.userRole == "Company Master" || widget.userRole == "Contractor Admin" || widget.userRole == "Super Admin";
 
     return Scaffold(
       backgroundColor: Colors.white,
