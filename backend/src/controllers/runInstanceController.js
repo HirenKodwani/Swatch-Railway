@@ -1,3 +1,4 @@
+import { db } from '../database/index.js';
 import { runInstanceService } from '../services/runInstanceService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
@@ -14,10 +15,35 @@ export const update = asyncHandler(async (req, res) => {
 export const list = asyncHandler(async (req, res) => {
   const { division: queryDivision, status } = req.query;
   const userRole = (req.user?.role || '').toLowerCase();
-  const isSuperAdmin = userRole.includes('super admin') || userRole.includes('company master') || userRole.includes('admin');
+
+  // Elevated roles that see all data (or can filter by division via query param)
+  const isSuperAdmin =
+    userRole.includes('super admin') ||
+    userRole.includes('company master') ||
+    userRole.includes('admin') ||
+    userRole.includes('railway master') ||
+    userRole.includes('railway_master') ||
+    userRole.includes('railway supervisor') ||
+    userRole.includes('railway_supervisor') ||
+    userRole.includes('contractor master') ||
+    userRole.includes('contractor_master');
 
   // Super admins see ALL instances; regular users are scoped to their division
-  const division = isSuperAdmin ? (queryDivision || null) : (queryDivision || req.user?.division);
+  let division = isSuperAdmin ? (queryDivision || null) : (queryDivision || req.user?.division);
+
+  // Derive division from assigned station if user has no direct division (e.g. Station/Area/Platform Master)
+  if (!division && !isSuperAdmin && req.user?.stationId) {
+    const stationDoc = await db.collection('stations').doc(req.user.stationId).get();
+    if (stationDoc.exists) {
+      division = stationDoc.data().division || null;
+    }
+  }
+
+  // If still no division, try to use zone as a fallback for zone-level scoped roles
+  if (!division && !isSuperAdmin && req.user?.zone) {
+    const result = await runInstanceService.getRunInstancesByZone(req.user.zone, status);
+    return res.status(200).json(result);
+  }
 
   if (!division && !isSuperAdmin) {
     return res.status(400).json({ error: 'Division is required' });

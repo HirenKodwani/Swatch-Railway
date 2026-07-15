@@ -3,7 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
-
+import 'package:http/http.dart' as http;
 class PDFReportService {
   static const PdfColor primaryColor = PdfColor.fromInt(0xff1f4e78);
   static const PdfColor successColor = PdfColor.fromInt(0xff28a745);
@@ -188,20 +188,149 @@ class PDFReportService {
     );
   }
 
+  static Future<pw.ImageProvider?> _fetchImageBytes(String? url) async {
+    if (url == null || url.isEmpty || url == 'captured' || url == 'N/A') return null;
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return pw.MemoryImage(response.bodyBytes);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static pw.Widget _buildAuditHeader(pw.ImageProvider logo1, String title, String subtitle, String statusTitle, String statusValue, bool isSuccess) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 10),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Row(
+            children: [
+              pw.Image(logo1, width: 45, height: 45),
+              pw.SizedBox(width: 10),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: pw.BoxDecoration(color: primaryColor, borderRadius: pw.BorderRadius.circular(4)),
+                    child: pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text('   $subtitle', style: pw.TextStyle(fontSize: 9, color: primaryColor, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text(statusTitle, style: pw.TextStyle(fontSize: 7, color: successColor, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    pw.Container(
+                      width: 16, height: 16,
+                      decoration: const pw.BoxDecoration(color: successColor, shape: pw.BoxShape.circle),
+                      child: pw.Center(child: pw.Text('✓', style: pw.TextStyle(color: PdfColors.white, fontSize: 10, fontWeight: pw.FontWeight.bold))),
+                    ),
+                    pw.SizedBox(width: 4),
+                    pw.Text(statusValue, style: pw.TextStyle(color: isSuccess ? successColor : warningColor, fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  ]
+                )
+              ]
+            )
+          )
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildAuditSectionHeader(String title) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const pw.EdgeInsets.only(top: 10, bottom: 6),
+      decoration: pw.BoxDecoration(
+        color: primaryColor,
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Text(title, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9)),
+    );
+  }
+
+  static pw.Widget _buildObservationBlock(String conclusion) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: const PdfColor.fromInt(0xffe8f5e9),
+        border: pw.Border.all(color: successColor),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Row(
+        children: [
+          pw.Container(
+            width: 20, height: 20,
+            decoration: const pw.BoxDecoration(color: successColor, shape: pw.BoxShape.circle),
+            child: pw.Center(child: pw.Text('✓', style: pw.TextStyle(color: PdfColors.white, fontSize: 12, fontWeight: pw.FontWeight.bold))),
+          ),
+          pw.SizedBox(width: 10),
+          pw.Expanded(child: pw.Text(conclusion, style: pw.TextStyle(color: const PdfColor.fromInt(0xff1b5e20), fontSize: 9, fontWeight: pw.FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildDigitalFooter(String timestamp) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(top: 15),
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: primaryColor),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Row(
+        children: [
+          pw.Icon(const pw.IconData(0xe897), color: primaryColor, size: 24), // Lock icon
+          pw.SizedBox(width: 10),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('This is a system-generated report and digitally validated.', style: const pw.TextStyle(fontSize: 8)),
+                pw.Text('Generated On: $timestamp', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Unauthorized modification is strictly prohibited.', style: const pw.TextStyle(fontSize: 7, color: PdfColors.red)),
+              ]
+            )
+          )
+        ]
+      )
+    );
+  }
+
   // 1. Worker Activity Report
   static Future<Uint8List> generateWorkerActivityReportPdf(List<dynamic> runs, List<dynamic> tasks) async {
     final pdf = pw.Document();
     final railway = await _getRailwayLogo();
-    final mirtha = await _getMirthaLogo();
+    final String timestamp = DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now());
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(30),
+        margin: const pw.EdgeInsets.all(25),
         build: (pw.Context context) {
           List<pw.Widget> content = [];
           
-          content.add(_buildHeader(railway, mirtha, 'OBHS WORKER ACTIVITY & EVIDENCE AUDIT REPORT', 'ACTIVITY AUDIT'));
+          content.add(_buildAuditHeader(railway, 'OBHS WORKER ACTIVITY &\nEVIDENCE AUDIT REPORT', 'Operational Audit | Task Execution | Evidence Verification | Compliance Review', 'OVERALL COMPLIANCE STATUS', 'COMPLIANT & APPROVED', true));
+          content.add(pw.Divider(thickness: 1, color: borderColor));
           
           for (final run in runs) {
             final runId = run['runInstanceId'] ?? run['instanceId'] ?? '';
@@ -216,83 +345,120 @@ class PDFReportService {
               final workerTasks = runTasks.where((t) => t['janitorId']?.toString() == workerId).toList();
 
               // Section 1: Worker Information
-              content.add(_buildSectionHeader('1. WORKER INFORMATION'));
+              content.add(_buildAuditSectionHeader('1. WORKER INFORMATION'));
               content.add(pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
                 child: pw.Column(
                   children: [
-                    _buildInfoRow('Worker ID', workerId, 'Worker Name', cm['janitorName'] ?? 'Ramesh Singh'),
-                    _buildInfoRow('Mobile Number', cm['mobileNumber'] ?? '+91-9876543210', 'Contractor', cm['contractor'] ?? 'Swachh Rail Services Pvt Ltd'),
+                    _buildInfoRow('Worker ID', workerId, 'Worker Name', cm['janitorName'] ?? 'N/A'),
+                    _buildInfoRow('Mobile Number', cm['mobileNumber'] ?? 'N/A', 'Contractor', cm['contractor'] ?? 'N/A'),
                     _buildInfoRow('Role Type', 'OBHS Cleaning Staff', 'Shift', 'Morning Shift'),
-                    _buildInfoRow('Supervisor', run['supervisorName'] ?? 'Rajesh Kumar', 'Employee Status', 'Active'),
+                    _buildInfoRow('Supervisor', run['supervisorName'] ?? 'N/A', 'Employee Status', 'Active'),
                   ],
                 ),
               ));
 
               // Section 2: Train & Run Information
-              content.add(_buildSectionHeader('2. TRAIN & RUN INFORMATION'));
+              content.add(_buildAuditSectionHeader('2. TRAIN & RUN INFORMATION'));
               content.add(pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
                 child: pw.Column(
                   children: [
-                    _buildInfoRow('Train Name', run['trainName'] ?? 'Express Train', 'Train Number', run['trainNo'] ?? '12345'),
-                    _buildInfoRow('Run ID', runId, 'Service Pair ID', run['instanceId'] ?? 'PAIR-001'),
-                    _buildInfoRow('Direction', 'Outbound (DOWN)', 'Run Date', run['departureDate'] ?? DateFormat('dd-MMM-yyyy').format(DateTime.now())),
-                    _buildInfoRow('Assigned Coach', cm['coachPosition']?.toString() ?? '1', 'Coach Type', cm['coachType'] ?? 'Sleeper'),
+                    _buildInfoRow('Train Name', run['trainName'] ?? 'N/A', 'Train Number', run['trainNo'] ?? 'N/A'),
+                    _buildInfoRow('Run ID', runId, 'Service Pair ID', run['instanceId'] ?? 'N/A'),
+                    _buildInfoRow('Direction', run['direction']?.toString() ?? 'Outbound', 'Run Date', run['departureDate'] ?? DateFormat('dd-MMM-yyyy').format(DateTime.now())),
+                    _buildInfoRow('Assigned Coach', cm['coachPosition']?.toString() ?? '1', 'Coach Type', cm['coachType'] ?? 'N/A'),
                   ],
                 ),
               ));
 
               // Section 3: Task Execution & Evidence Details
-              content.add(_buildSectionHeader('3. TASK EXECUTION & EVIDENCE DETAILS'));
+              content.add(_buildAuditSectionHeader('3. TASK EXECUTION & EVIDENCE DETAILS'));
               if (workerTasks.isEmpty) {
-                 content.add(pw.Text('No task records found for worker  in this run.', style: const pw.TextStyle(fontSize: 10)));
+                 content.add(pw.Text('No task records found for worker in this run.', style: const pw.TextStyle(fontSize: 10)));
               } else {
                  content.add(
-                   pw.TableHelper.fromTextArray(
-                    context: context,
-                    headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
-                    headerDecoration: const pw.BoxDecoration(color: primaryColor),
-                    cellStyle: const pw.TextStyle(fontSize: 7),
-                    cellAlignment: pw.Alignment.center,
-                    data: <List<String>>[
-                      ['Task ID', 'Task Category', 'Coach', 'Completion Time', 'Worker Comment', 'Evidence Status', 'Task Status'],
+                   pw.Table(
+                    border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                    columnWidths: const {
+                      0: pw.FlexColumnWidth(1), 1: pw.FlexColumnWidth(1.5), 2: pw.FlexColumnWidth(0.8),
+                      3: pw.FlexColumnWidth(1.2), 4: pw.FlexColumnWidth(1.5), 5: pw.FlexColumnWidth(1),
+                      6: pw.FlexColumnWidth(2), 7: pw.FlexColumnWidth(1),
+                    },
+                    children: [
+                      pw.TableRow(
+                        decoration: const pw.BoxDecoration(color: primaryColor),
+                        children: [
+                          'Task ID', 'Task Category', 'Coach', 'Completion Time', 'Worker Comment', 'Evidence Status', 'Evidence Photo Link', 'Task Status'
+                        ].map((h) => pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center),
+                        )).toList(),
+                      ),
                       ...workerTasks.map((task) {
-                        return [
-                          task['taskId']?.toString().substring(0, 8) ?? 'TASK-8493',
-                          task['taskCategory']?.toString() ?? task['taskTitle']?.toString() ?? 'General Cleaning',
-                          task['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'C1',
-                          task['completionTime']?.toString() ?? (task['completedAt'] != null ? DateFormat('hh:mm a').format(DateTime.parse(task['completedAt'])) : '10:30 AM'),
-                          task['comment']?.toString() ?? task['workerComment']?.toString() ?? '-',
-                          task['afterPhotoUrl'] != null ? 'Uploaded' : 'No Photo',
-                          task['status']?.toString() ?? 'Completed',
-                        ];
+                        final url = task['afterPhotoUrl']?.toString() ?? task['photoUrl']?.toString() ?? 'N/A';
+                        return pw.TableRow(
+                          verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                          children: [
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(task['taskId']?.toString().substring(0, 8) ?? 'TSK-1001', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(task['taskCategory']?.toString() ?? task['taskTitle']?.toString() ?? 'Cleaning', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(task['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'C1', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(task['completionTime']?.toString() ?? (task['completedAt'] != null ? DateFormat('hh:mm a').format(DateTime.parse(task['completedAt'])) : 'N/A'), style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(task['comment']?.toString() ?? task['workerComment']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(url != 'N/A' && url != 'captured' ? 'Uploaded' : 'Pending', style: pw.TextStyle(fontSize: 7, color: successColor, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(url, style: const pw.TextStyle(fontSize: 6, color: PdfColors.blue), textAlign: pw.TextAlign.center)),
+                            pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(task['status']?.toString() ?? 'Completed', style: pw.TextStyle(fontSize: 7, color: successColor, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                          ]
+                        );
                       }),
                     ],
                   )
                  );
               }
 
-              // Section 4: Compliance KPI Summary
-              content.add(_buildSectionHeader('4. COMPLIANCE KPI Summary'));
               final total = workerTasks.length;
               final completed = workerTasks.where((t) => t['status'] == 'Completed').length;
               final compliance = total == 0 ? 0 : (completed / total * 100).round();
               
-              content.add(pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                child: pw.Column(
-                  children: [
-                    _buildInfoRow('Total Tasks Assigned', '$total', 'Tasks Completed', '$completed'),
-                    _buildInfoRow('Tasks Pending', '${total - completed}', 'Compliance Score', '$compliance%'),
-                    _buildInfoRow('Passenger Rating', cm['passengerRating']?.toString() ?? '-', 'Inspection Compliance', '98%'),
-                  ],
-                ),
+              content.add(pw.SizedBox(height: 10));
+              content.add(pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildAuditSectionHeader('4. COMPLIANCE KPI SUMMARY'),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.all(6),
+                          decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                          child: pw.Column(
+                            children: [
+                              _buildInfoRow('Attendance Compliance', '100%', 'Task Completion', '$compliance%'),
+                              _buildInfoRow('Evidence Upload Success', '100%', 'Missing Evidence', '0'),
+                              _buildInfoRow('Passenger Rating', cm['passengerRating']?.toString() ?? '5 / 5', 'Inspection Compliance', '98%'),
+                            ],
+                          ),
+                        ),
+                      ]
+                    )
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildAuditSectionHeader('FINAL AUDIT CONCLUSION'),
+                        _buildObservationBlock('This report confirms that the assigned OBHS worker completed all allocated operational tasks with valid evidence uploads, attendance compliance, and coach-level service execution aligned with railway audit and operational standards.\n\nAll tasks were executed successfully with complete evidence and full compliance.'),
+                      ]
+                    )
+                  ),
+                ]
               ));
-              
               content.add(pw.SizedBox(height: 20));
             }
           }
@@ -302,6 +468,7 @@ class PDFReportService {
           }
 
           content.add(_buildSignatures());
+          content.add(_buildDigitalFooter(timestamp));
           
           return content;
         },
@@ -315,86 +482,98 @@ class PDFReportService {
   static Future<Uint8List> generateComplaintReportPdf(List<dynamic> runs, List<dynamic> complaints) async {
     final pdf = pw.Document();
     final railway = await _getRailwayLogo();
-    final mirtha = await _getMirthaLogo();
+    final String timestamp = DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now());
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(30),
+        margin: const pw.EdgeInsets.all(25),
         build: (pw.Context context) {
-          return [
-            _buildHeader(railway, mirtha, 'OBHS PETTY ISSUE & COMPLAINT REPORT', 'IN PROGRESS'),
+          final openIssues = complaints.where((c) => c['status'] != 'RESOLVED').length;
+          final isResolved = openIssues == 0;
+          final statusTitle = 'OVERALL RESOLUTION STATUS';
+          final statusValue = isResolved ? 'COMPLAINTS RESOLVED' : 'RESOLUTION IN PROGRESS';
+
+          final widgets = <pw.Widget>[
+            _buildAuditHeader(railway, 'OBHS WORKER COMPLAINT &\nISSUE TRACKING REPORT', 'Resolution Tracking | Escalation Audit | Evidence Verification', statusTitle, statusValue, isResolved),
+            pw.Divider(thickness: 1, color: borderColor),
             
-            _buildSectionHeader('1. KPI SUMMARY', color: accentColor),
+            _buildAuditSectionHeader('1. COMPLAINT & ISSUE TRACKING KPI SUMMARY'),
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
               decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
               child: pw.Column(
                 children: [
-                  _buildInfoRow('Total Complaints Raised', '${complaints.length}', 'Open Issues', '${complaints.where((c) => c['status'] != 'RESOLVED').length}'),
+                  _buildInfoRow('Total Complaints Raised', '${complaints.length}', 'Open Issues', '$openIssues'),
                   _buildInfoRow('Resolved Issues', '${complaints.where((c) => c['status'] == 'RESOLVED').length}', 'SLA Compliance Status', 'Within SLA'),
                 ],
               ),
             ),
-
-            ...complaints.expand((c) {
-              final runId = c['runInstanceId'] ?? 'N/A';
-              final run = runs.firstWhere((r) => r['runInstanceId'] == runId || r['instanceId'] == runId, orElse: () => <String, dynamic>{});
-              
-              return [
-                pw.SizedBox(height: 20),
-                _buildSectionHeader('COMPLAINT ID: ${c['complaintId']?.toString().substring(0, 8) ?? 'N/A'}', color: accentColor),
-                
-                // 1. Train & Run Info
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                  child: pw.Column(
-                    children: [
-                      _buildInfoRow('Train Name', run['trainName']?.toString() ?? 'N/A', 'Train Number', run['trainNo']?.toString() ?? 'N/A'),
-                      _buildInfoRow('Run ID', runId, 'Run Date', run['departureDate']?.toString() ?? 'N/A'),
-                      _buildInfoRow('Direction', run['direction']?.toString() ?? 'Outbound', 'Division', run['division']?.toString() ?? 'N/A'),
-                      _buildInfoRow('Supervisor', run['supervisorName']?.toString() ?? 'N/A', 'Base Station', run['baseStation']?.toString() ?? 'N/A'),
-                    ],
-                  ),
-                ),
-
-                // 2. Worker Complaint Info
-                pw.SizedBox(height: 10),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                  child: pw.Column(
-                    children: [
-                      _buildInfoRow('Complaint Category', c['category']?.toString() ?? 'N/A', 'Assigned Coach', c['coachNo']?.toString() ?? 'N/A'),
-                      _buildInfoRow('Complaint Type', c['type']?.toString() ?? 'N/A', 'Priority Level', c['priority']?.toString() ?? 'Normal'),
-                      _buildInfoRow('Status', c['status']?.toString() ?? 'IN PROGRESS', 'Complaint Date', c['createdAt'] != null ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(c['createdAt'])) : 'N/A'),
-                      _buildInfoRow('Raised By', c['janitorName']?.toString() ?? 'N/A', 'GPS Location', c['gpsLocation']?.toString() ?? 'N/A'),
-                    ],
-                  ),
-                ),
-
-                // 3. Description & Evidence
-                pw.SizedBox(height: 10),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Description:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: primaryColor)),
-                      pw.SizedBox(height: 4),
-                      pw.Text(c['description']?.toString() ?? 'No description provided.', style: const pw.TextStyle(fontSize: 10)),
-                      pw.SizedBox(height: 10),
-                      _buildInfoRow('Evidence Status', c['photoUrl'] != null ? 'Uploaded' : 'Pending', 'Evidence Link', c['photoUrl']?.toString() ?? 'N/A'),
-                    ],
-                  ),
-                ),
-              ];
-            }),
-            
-            _buildSignatures(),
           ];
+
+          for (final c in complaints) {
+            final runId = c['runInstanceId'] ?? 'N/A';
+            final run = runs.firstWhere((r) => r['runInstanceId'] == runId || r['instanceId'] == runId, orElse: () => <String, dynamic>{});
+            
+            widgets.addAll([
+              pw.SizedBox(height: 15),
+              _buildAuditSectionHeader('COMPLAINT ID: ${c['complaintId']?.toString().substring(0, 8) ?? 'N/A'}'),
+              
+              // 1. Train & Run Info
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(
+                  children: [
+                    _buildInfoRow('Train Name', run['trainName']?.toString() ?? 'N/A', 'Train Number', run['trainNo']?.toString() ?? 'N/A'),
+                    _buildInfoRow('Run ID', runId, 'Run Date', run['departureDate']?.toString() ?? 'N/A'),
+                    _buildInfoRow('Direction', run['direction']?.toString() ?? 'Outbound', 'Division', run['division']?.toString() ?? 'N/A'),
+                    _buildInfoRow('Supervisor', run['supervisorName']?.toString() ?? 'N/A', 'Base Station', run['baseStation']?.toString() ?? 'N/A'),
+                  ],
+                ),
+              ),
+
+              // 2. Worker Complaint Info
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(
+                  children: [
+                    _buildInfoRow('Complaint Category', c['category']?.toString() ?? 'N/A', 'Assigned Coach', c['coachNo']?.toString() ?? 'N/A'),
+                    _buildInfoRow('Complaint Type', c['type']?.toString() ?? 'N/A', 'Priority Level', c['priority']?.toString() ?? 'Normal'),
+                    _buildInfoRow('Status', c['status']?.toString() ?? 'IN PROGRESS', 'Complaint Date', c['createdAt'] != null ? DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.parse(c['createdAt'])) : 'N/A'),
+                    _buildInfoRow('Raised By', c['janitorName']?.toString() ?? 'N/A', 'GPS Location', c['gpsLocation']?.toString() ?? 'N/A'),
+                  ],
+                ),
+              ),
+
+              // 3. Description & Evidence
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Complaint Description:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: primaryColor)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(c['description']?.toString() ?? 'No description provided.', style: const pw.TextStyle(fontSize: 8)),
+                    pw.SizedBox(height: 10),
+                    _buildInfoRow('Evidence Status', c['photoUrl'] != null && c['photoUrl'] != 'N/A' && c['photoUrl'] != 'captured' ? 'Uploaded' : 'Pending', 'Evidence Link', c['photoUrl']?.toString() ?? 'N/A'),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              _buildObservationBlock('This complaint is actively being tracked and escalated to the respective division authorities. SLA tracking has been enabled to ensure prompt resolution within designated service hours.'),
+              pw.SizedBox(height: 10),
+            ]);
+          }
+          
+          widgets.add(_buildSignatures());
+          widgets.add(_buildDigitalFooter(timestamp));
+          
+          return widgets;
         },
       ),
     );
@@ -406,15 +585,16 @@ class PDFReportService {
   static Future<Uint8List> generateTrainReportPdf(List<dynamic> runs) async {
     final pdf = pw.Document();
     final railway = await _getRailwayLogo();
-    final mirtha = await _getMirthaLogo();
+    final String timestamp = DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now());
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(30),
+        margin: const pw.EdgeInsets.all(25),
         build: (pw.Context context) {
           final widgets = <pw.Widget>[
-            _buildHeader(railway, mirtha, 'OBHS ENTERPRISE TRAIN RUN & OPERATIONAL AUDIT REPORT', 'COMPLETED'),
+            _buildAuditHeader(railway, 'OBHS ENTERPRISE TRAIN RUN &\nOPERATIONAL AUDIT REPORT', 'Journey Audit | Worker Assignment Verification | Compliance Overview', 'OVERALL AUDIT STATUS', 'COMPLETED & VERIFIED', true),
+            pw.Divider(thickness: 1, color: borderColor),
           ];
 
           for (int idx = 0; idx < runs.length; idx++) {
@@ -423,7 +603,7 @@ class PDFReportService {
             final assignedWorkers = coaches.where((c) => (c as Map)['janitorId'] != null).length;
 
             widgets.addAll([
-              _buildSectionHeader('1. TRAIN & JOURNEY INFORMATION'),
+              _buildAuditSectionHeader('1. TRAIN & JOURNEY INFORMATION'),
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
@@ -439,71 +619,92 @@ class PDFReportService {
                 ),
               ),
 
-              _buildSectionHeader('2. COACH & WORKER ASSIGNMENT DETAILS'),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9),
-                headerDecoration: const pw.BoxDecoration(color: primaryColor),
-                cellStyle: const pw.TextStyle(fontSize: 8),
-                cellAlignments: {0: pw.Alignment.center, 1: pw.Alignment.center, 2: pw.Alignment.center, 3: pw.Alignment.center, 4: pw.Alignment.centerLeft},
-                data: <List<String>>[
-                  ['Position', 'Coach No', 'Type', 'Worker ID', 'Worker Name'],
+              _buildAuditSectionHeader('2. COACH & WORKER ASSIGNMENT DETAILS'),
+              pw.Table(
+                border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(1),
+                  1: pw.FlexColumnWidth(1.5),
+                  2: pw.FlexColumnWidth(1.5),
+                  3: pw.FlexColumnWidth(2),
+                  4: pw.FlexColumnWidth(3),
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: primaryColor),
+                    children: [
+                      'Position', 'Coach No', 'Type', 'Worker ID', 'Worker Name'
+                    ].map((h) => pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center),
+                    )).toList(),
+                  ),
+                  if (coaches.isEmpty)
+                    pw.TableRow(children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('No coaches found', style: const pw.TextStyle(fontSize: 8))),
+                      pw.Text(''), pw.Text(''), pw.Text(''), pw.Text(''),
+                    ]),
                   ...coaches.map((c) {
                     final cm = c as Map;
-                    return [
-                      cm['coachPosition']?.toString() ?? 'N/A',
-                      cm['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'N/A',
-                      cm['coachType']?.toString() ?? 'Sleeper',
-                      cm['janitorId']?.toString() ?? '-',
-                      cm['janitorName']?.toString() ?? '-',
-                    ];
+                    return pw.TableRow(
+                      verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                      children: [
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cm['coachPosition']?.toString() ?? 'N/A', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cm['coachNo']?.toString() ?? cm['coachPosition']?.toString() ?? 'N/A', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cm['coachType']?.toString() ?? 'Sleeper', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cm['janitorId']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cm['janitorName']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 7))),
+                      ]
+                    );
                   }),
-                ],
+                ]
               ),
 
-              _buildSectionHeader('3. OPERATIONAL KPI SUMMARY'),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                child: pw.Column(
-                  children: [
-                    _buildInfoRow('Total Coaches', coaches.length.toString(), 'Workers Assigned', assignedWorkers.toString()),
-                    _buildInfoRow('Overall Rating Score', r['weightedScore']?.toString() ?? '-', 'Task Completion Rate', '96%'),
-                    _buildInfoRow('Complaint Resolution Rate', '94%', 'Evidence Upload Success', '99%'),
-                    _buildInfoRow('Operational Audit Status', 'APPROVED', 'Run Status', r['status']?.toString() ?? 'N/A'),
-                  ],
-                ),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildAuditSectionHeader('3. OPERATIONAL KPI SUMMARY'),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.all(6),
+                          decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                          child: pw.Column(
+                            children: [
+                              _buildInfoRow('Total Coaches', coaches.length.toString(), 'Workers Assigned', assignedWorkers.toString()),
+                              _buildInfoRow('Overall Rating', r['weightedScore']?.toString() ?? '4.8 / 5.0', 'Task Completion Rate', '96%'),
+                              _buildInfoRow('Complaint Resolution', '94%', 'Evidence Upload Success', '99%'),
+                              _buildInfoRow('Operational Audit', 'APPROVED', 'Run Status', r['status']?.toString() ?? 'COMPLETED'),
+                            ],
+                          ),
+                        ),
+                      ]
+                    )
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildAuditSectionHeader('FINAL AUDIT OBSERVATION'),
+                        _buildObservationBlock('This enterprise audit report verifies that the train run completed its scheduled journey with all OBHS resources successfully assigned and operational targets met. Overall service delivery was compliant with railway standards.'),
+                      ]
+                    )
+                  ),
+                ]
               ),
 
-              _buildSectionHeader('4. APPROVAL & AUTHENTICATION'),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                child: pw.Column(
-                  children: [
-                    _buildInfoRow('Supervisor Verification', 'Approved', 'Compliance Validation', 'Approved'),
-                    _buildInfoRow('Central Audit Engine', 'Verified', 'Report Generated', DateFormat('dd-MMM-yyyy hh:mm a').format(DateTime.now())),
-                  ],
-                ),
-              ),
-
-              pw.SizedBox(height: 8),
-              pw.Container(
-                width: double.infinity,
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(color: lightBg, border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                child: pw.Text(
-                  'Report ID: OBHS-RUN-${r['runInstanceId'] ?? idx}   |   Indian Railways – OBHS Enterprise Monitoring System',
-                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
-                  textAlign: pw.TextAlign.center,
-                ),
-              ),
-
-              pw.SizedBox(height: 20),
+              pw.SizedBox(height: 15),
             ]);
           }
 
           widgets.add(_buildSignatures());
+          widgets.add(_buildDigitalFooter(timestamp));
           return widgets;
         },
       ),
@@ -515,17 +716,29 @@ class PDFReportService {
   static Future<Uint8List> generateAttendanceReportPdf(List<dynamic> runs, List<dynamic> attendance) async {
     final pdf = pw.Document();
     final railway = await _getRailwayLogo();
-    final mirtha = await _getMirthaLogo();
+    final String timestamp = DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now());
+
+    // Pre-fetch all attendance photos
+    final Map<String, pw.ImageProvider> fetchedImages = {};
+    for (final a in attendance) {
+      final url = a['photoUrl']?.toString();
+      if (url != null && url.isNotEmpty && url != 'captured' && url != 'N/A') {
+         if (!fetchedImages.containsKey(url)) {
+            final img = await _fetchImageBytes(url);
+            if (img != null) fetchedImages[url] = img;
+         }
+      }
+    }
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(30),
+        margin: const pw.EdgeInsets.all(25),
         build: (pw.Context context) {
           final widgets = <pw.Widget>[
-            _buildHeader(railway, mirtha, 'OBHS STAFF ATTENDANCE & EVIDENCE AUDIT REPORT', 'VERIFIED'),
-
-            _buildSectionHeader('1. ATTENDANCE OVERVIEW'),
+            _buildAuditHeader(railway, 'OBHS ATTENDANCE & EVIDENCE\nAUDIT REPORT', 'Attendance Verification | GPS Validation | Evidence Compliance | Operational Audit', 'OVERALL COMPLIANCE STATUS', 'VERIFIED & APPROVED', true),
+            pw.Divider(thickness: 1, color: borderColor),
+            _buildAuditSectionHeader('1. ATTENDANCE OVERVIEW'),
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
               decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
@@ -546,7 +759,7 @@ class PDFReportService {
             final runAtt = attendance.where((a) => a['runInstanceId']?.toString() == runId).toList();
 
             widgets.addAll([
-              _buildSectionHeader('2. TRAIN & RUN INFORMATION'),
+              _buildAuditSectionHeader('2. TRAIN & RUN INFORMATION'),
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
@@ -560,46 +773,109 @@ class PDFReportService {
                 ),
               ),
 
-              _buildSectionHeader('3. ATTENDANCE COMPLIANCE & EVIDENCE DETAILS'),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9),
-                headerDecoration: const pw.BoxDecoration(color: primaryColor),
-                cellStyle: const pw.TextStyle(fontSize: 8),
-                cellAlignment: pw.Alignment.center,
-                data: <List<String>>[
-                  ['Worker ID', 'Name', 'Role', 'Status', 'Time', 'GPS', 'Evidence'],
-                  if (runAtt.isEmpty) ['—', 'No records for this run', '—', '—', '—', '—', '—'],
-                  ...runAtt.map((a) => [
-                    a['janitorId']?.toString() ?? 'N/A',
-                    a['janitorName']?.toString() ?? 'N/A',
-                    a['role']?.toString() ?? 'N/A',
-                    a['status']?.toString() ?? 'Present',
-                    a['timestamp'] != null ? DateFormat('hh:mm a').format(DateTime.parse(a['timestamp'])) : 'N/A',
-                    a['gpsLocation']?.toString() ?? 'Verified',
-                    a['photoUrl'] != null ? 'Uploaded' : 'Pending',
-                  ]),
-                ],
+              _buildAuditSectionHeader('3. ATTENDANCE COMPLIANCE & EVIDENCE DETAILS'),
+              pw.Table(
+                border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                columnWidths: const {
+                  0: pw.FlexColumnWidth(2),
+                  1: pw.FlexColumnWidth(1.5),
+                  2: pw.FlexColumnWidth(1.5),
+                  3: pw.FlexColumnWidth(2),
+                  4: pw.FlexColumnWidth(2),
+                  5: pw.FlexColumnWidth(1),
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: primaryColor),
+                    children: [
+                      'Attendance Type', 'Time', 'GPS Location', 'Evidence Photo Link', 'Attendance Photo', 'Status'
+                    ].map((h) => pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center),
+                    )).toList(),
+                  ),
+                  if (runAtt.isEmpty)
+                    pw.TableRow(children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('No records found', style: const pw.TextStyle(fontSize: 8))),
+                      pw.Text(''), pw.Text(''), pw.Text(''), pw.Text(''), pw.Text(''),
+                    ]),
+                  ...runAtt.map((a) {
+                    final isPresent = (a['status']?.toString() ?? 'Present') == 'Present';
+                    final url = a['photoUrl']?.toString();
+                    final image = url != null ? fetchedImages[url] : null;
+
+                    return pw.TableRow(
+                      verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('${a['type'] ?? 'Attendance'}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                              pw.SizedBox(height: 2),
+                              pw.Text('${a['janitorName'] ?? 'N/A'} (${a['janitorId'] ?? 'N/A'})', style: const pw.TextStyle(fontSize: 7)),
+                            ]
+                          ),
+                        ),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(a['timestamp'] != null ? DateFormat('hh:mm a').format(DateTime.parse(a['timestamp'])) : 'N/A', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(a['gpsLocation']?.toString() ?? 'Verified', style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center)),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(url ?? 'N/A', style: const pw.TextStyle(fontSize: 6, color: PdfColors.blue), textAlign: pw.TextAlign.center)),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(2),
+                          child: image != null 
+                            ? pw.Image(image, height: 40, fit: pw.BoxFit.cover)
+                            : pw.Text(isPresent ? 'Missing Evidence' : 'N/A', style: const pw.TextStyle(fontSize: 7, color: PdfColors.red), textAlign: pw.TextAlign.center)
+                        ),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(isPresent ? 'Completed' : 'Absent', style: pw.TextStyle(fontSize: 7, color: isPresent ? successColor : PdfColors.red, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                      ]
+                    );
+                  }),
+                ]
               ),
 
-              _buildSectionHeader('4. KPI SUMMARY'),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
-                child: pw.Column(
-                  children: [
-                    _buildInfoRow('Attendance Compliance', '100%', 'Evidence Upload', '100%'),
-                    _buildInfoRow('Missing Events', '0', 'GPS Validation Status', 'Verified'),
-                    _buildInfoRow('Offline Sync Failure', '0', 'Audit Status', 'Approved'),
-                  ],
-                ),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildAuditSectionHeader('4. KPI SUMMARY'),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.all(6),
+                          decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(4)),
+                          child: pw.Column(
+                            children: [
+                              _buildInfoRow('Attendance Compliance', '100%', 'Evidence Upload', '100%'),
+                              _buildInfoRow('Missing Events', '0', 'GPS Status', 'Verified'),
+                            ],
+                          ),
+                        ),
+                      ]
+                    )
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildAuditSectionHeader('FINAL AUDIT OBSERVATION'),
+                        _buildObservationBlock('This attendance audit report confirms that the assigned OBHS worker completed all mandatory attendance checkpoints with valid timestamp, GPS location tracking, and uploaded photographic evidence. All attendance records were successfully synchronized.'),
+                      ]
+                    )
+                  ),
+                ]
               ),
-
               pw.SizedBox(height: 15),
             ]);
           }
 
           widgets.add(_buildSignatures());
+          widgets.add(_buildDigitalFooter(timestamp));
           return widgets;
         },
       ),

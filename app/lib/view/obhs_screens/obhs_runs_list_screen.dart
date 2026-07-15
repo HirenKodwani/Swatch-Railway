@@ -1,12 +1,13 @@
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:crm_train/utills/app_colors.dart';
+import 'package:printing/printing.dart';
 import '../../model/run_instance_model.dart';
 import '../../model/train_model.dart';
 import '../../repositories/obhs_repository.dart';
 import '../../model/railway_worker_model.dart';
 import 'obhs_create_run_screen.dart';
+import 'obhs_pdf_report.dart';
 import 'obhs_review_queue_screen.dart';
 
 class OBHSRunsListScreen extends StatefulWidget {
@@ -920,6 +921,17 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
+          value: 'report',
+          child: Row(
+            children: [
+              Icon(Icons.picture_as_pdf, size: 18, color: Colors.red[700]),
+              const SizedBox(width: 10),
+              const Text('Generate Report'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
@@ -938,12 +950,202 @@ class _OBHSRunsListScreenState extends State<OBHSRunsListScreen> {
           case 'edit':
             _editInstance(instance);
             break;
+          case 'report':
+            _showReportDialog(instance);
+            break;
           case 'delete':
             _deleteInstance(instance);
             break;
         }
       },
     );
+  }
+
+  void _showReportDialog(RunInstanceModel instance) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.picture_as_pdf, color: Colors.red[700]),
+            const SizedBox(width: 10),
+            const Text('Generate OBHS Report', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Select the report format you want to generate:',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              _reportOption(
+                ctx,
+                instance,
+                reportType: 1,
+                icon: Icons.assignment,
+                color: kRailwayBlue,
+                title: 'Attendance & Evidence Audit',
+                subtitle: 'Compact format with KPI summary',
+              ),
+              const SizedBox(height: 8),
+              _reportOption(
+                ctx,
+                instance,
+                reportType: 2,
+                icon: Icons.fact_check,
+                color: Colors.indigo,
+                title: 'Compliance Audit Report',
+                subtitle: 'Detailed with GPS & exception analysis',
+              ),
+              const SizedBox(height: 8),
+              _reportOption(
+                ctx,
+                instance,
+                reportType: 3,
+                icon: Icons.engineering,
+                color: Colors.teal,
+                title: 'Worker Activity & Evidence',
+                subtitle: 'Task execution & evidence focused',
+              ),
+              const SizedBox(height: 8),
+              _reportOption(
+                ctx,
+                instance,
+                reportType: 4,
+                icon: Icons.photo_library,
+                color: Colors.deepOrange,
+                title: 'Audit Report with Photos',
+                subtitle: 'Full attendance photos embedded',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reportOption(
+    BuildContext dialogCtx,
+    RunInstanceModel instance, {
+    required int reportType,
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+  }) {
+    return InkWell(
+      onTap: () {
+        Navigator.pop(dialogCtx);
+        _generateReport(instance, reportType);
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(8),
+          color: color.withOpacity(0.04),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Report $reportType – $title',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: color,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, color: Colors.black45),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: color.withOpacity(0.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateReport(RunInstanceModel instance, int reportType) async {
+    // Show progress
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text('Generating Report $reportType...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final pdf = switch (reportType) {
+        1 => await OBHSPdfReport.generateReport1(instance),
+        2 => await OBHSPdfReport.generateReport2(instance),
+        3 => await OBHSPdfReport.generateReport3(instance),
+        4 => await OBHSPdfReport.generateReport4(instance),
+        _ => await OBHSPdfReport.generateReport1(instance),
+      };
+
+      if (!mounted) return;
+      Navigator.pop(context); // close progress dialog
+
+      final reportNames = {
+        1: 'OBHS_Attendance_Evidence_Audit',
+        2: 'OBHS_Compliance_Audit',
+        3: 'OBHS_Worker_Activity_Audit',
+        4: 'OBHS_Attendance_Photos_Audit',
+      };
+      final fileName = '${reportNames[reportType]}_${instance.instanceId}.pdf';
+
+      await Printing.layoutPdf(
+        onLayout: (_) async => pdf,
+        name: fileName,
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // close progress if still open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate report: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: kErrorRed,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildCompactInfo({
