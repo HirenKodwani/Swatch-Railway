@@ -36,6 +36,8 @@ async function seedForms() {
           status: status,
           zone: commonZone,
           division: commonDivision,
+          submittedByZone: commonZone,
+          submittedByDivision: commonDivision,
           depot: 'CSMT',
           createdAt: new Date().toISOString(),
           contractorName: "Demo Contractor",
