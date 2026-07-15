@@ -10,6 +10,7 @@ import '../../../utills/app_colors.dart';
 import '../../../model/train_model.dart';
 import '../../../model/station_models.dart';
 import '../../../model/platform_model.dart';
+import '../../../repositories/platform_repository.dart';
 import '../widgets/approve_entity_dropdown.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -417,7 +418,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
               if (_selectedRole == 'Platform Master' && _selectedStationId != null && _selectedAreaId != null)
                 FutureBuilder<List<Platform>>(
-                  future: ApiService.getPlatformsByStation(_selectedStationId!),
+                  future: PlatformRepository.getByStation(_selectedStationId!),
                   builder: (ctx, snap) {
                     if (snap.connectionState != ConnectionState.done) return const Padding(
                       padding: EdgeInsets.only(bottom: 12),
