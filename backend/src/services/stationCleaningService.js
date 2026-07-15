@@ -1,8 +1,19 @@
 import { db, admin } from '../database/index.js';
-import { NotFoundError, ValidationError } from '../errors/index.js';
+import { NotFoundError, ValidationError, ForbiddenError } from '../errors/index.js';
 import { paginate } from '../utils/paginate.js';
 
 class StationCleaningService {
+
+  _verifyStationAccess(task, user) {
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'STATION_MASTER' || role === 'AREA_MASTER' || role === 'PLATFORM_MASTER') {
+      const userStationId = user?.stationId;
+      if (!userStationId) throw new ValidationError('No station assigned to your account');
+      if (task.stationId && task.stationId !== userStationId) {
+        throw new ForbiddenError('You can only access tasks in your assigned station');
+      }
+    }
+  }
 
   // ─── Station Areas ──────────────────────────────────────────────────────────
   async createStationArea(body) {
@@ -60,12 +71,14 @@ class StationCleaningService {
 
   // ─── Station Zones ──────────────────────────────────────────────────────────
   async createStationZone(body) {
-    const { stationId, zoneName } = body;
+    const { stationId } = body;
+    const zoneName = body.zoneName || body.name;
     if (!stationId || !zoneName) throw new ValidationError('stationId and zoneName are required');
     const ref = db.collection('stationZones').doc();
     const data = {
       uid: ref.id, stationId, areaId: body.areaId || null,
-      zoneName, zoneType: body.zoneType || 'Other',
+      zoneName, name: zoneName, zoneType: body.zoneType || 'Other',
+      description: body.description || '',
       status: 'active',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
@@ -78,21 +91,44 @@ class StationCleaningService {
     let q = db.collection('stationZones').where('stationId', '==', stationId).where('status', '==', 'active');
     if (areaId) q = q.where('areaId', '==', areaId);
     const snapshot = await q.get();
-    const zones = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const zones = snapshot.docs.map(d => {
+      const data = d.data();
+      const zName = data.zoneName || data.name || '';
+      return {
+        id: d.id,
+        uid: d.id,
+        ...data,
+        name: zName,
+        zoneName: zName
+      };
+    });
     return { count: zones.length, zones };
   }
 
   async getStationZone(uid) {
     const doc = await db.collection('stationZones').doc(uid).get();
     if (!doc.exists) throw new NotFoundError('Station zone not found');
-    return { id: doc.id, ...doc.data() };
+    const data = doc.data();
+    const zName = data.zoneName || data.name || '';
+    return {
+      id: doc.id,
+      uid: doc.id,
+      ...data,
+      name: zName,
+      zoneName: zName
+    };
   }
 
   async updateStationZone(uid, body) {
     const ref = db.collection('stationZones').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station zone not found');
+    const zoneName = body.zoneName || body.name;
     const updates = { ...body, updatedAt: new Date().toISOString() };
+    if (zoneName) {
+      updates.zoneName = zoneName;
+      updates.name = zoneName;
+    }
     delete updates.uid;
     await ref.update(updates);
     return { message: 'Station zone updated', uid };
@@ -325,8 +361,16 @@ class StationCleaningService {
   }
 
   // ─── Station Tasks ──────────────────────────────────────────────────────────
-  async submitStationTask(body) {
+  async submitStationTask(body, user) {
     const { stationId, areaId, workerId } = body;
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'STATION_MASTER' || role === 'AREA_MASTER' || role === 'PLATFORM_MASTER') {
+      const userStationId = user?.stationId;
+      if (!userStationId) throw new ValidationError('No station assigned to your account');
+      if (stationId && stationId !== userStationId) {
+        throw new ForbiddenError('You can only create tasks in your assigned station');
+      }
+    }
     const ref = db.collection('cleaningTasks').doc();
     const data = {
       uid: ref.id, stationId, areaId: areaId || null,
@@ -341,16 +385,19 @@ class StationCleaningService {
     return { message: 'Task created', uid: ref.id, data };
   }
 
-  async getStationTask(taskId) {
+  async getStationTask(taskId, user) {
     const doc = await db.collection('cleaningTasks').doc(taskId).get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
-    return { id: doc.id, ...doc.data() };
+    const task = doc.data();
+    this._verifyStationAccess(task, user);
+    return { id: doc.id, ...task };
   }
 
-  async updateStationTask(taskId, body) {
+  async updateStationTask(taskId, body, user) {
     const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
+    this._verifyStationAccess(doc.data(), user);
     await ref.update({ ...body, updatedAt: new Date().toISOString() });
     return { message: 'Station task updated', taskId };
   }
@@ -363,12 +410,14 @@ class StationCleaningService {
     return { message: 'Station task deleted', taskId };
   }
 
-  async listPendingStationTasks(runInstanceId) {
+  async listPendingStationTasks(runInstanceId, user) {
     const pendingStatuses = ['completed', 'submitted', 'resubmitted'];
     let allTasks = [];
+    const userStationId = user?.stationId || null;
     for (const status of pendingStatuses) {
       let q = db.collection('cleaningTasks').where('status', '==', status).limit(200);
       if (runInstanceId) q = q.where('runInstanceId', '==', runInstanceId);
+      if (userStationId) q = q.where('stationId', '==', userStationId);
       const snapshot = await q.get();
       snapshot.forEach(d => allTasks.push({ id: d.id, ...d.data() }));
     }
@@ -382,6 +431,7 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
     if (task.status !== 'pending') throw new ValidationError('Only pending tasks can be started');
+    this._verifyStationAccess(task, user);
     await ref.update({
       status: 'started',
       startedBy: user?.uid || null,
@@ -397,6 +447,7 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
     if (task.status !== 'started') throw new ValidationError('Only started tasks can be completed');
+    this._verifyStationAccess(task, user);
     await ref.update({
       status: 'completed',
       afterPhoto: body.afterPhoto || task.afterPhoto || null,
@@ -414,6 +465,7 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
     if (task.status !== 'completed') throw new ValidationError('Only completed tasks can be submitted for review');
+    this._verifyStationAccess(task, user);
     await ref.update({
       status: 'submitted',
       submittedBy: user?.uid || null,
@@ -429,15 +481,20 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
     if (task.status !== 'submitted') throw new ValidationError('Only submitted tasks can be approved');
+    this._verifyStationAccess(task, user);
+    const score = body.score != null ? Math.min(10, Math.max(1, Number(body.score))) : null;
     await ref.update({
       status: 'approved',
       supervisorNotes: body.supervisorNotes || body.notes || '',
+      supervisorScore: score,
+      scoredAt: score != null ? new Date().toISOString() : null,
+      scoredBy: score != null ? (user?.uid || null) : null,
       approvedBy: user?.uid || null,
       approvedByName: user?.fullName || null,
       approvedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
-    return { message: 'Task approved', taskId };
+    return { message: 'Task approved', taskId, score };
   }
 
   async rejectTask(taskId, body, user) {
@@ -446,6 +503,7 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
     if (task.status !== 'submitted') throw new ValidationError('Only submitted tasks can be rejected');
+    this._verifyStationAccess(task, user);
     const reason = body.reason || body.rejectionReason || 'No reason provided';
     await ref.update({
       status: 'rejected',
@@ -464,6 +522,7 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
     if (task.status !== 'rejected') throw new ValidationError('Only rejected tasks can be resubmitted');
+    this._verifyStationAccess(task, user);
     await ref.update({
       status: 'pending',
       afterPhoto: body.afterPhoto || task.afterPhoto || null,

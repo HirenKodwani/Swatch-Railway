@@ -67,6 +67,7 @@ class _StationZonesScreenState extends State<StationZonesScreen> {
               final data = {
                 'stationId': widget.stationId,
                 'name': nameCtrl.text,
+                'zoneName': nameCtrl.text,
                 'areaId': areaIdCtrl.text,
                 'description': descCtrl.text,
               };
@@ -138,7 +139,7 @@ class _StationZonesScreenState extends State<StationZonesScreen> {
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             child: ListTile(
-                              title: Text(z['name'] ?? 'Unnamed'),
+                              title: Text(z['name'] ?? z['zoneName'] ?? 'Unnamed'),
                               subtitle: Text('Area: ${z['areaId'] ?? '-'}'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,

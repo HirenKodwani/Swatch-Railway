@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../utills/app_colors.dart';
+import '../../../model/station_models.dart';
+import '../../../model/platform_model.dart';
 import '../widgets/approve_entity_dropdown.dart';
 
 
@@ -35,6 +37,10 @@ class _UserEditScreenState extends State<UserEditScreen> {
   List<String> zones = [];
   List<String> divisions = [];
   List<String> depots = [];
+
+  String? _selectedStationId;
+  String? _selectedAreaId;
+  String? _selectedPlatformId;
 
   bool _isLoading = false;
 
@@ -181,6 +187,128 @@ class _UserEditScreenState extends State<UserEditScreen> {
                     setState(() {
                       _selectedCompany = name;
                     });
+                  },
+                ),
+
+              if (_selectedRole == 'Station Master' || _selectedRole == 'Area Master' || _selectedRole == 'Platform Master')
+                FutureBuilder<List<Station>>(
+                  future: ApiService.getStations(),
+                  builder: (ctx, snap) {
+                    if (snap.connectionState != ConnectionState.done) return const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                    if (snap.hasError) return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text('Error loading stations', style: TextStyle(color: Colors.red)),
+                    );
+                    final stations = snap.data ?? [];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedStationId,
+                        decoration: const InputDecoration(labelText: 'Station *', border: OutlineInputBorder()),
+                        items: stations.map((s) => DropdownMenuItem(value: s.uid, child: Text(s.stationName))).toList(),
+                        validator: (v) => v == null ? 'Select station' : null,
+                        onChanged: (v) => setState(() {
+                          _selectedStationId = v;
+                          _selectedAreaId = null;
+                          _selectedPlatformId = null;
+                          if (v != null) {
+                            final selectedStn = stations.firstWhere(
+                              (s) => s.uid == v,
+                              orElse: () => Station(stationCode: '', stationName: '', zone: '', division: ''),
+                            );
+                            if (selectedStn.zone.isNotEmpty) {
+                              String? matchedZone;
+                              for (final zKey in zones) {
+                                if (zKey.toLowerCase() == selectedStn.zone.toLowerCase() ||
+                                    zKey.toLowerCase().contains(selectedStn.zone.toLowerCase()) ||
+                                    selectedStn.zone.toLowerCase().contains(zKey.toLowerCase())) {
+                                  matchedZone = zKey;
+                                  break;
+                                }
+                              }
+                              if (matchedZone != null) {
+                                _zone = matchedZone;
+                                divisions = DepotDatabase.zoneData[_zone]?.keys.toList() ?? [];
+                                String? matchedDiv;
+                                for (final dKey in divisions) {
+                                  if (dKey.toLowerCase() == selectedStn.division.toLowerCase() ||
+                                      dKey.toLowerCase().contains(selectedStn.division.toLowerCase()) ||
+                                      selectedStn.division.toLowerCase().contains(dKey.toLowerCase())) {
+                                    matchedDiv = dKey;
+                                    break;
+                                  }
+                                }
+                                if (matchedDiv != null) {
+                                  _division = matchedDiv;
+                                  depots = DepotDatabase.zoneData[_zone]?[_division] ?? [];
+                                } else {
+                                  _division = null;
+                                  depots = [];
+                                }
+                              }
+                            }
+                          }
+                        }),
+                      ),
+                    );
+                  },
+                ),
+
+              if ((_selectedRole == 'Area Master' || _selectedRole == 'Platform Master') && _selectedStationId != null)
+                FutureBuilder<List<StationArea>>(
+                  future: ApiService.getStationAreas(_selectedStationId!),
+                  builder: (ctx, snap) {
+                    if (snap.connectionState != ConnectionState.done) return const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                    if (snap.hasError) return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text('Error loading areas', style: TextStyle(color: Colors.red)),
+                    );
+                    final areas = snap.data ?? [];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedAreaId,
+                        decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
+                        items: areas.map((a) => DropdownMenuItem(value: a.uid, child: Text(a.name))).toList(),
+                        validator: (v) => v == null ? 'Select area' : null,
+                        onChanged: (v) => setState(() {
+                          _selectedAreaId = v;
+                          _selectedPlatformId = null;
+                        }),
+                      ),
+                    );
+                  },
+                ),
+
+              if (_selectedRole == 'Platform Master' && _selectedStationId != null && _selectedAreaId != null)
+                FutureBuilder<List<Platform>>(
+                  future: ApiService.getPlatformsByStation(_selectedStationId!),
+                  builder: (ctx, snap) {
+                    if (snap.connectionState != ConnectionState.done) return const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                    if (snap.hasError) return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text('Error loading platforms', style: TextStyle(color: Colors.red)),
+                    );
+                    final platforms = snap.data ?? [];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedPlatformId,
+                        decoration: const InputDecoration(labelText: 'Platform *', border: OutlineInputBorder()),
+                        items: platforms.map((p) => DropdownMenuItem(value: p.uid ?? p.platformNumber, child: Text(p.displayName))).toList(),
+                        validator: (v) => v == null ? 'Select platform' : null,
+                        onChanged: (v) => setState(() => _selectedPlatformId = v),
+                      ),
+                    );
                   },
                 ),
 
@@ -363,7 +491,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
   List<String> _getRolesForUserType(String userType) {
     if (userType == 'railway') {
-      return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker'];
+      return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker', 'Station Master', 'Area Master', 'Platform Master'];
     } else {
       return ['Contractor Master', 'Contractor Admin', 'Contractor Supervisor', 'Contractor Worker'];
     }
@@ -397,6 +525,9 @@ class _UserEditScreenState extends State<UserEditScreen> {
         entityId: _selectedCompany?.trim().isEmpty ?? true ? null : _selectedCompany?.trim(),
         editedById: currentUser?.uid ?? '',
         status: 'PENDING',
+        stationId: _selectedStationId,
+        areaId: _selectedAreaId,
+        platformId: _selectedPlatformId,
       );
 
       setState(() => _isLoading = false);
