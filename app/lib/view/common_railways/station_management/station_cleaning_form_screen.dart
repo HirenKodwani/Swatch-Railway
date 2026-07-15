@@ -333,16 +333,22 @@ class _StationCleaningFormScreenState extends State<StationCleaningFormScreen> {
                   ),
                   if (isLoadingAreas) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
                   const SizedBox(height: 14),
-                  DropdownButtonFormField<StationZone>(
-                    value: selectedZone,
-                    decoration: const InputDecoration(
-                      labelText: 'Select Zone',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.map),
+                  if (selectedArea != null && zones.isEmpty && !isLoadingZones)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text('No zones configured for this area (Optional)', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                    )
+                  else
+                    DropdownButtonFormField<StationZone>(
+                      value: selectedZone,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Zone (Optional)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.map),
+                      ),
+                      items: zones.map((z) => DropdownMenuItem(value: z, child: Text(z.name))).toList(),
+                      onChanged: isLoadingZones || zones.isEmpty ? null : (v) { setState(() { selectedZone = v; }); },
                     ),
-                    items: zones.map((z) => DropdownMenuItem(value: z, child: Text(z.name))).toList(),
-                    onChanged: isLoadingZones ? null : (v) { setState(() { selectedZone = v; }); },
-                  ),
                   if (isLoadingZones) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
                 ],
               ),
