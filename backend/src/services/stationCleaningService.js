@@ -327,7 +327,7 @@ class StationCleaningService {
   // ─── Station Tasks ──────────────────────────────────────────────────────────
   async submitStationTask(body) {
     const { stationId, areaId, workerId } = body;
-    const ref = db.collection('stationTasks').doc();
+    const ref = db.collection('cleaningTasks').doc();
     const data = {
       uid: ref.id, stationId, areaId: areaId || null,
       workerId: workerId || null,
@@ -342,13 +342,13 @@ class StationCleaningService {
   }
 
   async getStationTask(taskId) {
-    const doc = await db.collection('stationTasks').doc(taskId).get();
+    const doc = await db.collection('cleaningTasks').doc(taskId).get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     return { id: doc.id, ...doc.data() };
   }
 
   async updateStationTask(taskId, body) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     await ref.update({ ...body, updatedAt: new Date().toISOString() });
@@ -356,7 +356,7 @@ class StationCleaningService {
   }
 
   async deleteStationTask(taskId) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     await ref.delete();
@@ -367,7 +367,7 @@ class StationCleaningService {
     const pendingStatuses = ['completed', 'submitted', 'resubmitted'];
     let allTasks = [];
     for (const status of pendingStatuses) {
-      let q = db.collection('stationTasks').where('status', '==', status).limit(200);
+      let q = db.collection('cleaningTasks').where('status', '==', status).limit(200);
       if (runInstanceId) q = q.where('runInstanceId', '==', runInstanceId);
       const snapshot = await q.get();
       snapshot.forEach(d => allTasks.push({ id: d.id, ...d.data() }));
@@ -377,7 +377,7 @@ class StationCleaningService {
 
   // ─── Task State Machine (Full Lifecycle) ─────────────────────────────────
   async startTask(taskId, user) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
@@ -392,7 +392,7 @@ class StationCleaningService {
   }
 
   async completeTask(taskId, body, user) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
@@ -409,7 +409,7 @@ class StationCleaningService {
   }
 
   async submitTaskForReview(taskId, user) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
@@ -424,7 +424,7 @@ class StationCleaningService {
   }
 
   async approveTask(taskId, body, user) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
@@ -441,7 +441,7 @@ class StationCleaningService {
   }
 
   async rejectTask(taskId, body, user) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
@@ -459,7 +459,7 @@ class StationCleaningService {
   }
 
   async resubmitTask(taskId, body, user) {
-    const ref = db.collection('stationTasks').doc(taskId);
+    const ref = db.collection('cleaningTasks').doc(taskId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station task not found');
     const task = doc.data();
