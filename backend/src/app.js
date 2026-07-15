@@ -6,6 +6,7 @@ import swaggerUi from 'swagger-ui-express';
 
 import authRoutes from './routes/auth.js';
 import passengerRoutes from './routes/passenger.js';
+import passengerServiceRequestRoutes from './routes/passengerServiceRequest.js';
 import usersRoutes from './routes/users.js';
 import entitiesRoutes from './routes/entities.js';
 import contractsRoutes from './routes/contracts.js';
@@ -141,6 +142,7 @@ app.use(pestControlRoutes);                         // /api/pest-control/*
 
 // Relative-path routes mounted with base prefixes
 app.use('/api/passenger', passengerRoutes);       // /api/passenger/*
+app.use(passengerServiceRequestRoutes);                        // /api/passenger-service-requests/*
 app.use('/api/public/passenger', passengerRoutes); // Hack for legacy public endpoint
 app.use('/api/run-instances', runInstancesRoutes); // Legacy
 app.use('/api/runInstances', runInstancesRoutes);

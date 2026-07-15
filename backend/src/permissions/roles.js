@@ -223,7 +223,13 @@ export const PERMISSIONS = Object.freeze({
   // Admin
   VIEW_ANALYTICS: 'view_analytics',
   MANAGE_SYSTEM: 'manage_system',
-  VIEW_SYSTEM: 'view_system'
+  VIEW_SYSTEM: 'view_system',
+
+  // Passenger Service Request
+  MANAGE_PASSENGER_REQUESTS: 'manage_passenger_requests',
+  VIEW_PASSENGER_REQUESTS: 'view_passenger_requests',
+  CREATE_PASSENGER_REQUEST: 'create_passenger_request',
+  VIEW_PASSENGER_REQUEST_ANALYTICS: 'view_passenger_request_analytics'
 });
 
 export const ROLE_PERMISSIONS = Object.freeze({
