@@ -604,10 +604,7 @@ class PDFReportService {
             ]);
           }
           
-          widgets.add(_buildSignatures(
-            supervisorSignatureBase64: task['supervisorSignatureBase64'] ?? task['submittedBySignatureBase64'],
-            officialSignatureBase64: task['officialSignatureBase64'] ?? task['approvedBySignatureBase64'],
-          ));
+          widgets.add(_buildSignatures());
           widgets.add(_buildDigitalFooter(timestamp));
           
           return widgets;
@@ -1022,10 +1019,7 @@ class PDFReportService {
               ],
             ),
 
-            _buildSignatures(
-              supervisorSignatureBase64: form['supervisorSignatureBase64'] ?? form['submittedBySignatureBase64'],
-              officialSignatureBase64: form['officialSignatureBase64'] ?? form['approvedBySignatureBase64'],
-            ),
+            _buildSignatures(),
           ];
         },
       ),
@@ -1118,8 +1112,8 @@ class PDFReportService {
               ],
             ),
             _buildSignatures(
-              supervisorSignatureBase64: form['supervisorSignatureBase64'] ?? form['submittedBySignatureBase64'],
-              officialSignatureBase64: form['officialSignatureBase64'] ?? form['approvedBySignatureBase64'],
+              supervisorSignatureBase64: bill['supervisorSignatureBase64'] ?? bill['submittedBySignatureBase64'],
+              officialSignatureBase64: bill['officialSignatureBase64'] ?? bill['approvedBySignatureBase64'],
             ),
           ];
         },
