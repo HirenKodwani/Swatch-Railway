@@ -339,7 +339,7 @@ class PDFReportService {
 
             ...complaints.expand((c) {
               final runId = c['runInstanceId'] ?? 'N/A';
-              final run = runs.firstWhere((r) => r['runInstanceId'] == runId || r['instanceId'] == runId, orElse: () => {});
+              final run = runs.firstWhere((r) => r['runInstanceId'] == runId || r['instanceId'] == runId, orElse: () => <String, dynamic>{});
               
               return [
                 pw.SizedBox(height: 20),
