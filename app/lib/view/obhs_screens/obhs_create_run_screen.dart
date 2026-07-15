@@ -12,7 +12,9 @@ class CoachData {
   int? position;
   String? type;
   String? assignedJanitorId;
-  String? assignedWorkerName;
+  String? assignedJanitorName;
+  String? assignedAttendantId;
+  String? assignedAttendantName;
 
   CoachData({
     required this.coachNumber,
@@ -20,8 +22,12 @@ class CoachData {
     this.position,
     this.type,
     this.assignedJanitorId,
-    this.assignedWorkerName,
+    this.assignedJanitorName,
+    this.assignedAttendantId,
+    this.assignedAttendantName,
   });
+  
+  bool get isAC => type != null && (type!.toUpperCase().contains('AC') || type!.toUpperCase().contains('A1') || type!.toUpperCase().contains('A2') || type!.toUpperCase().contains('A3') || type!.toUpperCase().contains('B1') || type!.toUpperCase().contains('CC'));
 }
 
 class OBHSCreateInstanceScreen extends StatefulWidget {
@@ -125,7 +131,9 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
           position: coach.coachPosition,
           type: coach.coachType,
           assignedJanitorId: coach.janitorId,
-          assignedWorkerName: coach.janitorName ?? coach.attendantName,
+          assignedJanitorName: coach.janitorName,
+          assignedAttendantId: coach.attendantId,
+          assignedAttendantName: coach.attendantName,
         );
       }).toList();
     });
@@ -242,9 +250,14 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
   }
 
   bool isCoachComplete(CoachData coach) {
-    return coach.position != null &&
-        coach.type != null &&
-        coach.assignedJanitorId != null;
+    if (coach.type == null || coach.position == null) return false;
+    
+    // For AC coaches, both janitor and attendant are required
+    if (coach.isAC) {
+      return coach.assignedJanitorId != null && coach.assignedAttendantId != null;
+    }
+    // For non-AC coaches, only janitor is required
+    return coach.assignedJanitorId != null;
   }
 
   bool allCoachesComplete() {
@@ -292,14 +305,14 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
 
     try {
       final apiCoaches = coaches.map((coach) {
-        bool isAC = coach.type != null && coach.type!.toUpperCase().contains('AC');
+        bool isAC = coach.isAC;
         return CoachAssignment(
           coachPosition: coach.position!,
           coachType: coach.type!,
-          janitorId: isAC ? null : coach.assignedJanitorId,
-          janitorName: isAC ? null : coach.assignedWorkerName,
-          attendantId: isAC ? coach.assignedJanitorId : null,
-          attendantName: isAC ? coach.assignedWorkerName : null,
+          janitorId: isAC ? coach.assignedJanitorId : coach.assignedJanitorId,
+          janitorName: isAC ? coach.assignedJanitorName : coach.assignedJanitorName,
+          attendantId: isAC ? coach.assignedAttendantId : null,
+          attendantName: isAC ? coach.assignedAttendantName : null,
         );
       }).toList();
 
@@ -1278,6 +1291,130 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
   }
 
   Widget _buildCompactWorkerDropdown(CoachData coach) {
+    if (coach.isAC) {
+      // AC Coach: Two side-by-side dropdowns for Janitor and Attendant
+      return Row(
+        children: [
+          // Janitor Dropdown
+          Expanded(
+            flex: 1,
+            child: _buildRoleDropdown(
+              coach,
+              label: 'Janitor',
+              role: 'Janitor',
+              value: coach.assignedJanitorId,
+              onChanged: (v) {
+                setState(() {
+                  coach.assignedJanitorId = v;
+                  if (v != null) {
+                    final worker = allWorkers.firstWhere((w) => w.uid == v);
+                    coach.assignedJanitorName = worker.fullName;
+                  } else {
+                    coach.assignedJanitorName = null;
+                  }
+                });
+              },
+              isJanitor: true,
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Attendant Dropdown
+          Expanded(
+            flex: 1,
+            child: _buildRoleDropdown(
+              coach,
+              label: 'Attendant',
+              role: 'Attendant',
+              value: coach.assignedAttendantId,
+              onChanged: (v) {
+                setState(() {
+                  coach.assignedAttendantId = v;
+                  if (v != null) {
+                    final worker = allWorkers.firstWhere((w) => w.uid == v);
+                    coach.assignedAttendantName = worker.fullName;
+                  } else {
+                    coach.assignedAttendantName = null;
+                  }
+                });
+              },
+              isJanitor: false,
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Non-AC Coach: Single dropdown for Janitor only
+      return _buildRoleDropdown(
+        coach,
+        label: 'Janitor',
+        role: 'Janitor',
+        value: coach.assignedJanitorId,
+        onChanged: (v) {
+          setState(() {
+            coach.assignedJanitorId = v;
+            if (v != null) {
+              final worker = allWorkers.firstWhere((w) => w.uid == v);
+              coach.assignedJanitorName = worker.fullName;
+            } else {
+              coach.assignedJanitorName = null;
+            }
+          });
+        },
+        isJanitor: true,
+      );
+    }
+  }
+
+  Widget _buildRoleDropdown(CoachData coach, {
+    required String label,
+    required String role,
+    required String? value,
+    required ValueChanged<String?> onChanged,
+    required bool isJanitor,
+  }) {
+    final workers = allWorkers.where((w) => w.workerType == role).toList();
+    
+    // Filter out already assigned workers based on role
+    final assignedIds = <String>{};
+    for (final c in coaches) {
+      if (isJanitor) {
+        if (c.assignedJanitorId != null && c.assignedJanitorId != value) {
+          assignedIds.add(c.assignedJanitorId!);
+        }
+      } else {
+        if (c.assignedAttendantId != null && c.assignedAttendantId != value) {
+          assignedIds.add(c.assignedAttendantId!);
+        }
+      }
+    }
+    
+    // For janitors, filter out those assigned to 3+ coaches
+    final availableWorkers = workers.where((w) {
+      // For attendants: block if already assigned to another coach
+      if (!isJanitor && assignedIds.contains(w.uid)) return false;
+      
+      if (isJanitor) {
+        // Count how many coaches this janitor is already assigned to
+        int count = 0;
+        for (final c in coaches) {
+          if (c.assignedJanitorId == w.uid) count++;
+        }
+        if (count >= 3) return false; // Janitor max 3 coaches
+      } else {
+        // Attendant can only be assigned to 1 coach
+        if (assignedIds.contains(w.uid)) return false;
+      }
+      return true;
+    }).toList();
+
+    // Ensure current value is in the list (for edit mode)
+    if (value != null && !availableWorkers.any((w) => w.uid == value)) {
+      final existingWorker = allWorkers.firstWhere((w) => w.uid == value);
+      if (existingWorker != null) {
+        availableWorkers.insert(0, existingWorker);
+      }
+    }
+
     return Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1288,9 +1425,9 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: coach.assignedJanitorId,
-          hint: Text('Worker', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-          items: filteredWorkers
+          value: value,
+          hint: Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+          items: availableWorkers
               .map((w) => DropdownMenuItem(
             value: w.uid,
             child: Text(
@@ -1300,13 +1437,7 @@ class _OBHSCreateInstanceScreenState extends State<OBHSCreateInstanceScreen> {
             ),
           ))
               .toList(),
-          onChanged: (v) {
-            setState(() {
-              coach.assignedJanitorId = v;
-              coach.assignedWorkerName =
-                  allWorkers.firstWhere((w) => w.uid == v).fullName;
-            });
-          },
+          onChanged: onChanged,
           isExpanded: true,
           icon: Icon(Icons.arrow_drop_down, size: 16, color: kRailwayBlue),
           isDense: true,
