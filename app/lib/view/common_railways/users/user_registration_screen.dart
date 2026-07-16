@@ -393,36 +393,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                   },
                 ),
 
-              if ((_selectedRole == 'Area Master' || _selectedRole == 'Platform Master') && _selectedStationId != null)
-                FutureBuilder<List<StationArea>>(
-                  future: ApiService.getStationAreas(_selectedStationId!),
-                  builder: (ctx, snap) {
-                    if (snap.connectionState != ConnectionState.done) return const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                    if (snap.hasError) return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text('Error loading areas', style: TextStyle(color: Colors.red)),
-                    );
-                    final areas = snap.data ?? [];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedAreaId,
-                        decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
-                        items: areas.map((a) => DropdownMenuItem(value: a.uid, child: Text(a.name))).toList(),
-                        validator: (v) => v == null ? 'Select area' : null,
-                        onChanged: (v) => setState(() {
-                          _selectedAreaId = v;
-                          _selectedPlatformId = null;
-                        }),
-                      ),
-                    );
-                  },
-                ),
-
-              if (_selectedRole == 'Platform Master' && _selectedStationId != null && _selectedAreaId != null)
+              if ((_selectedRole == 'Platform Master' || _selectedRole == 'Area Master') && _selectedStationId != null)
                 FutureBuilder<List<Platform>>(
                   future: PlatformRepository.getByStation(_selectedStationId!),
                   builder: (ctx, snap) {
@@ -440,9 +411,12 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       child: DropdownButtonFormField<String>(
                         value: _selectedPlatformId,
                         decoration: const InputDecoration(labelText: 'Platform *', border: OutlineInputBorder()),
-                        items: platforms.map((p) => DropdownMenuItem(value: p.uid ?? p.platformNumber, child: Text(p.displayName))).toList(),
+                        items: platforms.map((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))).toList(),
                         validator: (v) => v == null ? 'Select platform' : null,
-                        onChanged: (v) => setState(() => _selectedPlatformId = v),
+                        onChanged: (v) => setState(() {
+                          _selectedPlatformId = v;
+                          _selectedAreaId = v; // Stored in areaId for DB consistency
+                        }),
                       ),
                     );
                   },
