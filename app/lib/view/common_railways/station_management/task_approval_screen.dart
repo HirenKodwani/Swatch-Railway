@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:crm_train/model/area_cleaning_models.dart';
 import 'package:crm_train/repositories/base_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
@@ -13,7 +12,7 @@ class TaskApprovalScreen extends StatefulWidget {
 }
 
 class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
-  List<CleaningTask> _pendingTasks = [];
+  List<Map<String, dynamic>> _pendingRuns = [];
   bool _isLoading = true;
   String? _error;
 
@@ -28,11 +27,13 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
     try {
       final result = await BaseRepository.apiCall(
         method: 'GET',
-        path: '/api/station-tasks/pending-review',
+        path: '/api/station-runs',
+        // Fetch completed runs that need approval
+        queryParams: {'status': 'completed'},
         parser: (d) => d,
       );
-      final raw = result['tasks'] as List? ?? [];
-      _pendingTasks = raw.map((t) => CleaningTask.fromJson(t as Map<String, dynamic>)).toList();
+      final raw = result['runs'] ?? result['data'] as List? ?? [];
+      _pendingRuns = List<Map<String, dynamic>>.from(raw);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -40,12 +41,12 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
     }
   }
 
-  Future<void> _approveTask(CleaningTask task) async {
+  Future<void> _approveRun(Map<String, dynamic> run) async {
     final notesCtrl = TextEditingController();
     final notes = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Approve Task'),
+        title: const Text('Approve Station Run'),
         content: TextField(
           controller: notesCtrl,
           decoration: const InputDecoration(labelText: 'Supervisor Notes (optional)', border: OutlineInputBorder()),
@@ -65,13 +66,13 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
     try {
       await BaseRepository.apiCall(
         method: 'PUT',
-        path: '/api/station-tasks/${task.uid}',
+        path: '/api/station-runs/${run['uid'] ?? run['id']}',
         body: {'status': 'approved', 'supervisorNotes': notes.isNotEmpty ? notes : 'Approved'},
         parser: (d) => d,
       );
       _loadPending();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task approved'), backgroundColor: kSuccessGreen));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Station Run approved'), backgroundColor: kSuccessGreen));
       }
     } catch (e) {
       if (mounted) {
@@ -80,7 +81,7 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
     }
   }
 
-  Future<void> _rejectTask(CleaningTask task) async {
+  Future<void> _rejectRun(Map<String, dynamic> run) async {
     final reasonCtrl = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
@@ -108,13 +109,13 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
     try {
       await BaseRepository.apiCall(
         method: 'PUT',
-        path: '/api/station-tasks/${task.uid}',
+        path: '/api/station-runs/${run['uid'] ?? run['id']}',
         body: {'status': 'rejected', 'rejectionReason': reason},
         parser: (d) => d,
       );
       _loadPending();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task rejected'), backgroundColor: kWarningOrange));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Station Run rejected'), backgroundColor: kWarningOrange));
       }
     } catch (e) {
       if (mounted) {
@@ -128,7 +129,7 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Task Approval', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Station Run Approval', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -145,14 +146,14 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
                     ],
                   ),
                 )
-              : _pendingTasks.isEmpty
+              : _pendingRuns.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.task_alt, size: 80, color: Colors.grey[300]),
                           const SizedBox(height: 16),
-                          const Text('No pending tasks', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                          const Text('No pending Station Runs', style: TextStyle(color: Colors.grey, fontSize: 16)),
                         ],
                       ),
                     )
@@ -160,9 +161,13 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
                       onRefresh: _loadPending,
                       child: ListView.builder(
                         padding: const EdgeInsets.all(12),
-                        itemCount: _pendingTasks.length,
+                        itemCount: _pendingRuns.length,
                         itemBuilder: (context, index) {
-                          final t = _pendingTasks[index];
+                          final run = _pendingRuns[index];
+                          final stationName = run['stationName'] ?? 'Station';
+                          final shift = run['shiftType'] ?? run['shift'] ?? '';
+                          final date = run['date'] ?? '';
+                          
                           return Card(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             margin: const EdgeInsets.only(bottom: 10),
@@ -176,69 +181,36 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen> {
                                       Container(
                                         padding: const EdgeInsets.all(6),
                                         decoration: BoxDecoration(color: kRailwayBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                                        child: const Icon(Icons.task, color: kRailwayBlue, size: 18),
+                                        child: const Icon(Icons.business, color: kRailwayBlue, size: 18),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(t.activityType ?? 'Task', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                            Text('${t.areaName} | ${t.scheduledDate}', style: const TextStyle(fontSize: 11, color: kTextSecondary)),
+                                            Text('$stationName ($shift)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            Text(date, style: const TextStyle(fontSize: 11, color: kTextSecondary)),
                                           ],
                                         ),
                                       ),
                                     ],
                                   ),
-                                  if (t.workerName != null) ...[
-                                    const SizedBox(height: 8),
-                                    Row(children: [
-                                      const Icon(Icons.person, size: 14, color: kTextSecondary),
-                                      const SizedBox(width: 4),
-                                      Text(t.workerName!, style: const TextStyle(fontSize: 12)),
-                                    ]),
-                                  ],
                                   const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      if (t.beforePhoto != null)
-                                        Expanded(
-                                          child: Column(children: [
-                                            Container(height: 80, decoration: BoxDecoration(
-                                              color: Colors.grey[200], borderRadius: BorderRadius.circular(8),
-                                              image: DecorationImage(image: NetworkImage(t.beforePhoto!), fit: BoxFit.cover),
-                                            )),
-                                            const Text('Before', style: TextStyle(fontSize: 9, color: kTextSecondary)),
-                                          ]),
-                                        ),
-                                      if (t.beforePhoto != null && t.afterPhoto != null) const SizedBox(width: 8),
-                                      if (t.afterPhoto != null)
-                                        Expanded(
-                                          child: Column(children: [
-                                            Container(height: 80, decoration: BoxDecoration(
-                                              color: Colors.grey[200], borderRadius: BorderRadius.circular(8),
-                                              image: DecorationImage(image: NetworkImage(t.afterPhoto!), fit: BoxFit.cover),
-                                            )),
-                                            const Text('After', style: TextStyle(fontSize: 9, color: kTextSecondary)),
-                                          ]),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
-                                      OutlinedButton.icon(
-                                        icon: const Icon(Icons.close, size: 18),
-                                        label: const Text('Reject'),
-                                        onPressed: () => _rejectTask(t),
-                                        style: OutlinedButton.styleFrom(foregroundColor: kErrorRed),
+                                      TextButton.icon(
+                                        onPressed: () => _rejectRun(run),
+                                        icon: const Icon(Icons.close, color: kErrorRed, size: 18),
+                                        label: const Text('Reject', style: TextStyle(color: kErrorRed)),
                                       ),
                                       const SizedBox(width: 8),
                                       ElevatedButton.icon(
+                                        onPressed: () => _approveRun(run),
                                         icon: const Icon(Icons.check, size: 18),
                                         label: const Text('Approve'),
-                                        onPressed: () => _approveTask(t),
                                         style: ElevatedButton.styleFrom(backgroundColor: kSuccessGreen, foregroundColor: Colors.white),
                                       ),
                                     ],

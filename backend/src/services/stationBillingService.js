@@ -28,7 +28,7 @@ class StationBillingService {
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${year}-${monthPad}-${String(lastDay).padStart(2, '0')}`;
 
-    const [attendanceSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap] = await Promise.all([
+    const [attendanceSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap, stationRunSnap] = await Promise.all([
       db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
       db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
       db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
@@ -37,6 +37,7 @@ class StationBillingService {
       db.collection('inspections').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
       db.collection('machines').where('stationId', '==', stationId).get(),
       db.collection('machine_downtime').where('stationId', '==', stationId).where('startTime', '>=', startDate).where('startTime', '<=', endDate + 'T23:59:59').get(),
+      db.collection('stationRuns').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
     ]);
 
     const attendanceRecords = []; attendanceSnap.forEach(d => attendanceRecords.push(d.data()));
@@ -74,9 +75,10 @@ class StationBillingService {
 
     const billingRuleSnap = await db.collection('billingRules').where('contractId', '==', contractId).limit(1).get();
     let penalties = { totalPenaltyAmount: 0, deductions: [] };
+    const monthlyBase = (contractData.contractValue || 0) / 12;
+    
     if (!billingRuleSnap.empty) {
       const rules = billingRuleSnap.docs[0].data();
-      const monthlyBase = (contractData.contractValue || 0) / 12;
       if (attendanceSummary.attendancePercentage < 90 && rules.attendancePenaltyRate) {
         const amt = Math.round(((90 - attendanceSummary.attendancePercentage) / 100) * monthlyBase * (rules.attendancePenaltyRate || 0.01));
         penalties.deductions.push({ reason: 'Attendance Shortfall', percentage: 90 - attendanceSummary.attendancePercentage, amount: amt });
@@ -88,10 +90,28 @@ class StationBillingService {
         penalties.totalPenaltyAmount += amt;
       }
     }
+    
     if (machineDowntimeSummary.totalPenalty > 0) {
       penalties.deductions.push({ reason: 'Machine Downtime Penalty', percentage: 0, amount: machineDowntimeSummary.totalPenalty });
       penalties.totalPenaltyAmount += machineDowntimeSummary.totalPenalty;
     }
+    
+    // 20% Supervisor Approval Deduction
+    const stationRuns = []; 
+    if (stationRunSnap) stationRunSnap.forEach(d => stationRuns.push(d.data()));
+    
+    const unapprovedRuns = stationRuns.filter(r => r.status !== 'approved');
+    if (stationRuns.length > 0 && unapprovedRuns.length > 0) {
+      const unapprovedRatio = unapprovedRuns.length / stationRuns.length;
+      // 20% of the monthly base is subject to approval
+      const approvalSubjectAmount = monthlyBase * 0.20;
+      const approvalPenalty = Math.round(approvalSubjectAmount * unapprovedRatio);
+      if (approvalPenalty > 0) {
+        penalties.deductions.push({ reason: 'Unapproved Station Runs (20% conditional billing)', percentage: Math.round(unapprovedRatio * 100), amount: approvalPenalty });
+        penalties.totalPenaltyAmount += approvalPenalty;
+      }
+    }
+
     const machines = []; machineSnap.forEach(d => machines.push(d.data()));
     const inMaintenanceCount = machines.filter(m => m.workingStatus === 'under_maintenance' || m.workingStatus === 'broken').length;
     const billableAmount = Math.max(0, (contractData.contractValue / 12) - penalties.totalPenaltyAmount);

@@ -732,10 +732,11 @@ class UserService {
     if (isMaster) {
       if (zone) {
         query = query.where('zone', '==', zone);
-        console.log(`(GetSupervisors) Master access: Fetching entire Zone ${zone}`);
-      } else {
-        console.log('(GetSupervisors) Master access: No zone set, fetching all supervisors');
       }
+      if (division) {
+        query = query.where('division', '==', division);
+      }
+      console.log(`(GetSupervisors) Master access: Fetching zone=${zone || 'ALL'} division=${division || 'ALL'}`);
     } else {
       if (!zone) {
         throw new ValidationError("Your user profile is missing Zone.");

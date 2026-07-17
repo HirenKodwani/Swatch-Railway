@@ -316,6 +316,7 @@ class StationCleaningService {
       shiftType: shiftType.toLowerCase(),
       platforms: body.platforms || [],
       supervisorId: body.supervisorId || (user && user.uid) || null,
+      contractorId: body.contractorId || null,
       status: body.status || 'active',
       createdBy: user && user.uid,
       createdAt: new Date().toISOString(),

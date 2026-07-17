@@ -331,7 +331,6 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
           {"title": "Task Approval", "route": "sc_approval"},
           {"title": "Machines", "route": "sc_machines"},
           {"title": "Materials", "route": "sc_materials"},
-          {"title": "Performance Reports", "route": "sc_performance"},
         ]
       },
       {

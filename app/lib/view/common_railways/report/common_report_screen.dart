@@ -15,6 +15,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../utills/app_colors.dart';
 import '../widgets/rolevise_dropdowns.dart';
 import '../report_excel_format/obhs_report_excel.dart';
+import '../station_management/area_performance_dashboard.dart';
 import '../../../services/pdf_report_service.dart';
 import '../../../repositories/worker_repo.dart';
 import 'package:printing/printing.dart';
@@ -88,7 +89,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this, initialIndex: widget.initialIndex);
+    _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialIndex);
     _loadStatistics();
   }
 
@@ -1273,6 +1274,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
             Tab(text: "Coach"),
             Tab(text: "CTS"),
             Tab(text: "OBHS"),
+            Tab(text: "Stn Cleaning"),
           ],
         ),
       ),
@@ -1283,6 +1285,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
           _buildCoachCleaningTab(),
           _buildCTSTab(),
           _buildOBHSTab(),
+          const AreaPerformanceDashboard(),
         ],
       ),
     );

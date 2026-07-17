@@ -57,7 +57,14 @@ export const getWorkers = asyncHandler(async (req, res) => {
 });
 
 export const getRailwaySupervisors = asyncHandler(async (req, res) => {
-  const result = await userService.getRailwaySupervisors(req.user.zone, req.user.division, req.user.role);
+  let { zone, division, role } = req.user;
+  
+  if (role === 'SUPER_ADMIN') {
+    zone = req.query.zone || zone;
+    division = req.query.division || division;
+  }
+  
+  const result = await userService.getRailwaySupervisors(zone, division, role);
   res.status(200).json(result);
 });
 
