@@ -761,12 +761,13 @@ class UserService {
       return { count: 0, supervisors: [] };
     }
 
-    const supervisorList = [];
-    const allowedRoles = ['Railway Supervisor', 'Station Master', 'Railway Admin', 'Area Master', 'Platform Master'];
+    const allowedRoles = ['RAILWAY_SUPERVISOR', 'STATION_MASTER', 'RAILWAY_ADMIN', 'AREA_MASTER', 'PLATFORM_MASTER', 'RAILWAY_MASTER'];
 
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (allowedRoles.includes(data.role)) {
+      const normalizedRole = (data.role || '').toUpperCase().replace(/\s+/g, '_');
+      
+      if (allowedRoles.includes(normalizedRole)) {
         supervisorList.push({
           uid: data.uid,
           fullName: data.fullName,

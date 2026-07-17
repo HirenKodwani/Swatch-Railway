@@ -1606,28 +1606,50 @@ class _NewCoachFormScreenState extends State<NewCoachFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            DropdownButtonFormField<RailwaySupervisor>(
-              decoration: InputDecoration(
-                hintText: 'Select Railway Employee',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+            if (_supervisors.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange),
                 ),
-                contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              value: _selectedSupervisor,
-              onChanged: (v) {
-                setState(() => _selectedSupervisor = v);
-              },
-              items: _supervisors
-                  .map(
-                    (sup) => DropdownMenuItem(
-                  value: sup,
-                  child: Text(sup.fullName),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No Railway Employee found for your Division. Please ensure supervisors exist for your division before submitting.',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
               )
-                  .toList(),
-            ),
+            else
+              DropdownButtonFormField<RailwaySupervisor>(
+                decoration: InputDecoration(
+                  hintText: 'Select Railway Employee',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                value: _selectedSupervisor,
+                onChanged: (v) {
+                  setState(() => _selectedSupervisor = v);
+                },
+                items: _supervisors
+                    .map(
+                      (sup) => DropdownMenuItem(
+                    value: sup,
+                    child: Text(sup.fullName),
+                  ),
+                )
+                    .toList(),
+              ),
 
             const SizedBox(height: 20),
 
