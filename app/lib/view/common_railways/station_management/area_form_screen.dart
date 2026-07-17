@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
@@ -18,7 +19,8 @@ class AreaFormScreen extends StatefulWidget {
   final String? platformName;
   final List<Platform>? platforms;
   final Map<String, dynamic>? existingArea;
-  const AreaFormScreen({super.key, required this.stationId, this.platformId, this.platformName, this.platforms, this.existingArea});
+  final List<StationArea>? allStationAreas;
+  const AreaFormScreen({super.key, required this.stationId, this.platformId, this.platformName, this.platforms, this.existingArea, this.allStationAreas});
 
   @override
   State<AreaFormScreen> createState() => _AreaFormScreenState();
@@ -35,7 +37,7 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
   
   final List<String> _selectedAreas = [];
   bool _active = true;
-  Platform? _selectedPlatform;
+  String? _selectedPlatformId;
 
   bool get _isReadOnly {
     final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
@@ -54,10 +56,11 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
     }
     // Pre-select platform from widget
     if (widget.platforms != null && widget.platformId != null) {
-      _selectedPlatform = widget.platforms!.where((p) => p.uid == widget.platformId).firstOrNull;
+      final matched = widget.platforms!.where((p) => p.uid == widget.platformId).firstOrNull;
+      _selectedPlatformId = matched?.uid;
     }
-    if (_selectedPlatform == null && widget.platforms != null && widget.platforms!.isNotEmpty) {
-      _selectedPlatform = widget.platforms!.first;
+    if (_selectedPlatformId == null && widget.platforms != null && widget.platforms!.isNotEmpty) {
+      _selectedPlatformId = widget.platforms!.first.uid;
     }
   }
 
@@ -94,7 +97,7 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
           'description': _descCtrl.text.trim(),
           'order': int.tryParse(_orderCtrl.text) ?? 0,
           'active': _active,
-          'platformId': _selectedPlatform?.uid ?? widget.platformId ?? widget.existingArea!['platformId'],
+          'platformId': _selectedPlatformId ?? widget.platformId ?? widget.existingArea!['platformId'],
         };
         final uid = widget.existingArea!['uid'] ?? widget.existingArea!['id'];
         await ApiService.updateStationArea(uid, data);
@@ -119,7 +122,7 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
             'description': _descCtrl.text.trim(),
             'order': int.tryParse(_orderCtrl.text) ?? 0,
             'active': _active,
-            'platformId': _selectedPlatform?.uid ?? widget.platformId,
+            'platformId': _selectedPlatformId ?? widget.platformId,
           };
           await ApiService.createStationArea(data);
         }
@@ -165,19 +168,21 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
               const SizedBox(height: 12),
               // Platform dropdown (read-only for Area/Platform Master)
               if (widget.platforms != null && widget.platforms!.isNotEmpty) ...[
-                DropdownButtonFormField<Platform>(
-                  value: _selectedPlatform,
+                DropdownButtonFormField<String?>(
+                  value: widget.platforms!.any((p) => p.uid == _selectedPlatformId)
+                      ? _selectedPlatformId
+                      : null,
                   decoration: const InputDecoration(
                     labelText: 'Platform',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.view_quilt),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
-                  items: widget.platforms!.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName))).toList(),
+                  items: widget.platforms!.map((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))).toList(),
                   onChanged: _isReadOnly
                       ? null
-                      : (v) => setState(() => _selectedPlatform = v),
-                  disabledHint: Text(_selectedPlatform?.displayName ?? widget.platformName ?? ''),
+                      : (v) => setState(() => _selectedPlatformId = v),
+                  disabledHint: Text(widget.platforms!.where((p) => p.uid == _selectedPlatformId).firstOrNull?.displayName ?? widget.platformName ?? ''),
                 ),
                 const SizedBox(height: 12),
               ] else if (widget.platformName != null && widget.platformName!.isNotEmpty) ...[
@@ -218,7 +223,16 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
-                  children: _areaTypes.map((a) {
+                  children: _areaTypes.where((a) {
+                    final currentPlatformId = _selectedPlatformId ?? widget.platformId;
+                    if (widget.allStationAreas != null) {
+                      final exists = widget.allStationAreas!.any((sa) =>
+                          sa.platformId == currentPlatformId &&
+                          sa.name.toLowerCase() == a.toLowerCase());
+                      return !exists;
+                    }
+                    return true;
+                  }).map((a) {
                     final isSelected = _selectedAreas.contains(a);
                     return FilterChip(
                       label: Text(a, style: const TextStyle(fontSize: 11)),

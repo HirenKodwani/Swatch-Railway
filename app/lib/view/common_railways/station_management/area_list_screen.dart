@@ -7,6 +7,7 @@ import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'area_form_screen.dart';
+import 'platform_list_screen.dart';
 
 class AreaListScreen extends StatefulWidget {
   final String? stationId;
@@ -24,7 +25,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
   List<StationArea> _allStationAreas = [];
   Station? _selectedStation;
   List<Platform> _platforms = [];
-  Platform? _selectedPlatform;
+  String? _selectedPlatformId;
   bool _isLoadingStations = true;
   bool _isLoadingPlatforms = false;
   bool _isLoadingAreas = false;
@@ -38,20 +39,28 @@ class _AreaListScreenState extends State<AreaListScreen> {
   }
 
   Future<void> _loadStations() async {
-    setState(() => _isLoadingStations = true);
+    setState(() {
+      _isLoadingStations = true;
+      _error = null;
+    });
     try {
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      final role = user?.role ?? '';
+      final fetched = await ApiService.getStations(active: true);
+      
+      List<Station> allowed = fetched;
       if (widget.stationId != null) {
-        _stations = await ApiService.getStations(active: true);
-        _stations = _stations.where((s) => s.uid == widget.stationId).toList();
-        _selectedStation = _stations.isNotEmpty ? _stations.first : null;
-      } else {
-        final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
-        final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-        _stations = await ApiService.getStations(active: true);
-        if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
-          _stations = _stations.where((s) => s.uid == user?.stationId).toList();
+        allowed = fetched.where((s) => s.uid == widget.stationId).toList();
+      } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
+        if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+          allowed = fetched.where((s) => s.uid == user.stationId).toList();
         }
       }
+      
+      setState(() {
+        _stations = allowed;
+      });
+
       if (_stations.isNotEmpty) {
         _selectedStation ??= _stations.first;
         await _loadPlatforms();
@@ -105,7 +114,11 @@ class _AreaListScreenState extends State<AreaListScreen> {
           displayAreas = fetched;
         }
       } else {
-        displayAreas = fetched;
+        if (_selectedPlatformId != null) {
+          displayAreas = fetched.where((a) => a.platformId == _selectedPlatformId).toList();
+        } else {
+          displayAreas = fetched;
+        }
       }
 
       if (mounted) {
@@ -123,15 +136,19 @@ class _AreaListScreenState extends State<AreaListScreen> {
   }
 
   Future<void> _openForm({Map<String, dynamic>? existing}) async {
+    final currentPlatformId = Provider.of<AuthProvider>(context, listen: false).currentUser?.platformId ?? _selectedPlatformId;
+    final selectedPlatformObj = _platforms.where((p) => p.uid == currentPlatformId).firstOrNull;
+
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
           builder: (_) => AreaFormScreen(
             stationId: _selectedStation!.uid ?? _selectedStation!.stationCode,
             existingArea: existing,
-            platformId: Provider.of<AuthProvider>(context, listen: false).currentUser?.platformId ?? _selectedPlatform?.uid,
-            platformName: _assignedPlatformName.isNotEmpty ? _assignedPlatformName : _selectedPlatform?.displayName,
+            platformId: currentPlatformId,
+            platformName: _assignedPlatformName.isNotEmpty ? _assignedPlatformName : selectedPlatformObj?.displayName,
             platforms: _platforms,
+            allStationAreas: _allStationAreas,
           ),
       ),
     );
@@ -172,6 +189,28 @@ class _AreaListScreenState extends State<AreaListScreen> {
         title: const Text('Area Master', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (_selectedStation != null &&
+              Provider.of<AuthProvider>(context, listen: false).currentUser?.role != 'Area Master' &&
+              Provider.of<AuthProvider>(context, listen: false).currentUser?.role != 'Platform Master')
+            IconButton(
+              icon: const Icon(Icons.view_quilt),
+              tooltip: 'Manage Platforms',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PlatformListScreen(
+                      stationId: _selectedStation!.uid ?? _selectedStation!.stationCode,
+                      stationName: _selectedStation!.stationName,
+                    ),
+                  ),
+                );
+                await _loadPlatforms();
+                _loadAreas();
+              },
+            ),
+        ],
       ),
       body: _isLoadingStations
           ? const Center(child: CircularProgressIndicator())
@@ -206,7 +245,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
                           ),
                           items: _stations.map((s) => DropdownMenuItem(value: s, child: Text('${s.stationCode} - ${s.stationName}'))).toList(),
                           onChanged: isMaster ? null : (v) async {
-                            setState(() => _selectedStation = v);
+                            setState(() {
+                              _selectedStation = v;
+                              _selectedPlatformId = null;
+                            });
                             await _loadPlatforms();
                             _loadAreas();
                           },
@@ -242,8 +284,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         color: Colors.white,
-                        child: DropdownButtonFormField<Platform>(
-                          value: _selectedPlatform,
+                        child: DropdownButtonFormField<String?>(
+                          value: _platforms.any((p) => p.uid == _selectedPlatformId)
+                              ? _selectedPlatformId
+                              : null,
                           decoration: const InputDecoration(
                             labelText: 'Platform (optional)',
                             border: OutlineInputBorder(),
@@ -252,10 +296,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
                           ),
                           items: [
                             const DropdownMenuItem(value: null, child: Text('All Platforms')),
-                            ..._platforms.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName))),
+                            ..._platforms.map((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
                           ],
                           onChanged: (v) {
-                            setState(() => _selectedPlatform = v);
+                            setState(() => _selectedPlatformId = v);
                             _loadAreas();
                           },
                         ),

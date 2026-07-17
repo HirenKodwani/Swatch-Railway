@@ -26,6 +26,7 @@ import '../billing/billing_dashboard_screen.dart';
 import '../billing/contract_billing_config_screen.dart';
 import '../cleaning_forms/cleaning_form_dashboard.dart';
 import '../../station_cleaning_screens/station_cleaning_runs_list_screen.dart';
+import '../../station_cleaning_complete/station_cleaning_main_screen.dart';
 import '../station_management/station_dashboard_screen.dart';
 import '../../common_workers/worker_pest_control_screen.dart';
 import '../../common_workers/worker_machine_screen.dart';
@@ -478,6 +479,8 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "title": "Station Cleaning",
         "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
         "children": [
+          {"title": "Module Hub", "route": "sc_main"},
+          {"title": "Inspection", "route": "sc_inspection"},
           {"title": "Dashboard", "route": "sc_dashboard"},
           {"title": "Area Management", "route": "sc_areas"},
           {"title": "Generate Tasks", "route": "sc_generate_tasks"},
@@ -633,6 +636,10 @@ class _CommonDashboardState extends State<CommonDashboard> {
         break;
       case "complaints":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
+        break;
+      case "sc_main":
+      case "sc_inspection":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const StationCleaningMainScreen()));
         break;
       case "sc_dashboard":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationDashboardScreen()));

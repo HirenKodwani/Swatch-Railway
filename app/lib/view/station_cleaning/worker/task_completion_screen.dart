@@ -199,22 +199,13 @@ class _TaskCompletionScreenState extends State<TaskCompletionScreen> {
       }
 
       await BaseRepository.apiCall(
-        method: 'PUT',
+        method: 'POST',
         path: '/api/tasks-v2/${widget.task.uid}/complete',
         body: {
-          'workerId': user?.uid ?? widget.task.workerId ?? '',
-          'workerName': user?.fullName ?? widget.task.workerName ?? '',
-          'beforePhoto': _beforeUrl ?? 'captured',
           'afterPhoto': _afterUrl ?? 'captured',
           'gpsLat': _gpsPosition!.latitude,
           'gpsLng': _gpsPosition!.longitude,
-          'machineId': _selectedMachine?['uid'],
-          'machineName': _selectedMachine?['machineName'],
-          'machineHours': _machineHoursCtrl.text.trim(),
-          'fuelUsed': _fuelCtrl.text.trim(),
-          'materialsUsed': usedMaterials,
           'remarks': _remarksCtrl.text.trim(),
-          'status': 'pending_review',
         },
         parser: (d) => d,
       );

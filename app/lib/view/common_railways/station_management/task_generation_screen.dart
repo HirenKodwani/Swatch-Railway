@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/repositories/base_repository.dart';
 import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
@@ -40,6 +41,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   bool _isLoadingZones = false;
   String _assignedPlatformName = '';
   Set<String> _existingTaskAreaIds = {};
+  List<Platform> _stationPlatforms = [];
+  String? _selectedPlatformId;
 
   @override
   void initState() {
@@ -77,10 +80,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   Future<void> _loadAreas() async {
     if (_selectedStation == null) return;
     try {
-      final fetched = await ApiService.getStationAreas(_selectedStation!.uid ?? '');
+      final stationId = _selectedStation!.uid ?? '';
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
-      
+
       String platformName = '';
       final assignedPlatformId = user?.areaId;
       if (assignedPlatformId != null && assignedPlatformId.isNotEmpty) {
@@ -89,6 +92,17 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           platformName = platformDoc.displayName;
         } catch (_) {}
       }
+
+      // Fetch platforms for the station
+      List<Platform> stationPlatforms = [];
+      try {
+        stationPlatforms = await PlatformRepository.getByStation(stationId);
+      } catch (pe) {
+        debugPrint('TaskGenerationScreen: Error loading platforms: $pe');
+      }
+
+      // Fetch areas for the station
+      final fetched = await ApiService.getStationAreas(stationId);
 
       if (platformName.isEmpty && assignedPlatformId != null) {
         final platformArea = fetched.firstWhere((a) => a.uid == assignedPlatformId, orElse: () => StationArea(stationId: '', name: ''));
@@ -113,13 +127,14 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final assignmentsResult = await BaseRepository.apiCall(
         method: 'GET',
         path: '/api/area-assignments',
-        queryParams: {'stationId': _selectedStation!.uid ?? '', 'isActive': 'true'},
+        queryParams: {'stationId': stationId, 'isActive': 'true'},
         parser: (d) => d,
       );
       final rawAssignments = (assignmentsResult['assignments'] as List? ?? []).map((a) => a as Map<String, dynamic>).toList();
       if (mounted) {
         setState(() {
           _allStationAreas = fetched;
+          _stationPlatforms = stationPlatforms;
           _areas = filteredAreas;
           _assignments = rawAssignments;
           // Pre-select the area automatically if it's role-restricted
@@ -288,11 +303,45 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 setState(() {
                                   _selectedStation = v;
                                   _selectedWorkerId = null;
+                                  _selectedPlatformId = null;
                                 });
                                 _loadAreas();
                                 _loadWorkers();
                               },
                             ),
+                          if (Provider.of<AuthProvider>(context, listen: false).currentUser?.role != 'Area Master' &&
+                              Provider.of<AuthProvider>(context, listen: false).currentUser?.role != 'Platform Master' &&
+                              _stationPlatforms.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String?>(
+                              value: _stationPlatforms.any((p) => p.uid == _selectedPlatformId)
+                                  ? _selectedPlatformId
+                                  : null,
+                              decoration: const InputDecoration(
+                                labelText: 'Platform (optional)',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.view_quilt),
+                                isDense: true,
+                              ),
+                              isExpanded: true,
+                              items: [
+                                const DropdownMenuItem(value: null, child: Text('All Platforms')),
+                                ..._stationPlatforms.map((p) => DropdownMenuItem(
+                                  value: p.uid,
+                                  child: Text(p.displayName, overflow: TextOverflow.ellipsis),
+                                )),
+                              ],
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedPlatformId = v;
+                                  _selectedAreaIds = [];
+                                  _selectedZoneIds = [];
+                                  _zones = [];
+                                });
+                                _loadAreas();
+                              },
+                            ),
+                          ],
                           if (Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Area Master' ||
                               Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Platform Master') ...[
                             const SizedBox(height: 12),
@@ -361,29 +410,46 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             onChanged: (v) { if (v != null) setState(() => _frequency = v); },
                           ),
                           const SizedBox(height: 12),
-                          DropdownButtonFormField<String>(
-                            value: _selectedWorkerId,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: 'Assign to specific worker (Optional)',
-                              border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(Icons.person),
-                              suffixIcon: _isLoadingWorkers
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(12.0),
-                                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                                    )
-                                  : null,
+                          if (_workers.isEmpty && !_isLoadingWorkers)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.orange.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.orange.shade50,
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.warning_amber, color: kWarningOrange, size: 20),
+                                  SizedBox(width: 8),
+                                  Expanded(child: Text('No workers available — tasks will be generated without assignment', style: TextStyle(fontSize: 13))),
+                                ],
+                              ),
+                            )
+                          else
+                            DropdownButtonFormField<String>(
+                              value: _selectedWorkerId,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Assign to specific worker (Optional)',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.person),
+                                suffixIcon: _isLoadingWorkers
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(12.0),
+                                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                      )
+                                    : null,
+                              ),
+                              items: [
+                                const DropdownMenuItem(value: null, child: Text('Use default assigned worker(s)')),
+                                ..._workers.map((w) => DropdownMenuItem(
+                                      value: w['uid'] as String,
+                                      child: Text('${w['fullName'] ?? ''} (${w['designation'] ?? w['role'] ?? ''})'),
+                                    )),
+                              ],
+                              onChanged: (v) => setState(() => _selectedWorkerId = v),
                             ),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('Use default assigned worker(s)')),
-                              ..._workers.map((w) => DropdownMenuItem(
-                                    value: w['uid'] as String,
-                                    child: Text('${w['fullName'] ?? ''} (${w['designation'] ?? w['role'] ?? ''})'),
-                                  )),
-                            ],
-                            onChanged: (v) => setState(() => _selectedWorkerId = v),
-                          ),
                         ],
                       ),
                     ),
@@ -398,18 +464,35 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                         children: [
                           Text('Select Areas (${_selectedAreaIds.length} selected)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(height: 12),
-                          if (_areas.where((a) => !_existingTaskAreaIds.contains(a.uid)).isEmpty)
+                          if (_areas.where((a) {
+                            if (_existingTaskAreaIds.contains(a.uid)) return false;
+                            if (_selectedPlatformId != null) {
+                              return a.platformId == null || a.platformId == _selectedPlatformId;
+                            }
+                            return true;
+                          }).isEmpty)
                             const Text('No areas remaining for this date & shift', style: TextStyle(color: Colors.grey))
                           else
                             Wrap(
                               spacing: 8, runSpacing: 4,
-                              children: _areas.where((a) => !_existingTaskAreaIds.contains(a.uid)).map((a) {
+                              children: _areas.where((a) {
+                                if (_existingTaskAreaIds.contains(a.uid)) return false;
+                                if (_selectedPlatformId != null) {
+                                  return a.platformId == null || a.platformId == _selectedPlatformId;
+                                }
+                                return true;
+                              }).map((a) {
                                 final areaAssignments = _assignments.where((assign) => assign['areaId'] == a.uid).toList();
                                 final workerLabel = areaAssignments.isEmpty
                                     ? '(No assigned worker)'
                                     : areaAssignments.map((assign) => '${assign['workerName']} (${assign['shift']})').join(', ');
-                                final parentArea = _allStationAreas.where((sa) => sa.uid == a.platformId).firstOrNull;
-                                final chipLabel = parentArea != null ? '${a.name} (${parentArea.name})' : a.name;
+                                final platform = _stationPlatforms.where((p) => p.uid == a.platformId).firstOrNull;
+                                String chipLabel;
+                                if (_selectedPlatformId == null) {
+                                  chipLabel = platform != null ? '${a.name} (${platform.displayName})' : a.name;
+                                } else {
+                                  chipLabel = platform != null ? a.name : '${a.name} (Unassigned)';
+                                }
                                 return FilterChip(
                                   label: Text('$chipLabel - $workerLabel', style: const TextStyle(fontSize: 12)),
                                   selected: _selectedAreaIds.contains(a.uid),

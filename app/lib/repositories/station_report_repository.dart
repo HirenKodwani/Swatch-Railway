@@ -46,6 +46,11 @@ class StationReportRepository {
     throw Exception('Failed to load schedules');
   }
 
+  static Future<void> deleteSchedule(String uid) async {
+    final res = await http.delete(Uri.parse('$baseUrl/api/station-reports/schedule/$uid'), headers: await _headers());
+    if (res.statusCode != 200) throw Exception('Failed to delete schedule');
+  }
+
   static Future<Map<String, dynamic>> getScoreTrend(String stationId) async {
     final res = await http.get(Uri.parse('$baseUrl/api/station-reports/score-trend?stationId=$stationId'), headers: await _headers());
     if (res.statusCode == 200) return jsonDecode(res.body);

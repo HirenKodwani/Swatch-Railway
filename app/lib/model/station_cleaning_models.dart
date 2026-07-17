@@ -290,6 +290,10 @@ class StationInspection {
   final String remarks;
   final List<String> photos;
   final List<Deficiency> deficiencies;
+  final String? templateId;
+  final String? templateName;
+  final List<dynamic> checklist;
+  final List<dynamic> checklistResults;
 
   StationInspection({
     required this.uid,
@@ -308,6 +312,10 @@ class StationInspection {
     required this.remarks,
     required this.photos,
     required this.deficiencies,
+    this.templateId,
+    this.templateName,
+    this.checklist = const [],
+    this.checklistResults = const [],
   });
 
   factory StationInspection.fromJson(Map<String, dynamic> json) => StationInspection(
@@ -327,6 +335,10 @@ class StationInspection {
     remarks: json['remarks'] ?? '',
     photos: List<String>.from(json['photos'] ?? []),
     deficiencies: (json['deficiencies'] as List?)?.map((e) => Deficiency.fromJson(e)).toList() ?? [],
+    templateId: json['templateId'],
+    templateName: json['templateName'],
+    checklist: json['checklist'] ?? [],
+    checklistResults: json['checklistResults'] ?? [],
   );
 }
 

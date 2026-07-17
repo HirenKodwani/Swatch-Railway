@@ -205,9 +205,12 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
   void _sendEmail(StationReport report) {
     try {
       if (report.reportType.startsWith('monthly_')) {
-        AutoEmailService.dispatchMonthlyReport(report.uid, report.stationId);
+        final parts = report.date.split('-');
+        final m = parts.length > 1 ? int.tryParse(parts[1]) ?? DateTime.now().month : DateTime.now().month;
+        final y = parts.isNotEmpty ? int.tryParse(parts[0]) ?? DateTime.now().year : DateTime.now().year;
+        AutoEmailService.dispatchMonthlyReport(report.reportType, report.stationId, m, y);
       } else {
-        AutoEmailService.dispatchDailyReport(report.uid, report.stationId);
+        AutoEmailService.dispatchDailyReport(report.reportType, report.stationId, report.date);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -361,8 +364,10 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: kErrorRed),
                           onPressed: () async {
+                            final uid = schedule['uid'] ?? schedule['id'];
+                            if (uid == null) return;
                             try {
-                              await StationReportRepository.list({});
+                              await StationReportRepository.deleteSchedule(uid.toString());
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Schedule deleted'), backgroundColor: kSuccessGreen),
@@ -387,24 +392,24 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
 }
 
 class AutoEmailService {
-  static Future<void> dispatchDailyReport(String reportId, String stationId) async {
+  static Future<void> dispatchDailyReport(String reportType, String stationId, String date) async {
     try {
       final token = await _getToken();
       await http.post(
         Uri.parse('${ApiService.baseUrl}/api/station-reports/auto-email/daily'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
-        body: jsonEncode({'reportId': reportId, 'stationId': stationId}),
+        body: jsonEncode({'reportType': reportType, 'stationId': stationId, 'date': date}),
       );
     } catch (_) {}
   }
 
-  static Future<void> dispatchMonthlyReport(String reportId, String stationId) async {
+  static Future<void> dispatchMonthlyReport(String reportType, String stationId, int month, int year) async {
     try {
       final token = await _getToken();
       await http.post(
         Uri.parse('${ApiService.baseUrl}/api/station-reports/auto-email/monthly'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
-        body: jsonEncode({'reportId': reportId, 'stationId': stationId}),
+        body: jsonEncode({'reportType': reportType, 'stationId': stationId, 'month': month, 'year': year}),
       );
     } catch (_) {}
   }

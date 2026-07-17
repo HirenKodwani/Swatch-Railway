@@ -27,7 +27,9 @@ class Platform {
     this.updatedAt,
   });
 
-  String get displayName => platformName ?? 'Platform $platformNumber';
+  String get displayName => (platformName != null && platformName!.trim().isNotEmpty)
+      ? platformName!
+      : 'Platform $platformNumber';
 
   factory Platform.fromJson(Map<String, dynamic> json) => Platform(
     uid: json['uid'] ?? json['id'],
@@ -55,4 +57,15 @@ class Platform {
     if (width != null) 'width': width,
     'status': status,
   };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Platform &&
+          runtimeType == other.runtimeType &&
+          uid == other.uid &&
+          platformNumber == other.platformNumber;
+
+  @override
+  int get hashCode => uid.hashCode ^ platformNumber.hashCode;
 }

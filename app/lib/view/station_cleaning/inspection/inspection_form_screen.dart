@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/inspection_repository.dart';
+import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class InspectionFormScreen extends StatefulWidget {
@@ -30,12 +34,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   late TextEditingController _defAssignedToCtrl;
   late TextEditingController _closeProofCtrl;
 
-  String _inspectionType = 'daily';
+  String _inspectionType = 'ad_hoc';
   DateTime _scheduledDate = DateTime.now();
   String? _selectedArea;
+  String? _selectedPlatformId;
   String? _selectedDefArea;
   List<StationArea> _areas = [];
+  List<Platform> _platforms = [];
   bool _areasLoading = false;
+  bool _platformsLoading = false;
 
   int _cleanliness = 3;
   int _hygiene = 3;
@@ -72,6 +79,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       }
     }
     _loadAreas();
+    _loadPlatforms();
   }
 
   Future<void> _loadAreas() async {
@@ -80,6 +88,14 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       _areas = await ApiService.getStationAreas(widget.stationId);
     } catch (_) {}
     if (mounted) setState(() => _areasLoading = false);
+  }
+
+  Future<void> _loadPlatforms() async {
+    setState(() => _platformsLoading = true);
+    try {
+      _platforms = await PlatformRepository.getByStation(widget.stationId);
+    } catch (_) {}
+    if (mounted) setState(() => _platformsLoading = false);
   }
 
   @override
@@ -131,6 +147,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       final payload = {
         'stationId': widget.stationId,
         'areaId': _selectedArea,
+        'platformId': _selectedPlatformId,
         'inspectionType': _inspectionType,
         'scheduledDate': formattedDate,
         'inspectorName': _inspectorNameCtrl.text.trim(),
@@ -510,9 +527,33 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
+  bool _hasPermission(String permission) {
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (user == null) return false;
+    final role = (user.role ?? '').toUpperCase().replaceAll(' ', '_');
+    const rolePerms = {
+      'SUPER_ADMIN': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'COMPANY_MASTER': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'RAILWAY_MASTER': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'ADMIN': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'RAILWAY_ADMIN': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'STATION_MASTER': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'AREA_MASTER': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'PLATFORM_MASTER': {'VIEW'},
+      'RAILWAY_SUPERVISOR': {'VIEW', 'SCORE'},
+      'CONTRACTOR_MASTER': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'CONTRACTOR_ADMIN': {'VIEW'},
+      'CONTRACTOR_SUPERVISOR': {'VIEW'},
+    };
+    return (rolePerms[role] ?? <String>{}).contains(permission);
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.inspection;
+    final canManage = _hasPermission('MANAGE');
+    final canApprove = _hasPermission('APPROVE');
+    final canScore = _hasPermission('SCORE');
     return Scaffold(
       appBar: AppBar(
         title: Text(isEdit ? 'Inspection Detail' : 'New Inspection', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -535,10 +576,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         value: _inspectionType,
                         decoration: const InputDecoration(labelText: 'Inspection Type *', border: OutlineInputBorder()),
                         items: const [
+                          DropdownMenuItem(value: 'ad_hoc', child: Text('Ad Hoc')),
+                          DropdownMenuItem(value: 'routine', child: Text('Routine')),
+                          DropdownMenuItem(value: 'surprise', child: Text('Surprise')),
                           DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                          DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                          DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                          DropdownMenuItem(value: 'quarterly', child: Text('Quarterly')),
+                          DropdownMenuItem(value: 'monthly_review', child: Text('Monthly Review')),
+                          DropdownMenuItem(value: 'petty_issue_linked', child: Text('Petty Issue Linked')),
+                          DropdownMenuItem(value: 'cleanliness_scorecard', child: Text('Cleanliness Scorecard')),
+                          DropdownMenuItem(value: 'complaint_based', child: Text('Complaint Based')),
+                          DropdownMenuItem(value: 'random', child: Text('Random')),
+                          DropdownMenuItem(value: 'emergency', child: Text('Emergency')),
                         ],
                         onChanged: isEdit ? null : (v) {
                           if (v != null) setState(() => _inspectionType = v);
@@ -554,6 +601,19 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                           items: _areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))).toList(),
                           onChanged: isEdit ? null : (v) => setState(() => _selectedArea = v),
                           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                        ),
+                      const SizedBox(height: 12),
+                      if (_platformsLoading)
+                        const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+                      else
+                        DropdownButtonFormField<String>(
+                          value: _selectedPlatformId,
+                          decoration: const InputDecoration(labelText: 'Platform (optional)', border: OutlineInputBorder()),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('None')),
+                            ..._platforms.map<DropdownMenuItem<String>>((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
+                          ],
+                          onChanged: isEdit ? null : (v) => setState(() => _selectedPlatformId = v),
                         ),
                       const SizedBox(height: 12),
                       InkWell(
@@ -589,7 +649,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                   ),
                 ),
               ),
-              if (r != null && _currentStatus == 'IN_PROGRESS') ...[
+              if (r != null && _currentStatus == 'IN_PROGRESS' && canScore) ...[
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(
@@ -653,12 +713,12 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (def.closureStatus == DeficiencyStatus.open)
+                            if (def.closureStatus == DeficiencyStatus.open && canManage)
                               TextButton(
                                 onPressed: () => _closeDeficiency(def),
                                 child: const Text('Close'),
                               ),
-                            if (def.closureStatus == DeficiencyStatus.closed)
+                            if (def.closureStatus == DeficiencyStatus.closed && canApprove)
                               TextButton(
                                 onPressed: () => _verifyDeficiency(def),
                                 child: const Text('Verify', style: TextStyle(color: Colors.blue)),
@@ -678,7 +738,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                       ),
                     )),
               ],
-              if (r != null && (_currentStatus == 'IN_PROGRESS' || _currentStatus == 'COMPLETED')) ...[
+              if (r != null && (_currentStatus == 'IN_PROGRESS' || _currentStatus == 'COMPLETED') && canManage) ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -694,7 +754,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
               if (_isLoading)
                 const Center(child: CircularProgressIndicator())
               else ...[
-                if (!isEdit)
+                if (!isEdit && canManage)
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -704,7 +764,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                       child: const Text('Create Inspection'),
                     ),
                   ),
-                if (isEdit && _currentStatus == 'SCHEDULED')
+                if (isEdit && _currentStatus == 'SCHEDULED' && canManage)
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -714,7 +774,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                       child: const Text('Start Inspection'),
                     ),
                   ),
-                if (isEdit && _currentStatus == 'COMPLETED')
+                if (isEdit && _currentStatus == 'COMPLETED' && canApprove)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Row(
@@ -743,7 +803,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                       ],
                     ),
                   ),
-                if (isEdit && _currentStatus == 'REJECTED')
+                if (isEdit && _currentStatus == 'REJECTED' && canScore)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: SizedBox(

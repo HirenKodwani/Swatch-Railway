@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/helper/api_error_handler.dart';
+import 'package:crm_train/utills/app_colors.dart';
 
 class AreaConfigScreen extends StatefulWidget {
   final String stationId;
@@ -24,11 +27,30 @@ class AreaConfigScreen extends StatefulWidget {
 class _AreaConfigScreenState extends State<AreaConfigScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _areas = [];
+  List<Platform> _platforms = [];
+  Platform? _selectedPlatform;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _loadPlatforms();
+  }
+
+  Future<void> _loadPlatforms() async {
+    try {
+      final platforms = await PlatformRepository.getByStation(widget.stationId);
+      Platform? preSelected;
+      if (widget.platformId != null) {
+        preSelected = platforms.where((p) => p.uid == widget.platformId).firstOrNull;
+      }
+      if (mounted) {
+        setState(() {
+          _platforms = platforms;
+          _selectedPlatform = preSelected;
+        });
+      }
+    } catch (_) {}
     _loadAreas();
   }
 
@@ -39,10 +61,14 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
       final token = prefs.getString('token');
       if (token == null) throw Exception('AUTH_ERROR');
 
-      final uri = Uri.parse('${ApiService.baseUrl}/api/areas').replace(queryParameters: {
-        'stationId': widget.stationId,
-        if (widget.platformId != null) 'platformId': widget.platformId,
-      });
+      final queryParams = <String, String>{'stationId': widget.stationId};
+      if (_selectedPlatform?.uid != null) {
+        queryParams['platformId'] = _selectedPlatform!.uid!;
+      } else if (widget.platformId != null) {
+        queryParams['platformId'] = widget.platformId!;
+      }
+
+      final uri = Uri.parse('${ApiService.baseUrl}/api/areas').replace(queryParameters: queryParams);
 
       final response = await http.get(
         uri,
@@ -79,6 +105,9 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
     List<String> times = (area?['frequencyTimes'] as List<dynamic>?)?.cast<String>() ?? ['08:00'];
     bool isEditing = area != null;
     String areaId = area?['uid'] ?? area?['id'] ?? '';
+    Platform? dialogSelectedPlatform = area != null
+        ? _platforms.where((p) => p.uid == (area['platformId'] ?? area['platform'])).firstOrNull
+        : _selectedPlatform;
 
     await showDialog(
       context: context,
@@ -89,6 +118,27 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_platforms.isNotEmpty) ...[
+                  DropdownButtonFormField<Platform>(
+                    value: dialogSelectedPlatform,
+                    decoration: const InputDecoration(
+                      labelText: 'Platform',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.view_quilt),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    isExpanded: true,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('No Platform')),
+                      ..._platforms.map((p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(p.displayName, overflow: TextOverflow.ellipsis),
+                      )),
+                    ],
+                    onChanged: (v) => setDialogState(() => dialogSelectedPlatform = v),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Area Name')),
                 TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Area Code', hintText: 'e.g. PF1-WAIT')),
                 TextField(controller: freqCtrl, decoration: const InputDecoration(labelText: 'Frequency'),),
@@ -118,7 +168,7 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                   'areaName': nameCtrl.text,
                   'areaCode': codeCtrl.text,
                   'stationId': widget.stationId,
-                  'platformId': widget.platformId,
+                  'platformId': dialogSelectedPlatform?.uid,
                   'cleaningFrequency': freqCtrl.text,
                   'frequencyTimes': times,
                   'defaultShift': shiftCtrl.text,
@@ -170,45 +220,96 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text('Error: $_error'))
-              : _areas.isEmpty
-                  ? const Center(child: Text('No areas configured'))
-                  : RefreshIndicator(
-                      onRefresh: _loadAreas,
-                      child: ListView.builder(
-                        itemCount: _areas.length,
-                        itemBuilder: (ctx, i) {
-                          final area = _areas[i];
-                          final freq = area['cleaningFrequency'] ?? area['frequency'] ?? 'daily';
-                          final times = (area['frequencyTimes'] as List<dynamic>?)?.join(', ') ?? '08:00';
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: ListTile(
-                              title: Text(area['areaName'] ?? area['name'] ?? 'Unnamed Area'),
-                              subtitle: Text('Code: ${area['areaCode'] ?? '-'} | Freq: $freq ($times) | Shift: ${area['defaultShift'] ?? 'morning'}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, size: 20),
-                                    onPressed: () => _showConfigDialog(area: area),
-                                  ),
-                                  if (area['qrCode'] != null)
-                                    IconButton(
-                                      icon: const Icon(Icons.qr_code, size: 20),
-                                      onPressed: () => _showQRCode(area['qrCode']),
-                                    ),
-                                ],
-                              ),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Area: ${area['areaName'] ?? area['name']} | Frequency: $freq | Workers: ${area['defaultWorkers'] ?? 1}')),
-                                );
-                              },
-                            ),
-                          );
-                        },
+              : Column(
+                  children: [
+                    if (_platforms.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        color: Colors.white,
+                        child: DropdownButtonFormField<Platform>(
+                          value: _selectedPlatform,
+                          decoration: const InputDecoration(
+                            labelText: 'Platform',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.view_quilt),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            isDense: true,
+                          ),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('All Platforms')),
+                            ..._platforms.map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(p.displayName, overflow: TextOverflow.ellipsis),
+                            )),
+                          ],
+                          onChanged: (v) {
+                            setState(() => _selectedPlatform = v);
+                            _loadAreas();
+                          },
+                        ),
                       ),
+                    Expanded(
+                      child: _areas.isEmpty
+                          ? const Center(child: Text('No areas configured'))
+                          : RefreshIndicator(
+                              onRefresh: _loadAreas,
+                              child: ListView.builder(
+                                itemCount: _areas.length,
+                                itemBuilder: (ctx, i) {
+                                  final area = _areas[i];
+                                  final freq = area['cleaningFrequency'] ?? area['frequency'] ?? 'daily';
+                                  final times = (area['frequencyTimes'] as List<dynamic>?)?.join(', ') ?? '08:00';
+                                  final platform = _platforms.where((p) => p.uid == (area['platformId'] ?? area['platform'])).firstOrNull;
+                                  return Card(
+                                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                    child: ListTile(
+                                      title: Row(
+                                        children: [
+                                          Expanded(child: Text(area['areaName'] ?? area['name'] ?? 'Unnamed Area')),
+                                          if (platform != null)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: kRailwayBlue.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: kRailwayBlue.withOpacity(0.3)),
+                                              ),
+                                              child: Text(
+                                                platform.displayName,
+                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kRailwayBlue),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      subtitle: Text('Code: ${area['areaCode'] ?? '-'} | Freq: $freq ($times) | Shift: ${area['defaultShift'] ?? 'morning'}'),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit, size: 20),
+                                            onPressed: () => _showConfigDialog(area: area),
+                                          ),
+                                          if (area['qrCode'] != null)
+                                            IconButton(
+                                              icon: const Icon(Icons.qr_code, size: 20),
+                                              onPressed: () => _showQRCode(area['qrCode']),
+                                            ),
+                                        ],
+                                      ),
+                                      onTap: () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Area: ${area['areaName'] ?? area['name']} | Frequency: $freq | Workers: ${area['defaultWorkers'] ?? 1}')),
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                     ),
+                  ],
+                ),
     );
   }
 

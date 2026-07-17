@@ -37,13 +37,18 @@ class InspectionService {
     return { message: 'Inspection created', uid: ref.id, inspection: data };
   }
 
-  async getInspections(query = {}) {
-    const { stationId, inspectionType, status, inspectorId, limit = 50, cursor } = query;
+  async getInspections(query = {}, user) {
+    const { stationId, inspectionType, status, inspectorId, date, limit = 50, cursor } = query;
     let q = db.collection('inspections');
-    if (stationId) q = q.where('stationId', '==', stationId);
+    if (user && user.stationId && !stationId) {
+      q = q.where('stationId', '==', user.stationId);
+    } else if (stationId) {
+      q = q.where('stationId', '==', stationId);
+    }
     if (inspectionType) q = q.where('inspectionType', '==', inspectionType);
     if (status) q = q.where('status', '==', status);
     if (inspectorId) q = q.where('inspectorId', '==', inspectorId);
+    if (date) q = q.where('scheduledDate', '==', date);
     const result = await paginate(q, { limit, cursor, orderBy: 'createdAt', orderDir: 'desc' });
     return { count: result.items.length, inspections: result.items, pagination: result.pagination };
   }
