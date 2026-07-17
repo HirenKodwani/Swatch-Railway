@@ -444,4 +444,4 @@ class PassengerRequestService {
   }
 }
 
-export const PassengerRequestService = new PassengerRequestService();
+export const passengerRequestService = new PassengerRequestService();
