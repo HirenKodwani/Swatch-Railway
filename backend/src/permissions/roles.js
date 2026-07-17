@@ -232,7 +232,13 @@ export const PERMISSIONS = Object.freeze({
   VIEW_BILLING: 'view_billing',
   MANAGE_BILLING: 'manage_billing',
   APPROVE_BILLING: 'approve_billing',
-  RECORD_PAYMENT: 'record_payment'
+  RECORD_PAYMENT: 'record_payment',
+
+  // Passenger Service Request
+  MANAGE_PASSENGER_REQUESTS: 'manage_passenger_requests',
+  VIEW_PASSENGER_REQUESTS: 'view_passenger_requests',
+  CREATE_PASSENGER_REQUEST: 'create_passenger_request',
+  VIEW_PASSENGER_REQUEST_ANALYTICS: 'view_passenger_request_analytics'
 });
 
 export const ROLE_PERMISSIONS = Object.freeze({
