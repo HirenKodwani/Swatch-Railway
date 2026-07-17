@@ -310,19 +310,21 @@ class ObhsService {
     const feedbackRef = db.collection('obhs_feedbacks').doc();
     const totalStars = Object.values(ratings).reduce((a, b) => a + Number(b), 0);
     const overallRating = parseFloat((totalStars / 5).toFixed(2));
+    const fType = (feedbackType || 'PASSENGER').toUpperCase();
     const feedbackData = {
       feedbackId: feedbackRef.id,
-      feedbackType: feedbackType || 'PASSENGER',
+      feedbackType: fType,
       runInstanceId, coachNo, ratings, overallRating,
       remarks: remarks || '', createdAt: new Date().toISOString()
     };
-    if (feedbackType === 'OFFICIAL') {
+    if (fType === 'OFFICIAL') {
       feedbackData.inspectorName = inspectorName || userData.fullName;
     } else {
       feedbackData.passengerName = passengerName || 'Anonymous';
       feedbackData.mobileNumber = mobileNumber || '';
     }
     await feedbackRef.set(feedbackData);
+
     return { success: true, message: 'Feedback submitted.', overallRating };
   }
 
