@@ -302,7 +302,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               onChanged: _stations.length <= 1 || Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Area Master' || Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Platform Master' ? null : (v) {
                                 setState(() {
                                   _selectedStation = v;
-                                  _selectedWorkerId = null;
+                                  _selectedWorkerIds = {};
                                   _selectedPlatformId = null;
                                 });
                                 _loadAreas();
