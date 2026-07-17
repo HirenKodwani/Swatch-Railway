@@ -220,6 +220,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
             'fullName': w.fullName,
             'role': w.role,
             'designation': w.designation,
+            'email': w.email,
           }).toList();
         });
       }
@@ -438,9 +439,12 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 final uid = w['uid'] as String;
                                 final name = '${w['fullName'] ?? ''}';
                                 final role = w['designation'] ?? w['role'] ?? '';
+                                final email = w['email'] ?? '';
+                                final displayName = name.isNotEmpty ? name : (email.isNotEmpty ? email : 'ID: ${uid.substring(0, 6)}');
+                                final displayRole = role.isNotEmpty ? role : 'worker';
                                 final selected = _selectedWorkerIds.contains(uid);
                                 return FilterChip(
-                                  label: Text('$name${role.isNotEmpty ? " ($role)" : ""}', style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+                                  label: Text('$displayName ($displayRole)', style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
                                   selected: selected,
                                   selectedColor: kRailwayBlue,
                                   checkmarkColor: Colors.white,
