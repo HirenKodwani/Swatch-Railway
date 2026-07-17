@@ -19,6 +19,9 @@ import '../station_management/area_performance_dashboard.dart';
 import '../../../services/pdf_report_service.dart';
 import '../../../repositories/worker_repo.dart';
 import 'package:printing/printing.dart';
+import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/repositories/platform_repository.dart';
 class CommonReportScreen extends StatefulWidget {
   final int initialIndex;
   const CommonReportScreen({super.key, this.initialIndex = 0});
@@ -85,6 +88,11 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   Map<String, dynamic> stnCleaningStats = {};
   bool isLoadingStats = true;
 
+  List<Station> _stnCleaningStations = [];
+  Station? _stnCleaningSelectedStation;
+  List<Platform> _stnCleaningPlatforms = [];
+  Platform? _stnCleaningSelectedPlatform;
+
   String? selectedReportType;
   DateTime? selectedDepartureDate;
 
@@ -93,6 +101,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
     super.initState();
     _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialIndex);
     _loadStatistics();
+    _loadStnCleaningStations();
   }
 
   Future<void> _loadStatistics() async {
@@ -3197,6 +3206,74 @@ class _CommonReportScreenState extends State<CommonReportScreen>
     }
   }
 
+  Future<void> _loadStnCleaningStations() async {
+    try {
+      final stationsList = await ApiService.getStations(active: true);
+      if (mounted) {
+        setState(() {
+          _stnCleaningStations = stationsList;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadStnCleaningPlatforms(String stationId) async {
+    try {
+      final platforms = await PlatformRepository.getByStation(stationId);
+      if (mounted) {
+        setState(() {
+          _stnCleaningPlatforms = platforms;
+          _stnCleaningSelectedPlatform = null;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _generateStnCleaningReport() async {
+    if (_stnCleaningSelectedStation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a station *")));
+      return;
+    }
+    setState(() {
+      isLoading = true;
+      isLoadingStats = true;
+    });
+
+    try {
+      final path = _stnCleaningSelectedPlatform != null
+          ? '/api/dashboard/platform/${_stnCleaningSelectedPlatform!.id}'
+          : '/api/dashboard/station/${_stnCleaningSelectedStation!.uid}';
+
+      final result = await BaseRepository.apiCall(
+        method: 'GET',
+        path: path,
+        parser: (d) => d,
+      );
+
+      if (mounted) {
+        setState(() {
+          stnCleaningStats = {
+            'totalRuns': result['data']?['totalTasks'] ?? 0,
+            'activeRuns': result['data']?['pendingTasks'] ?? 0,
+            'completedRuns': result['data']?['completedTasks'] ?? 0,
+            'approvedRuns': result['data']?['approvedTasks'] ?? 0,
+          };
+          isLoadingStats = false;
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Report generated successfully!"), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingStats = false;
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to fetch report data: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   Widget _buildStnCleaningTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -3211,12 +3288,39 @@ class _CommonReportScreenState extends State<CommonReportScreen>
               });
             },
             children: [
-              Row(
-                children: [
-                  Expanded(child: _textField("Station Name/Code", (v) {})),
-                  const SizedBox(width: 10),
-                  Expanded(child: _textField("Run ID", (v) {})),
+              DropdownButtonFormField<Station>(
+                value: _stnCleaningSelectedStation,
+                decoration: InputDecoration(
+                  labelText: 'Station *',
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                items: _stnCleaningStations.map((s) => DropdownMenuItem(value: s, child: Text(s.stationName, style: const TextStyle(fontSize: 13)))).toList(),
+                onChanged: (v) {
+                  setState(() {
+                    _stnCleaningSelectedStation = v;
+                    _stnCleaningSelectedPlatform = null;
+                  });
+                  if (v != null && v.uid != null) {
+                    _loadStnCleaningPlatforms(v.uid!);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<Platform>(
+                value: _stnCleaningSelectedPlatform,
+                decoration: InputDecoration(
+                  labelText: 'Platform (optional)',
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                items: [
+                  const DropdownMenuItem<Platform>(value: null, child: Text('All Platforms (Station Level)', style: TextStyle(fontSize: 13))),
+                  ..._stnCleaningPlatforms.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName, style: const TextStyle(fontSize: 13)))),
                 ],
+                onChanged: (v) {
+                  setState(() { _stnCleaningSelectedPlatform = v; });
+                },
               ),
               const SizedBox(height: 12),
               _dateRangePicker(),
@@ -3249,9 +3353,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                 ),
                 icon: const Icon(Icons.assessment, color: Colors.white),
                 label: const Text("Generate Report", style: TextStyle(color: Colors.white, fontSize: 15)),
-                onPressed: isLoading ? null : () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Station Cleaning Report Generation coming soon.")));
-                },
+                onPressed: isLoading ? null : _generateStnCleaningReport,
               ),
             ],
           ),
