@@ -361,7 +361,7 @@ class TaskManagementService {
   }
 
   async bulkGenerate(data, user) {
-    const { areaIds, date, workerId, zoneIds } = data;
+    const { areaIds, date, workerId, workerIds, zoneIds } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
@@ -370,7 +370,18 @@ class TaskManagementService {
     const allTaskIds = [];
 
     let assignedWorker = null;
-    if (workerId) {
+    let assignedWorkers = [];
+    if (workerIds && Array.isArray(workerIds) && workerIds.length > 0) {
+      const workerDocs = await Promise.all(
+        workerIds.map(wId => db.collection('users').doc(wId).get())
+      );
+      assignedWorkers = workerDocs
+        .filter(d => d.exists)
+        .map(d => ({ uid: d.id, ...d.data() }));
+      if (assignedWorkers.length === 0) {
+        throw new NotFoundError('None of the specified workers were found');
+      }
+    } else if (workerId) {
       const workerDoc = await db.collection('users').doc(workerId).get();
       if (!workerDoc.exists) {
         throw new NotFoundError(`Worker with ID ${workerId} not found`);
@@ -380,7 +391,7 @@ class TaskManagementService {
 
     for (const areaId of areaIds) {
       const [workersSnap, areaSnap] = await Promise.all([
-        assignedWorker ? null : db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).limit(200).get(),
+        assignedWorker || assignedWorkers.length > 0 ? null : db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).limit(200).get(),
         db.collection('areas').doc(areaId).get()
       ]);
       let areaDoc = areaSnap;
@@ -408,7 +419,49 @@ class TaskManagementService {
         }
       }
 
-      if (assignedWorker) {
+      if (assignedWorkers.length > 0) {
+        let workerIdx = 0;
+        for (const scheduledTime of frequencyTimes) {
+          for (const zoneInfo of targetZones) {
+            const w = assignedWorkers[workerIdx % assignedWorkers.length];
+            workerIdx++;
+            const taskRef = db.collection('cleaningTasks').doc();
+            const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
+            const task = {
+              uid: taskRef.id,
+              stationId: areaData.stationId || w.stationId || '',
+              platformId: areaData.platformId || null,
+              areaId,
+              areaName: displayAreaName,
+              areaCode,
+              zoneId: zoneInfo ? zoneInfo.uid : null,
+              zoneName: zoneInfo ? zoneInfo.name : null,
+              workerId: w.uid,
+              workerName: w.fullName || w.name || 'Unknown',
+              supervisorId: areaData.supervisorId || null,
+              assignmentId: null,
+              activityType: areaData.areaType || 'Cleaning',
+              frequency: cleaningFrequency,
+              date: targetDate,
+              scheduledDate: targetDate,
+              scheduledTime,
+              priority: areaData.priority || 3,
+              shift: data.shift || areaData.defaultShift || 'morning',
+              status: 'pending',
+              startedAt: null, completedAt: null,
+              approvedAt: null, rejectedAt: null,
+              beforePhoto: null, afterPhoto: null,
+              gpsLat: null, gpsLng: null,
+              supervisorNotes: null, rejectionReason: null,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: new Date().toISOString()
+            };
+            batch.set(taskRef, task);
+            allTaskIds.push(taskRef.id);
+            batchCount++;
+          }
+        }
+      } else if (assignedWorker) {
         for (const scheduledTime of frequencyTimes) {
           for (const zoneInfo of targetZones) {
             const taskRef = db.collection('cleaningTasks').doc();

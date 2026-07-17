@@ -32,7 +32,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   Map<String, dynamic>? _result;
 
   List<Map<String, dynamic>> _workers = [];
-  String? _selectedWorkerId;
+  Set<String> _selectedWorkerIds = {};
   bool _isLoadingWorkers = false;
   List<Map<String, dynamic>> _assignments = [];
   
@@ -241,7 +241,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           'date': _selectedDate,
           'shift': _shift,
           'frequency': _frequency,
-          if (_selectedWorkerId != null) 'workerId': _selectedWorkerId,
+          if (_selectedWorkerIds.isNotEmpty) 'workerIds': _selectedWorkerIds.toList(),
         },
         parser: (d) => d,
       );
@@ -410,6 +410,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             onChanged: (v) { if (v != null) setState(() => _frequency = v); },
                           ),
                           const SizedBox(height: 12),
+                          Text('Assign Workers', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const SizedBox(height: 8),
                           if (_workers.isEmpty && !_isLoadingWorkers)
                             Container(
                               padding: const EdgeInsets.all(12),
@@ -426,29 +428,35 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 ],
                               ),
                             )
+                          else if (_isLoadingWorkers)
+                            const Center(child: CircularProgressIndicator(strokeWidth: 2))
                           else
-                            DropdownButtonFormField<String>(
-                              value: _selectedWorkerId,
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                labelText: 'Assign to specific worker (Optional)',
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.person),
-                                suffixIcon: _isLoadingWorkers
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(12.0),
-                                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                                      )
-                                    : null,
-                              ),
-                              items: [
-                                const DropdownMenuItem(value: null, child: Text('Use default assigned worker(s)')),
-                                ..._workers.map((w) => DropdownMenuItem(
-                                      value: w['uid'] as String,
-                                      child: Text('${w['fullName'] ?? ''} (${w['designation'] ?? w['role'] ?? ''})'),
-                                    )),
-                              ],
-                              onChanged: (v) => setState(() => _selectedWorkerId = v),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: _workers.map((w) {
+                                final uid = w['uid'] as String;
+                                final name = '${w['fullName'] ?? ''}';
+                                final role = w['designation'] ?? w['role'] ?? '';
+                                final selected = _selectedWorkerIds.contains(uid);
+                                return FilterChip(
+                                  label: Text('$name${role.isNotEmpty ? " ($role)" : ""}', style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+                                  selected: selected,
+                                  selectedColor: kRailwayBlue,
+                                  checkmarkColor: Colors.white,
+                                  onSelected: (v) {
+                                    setState(() {
+                                      if (v) { _selectedWorkerIds.add(uid); }
+                                      else { _selectedWorkerIds.remove(uid); }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          if (_selectedWorkerIds.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text('${_selectedWorkerIds.length} worker(s) selected — tasks will be distributed among them', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                             ),
                         ],
                       ),
