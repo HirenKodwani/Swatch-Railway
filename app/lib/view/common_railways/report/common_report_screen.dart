@@ -35,6 +35,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   bool _isCoachFilterExpanded = true;
   bool _isCTSFilterExpanded = true;
   bool _isOBHSFilterExpanded = true;
+  bool _isStnCleaningFilterExpanded = true;
 
 
   final List<String> ares = [
@@ -81,6 +82,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   Map<String, dynamic> coachStats = {};
   Map<String, dynamic> ctsStats = {};
   Map<String, dynamic> obhsStats = {};
+  Map<String, dynamic> stnCleaningStats = {};
   bool isLoadingStats = true;
 
   String? selectedReportType;
@@ -1285,7 +1287,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
           _buildCoachCleaningTab(),
           _buildCTSTab(),
           _buildOBHSTab(),
-          const AreaPerformanceDashboard(),
+          _buildStnCleaningTab(),
         ],
       ),
     );
@@ -3193,5 +3195,106 @@ class _CommonReportScreenState extends State<CommonReportScreen>
         );
       }
     }
+  }
+
+  Widget _buildStnCleaningTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _expandableFilterContainer(
+            title: "Filter Reports",
+            isExpanded: _isStnCleaningFilterExpanded,
+            onTap: () {
+              setState(() {
+                _isStnCleaningFilterExpanded = !_isStnCleaningFilterExpanded;
+              });
+            },
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _textField("Station Name/Code", (v) {})),
+                  const SizedBox(width: 10),
+                  Expanded(child: _textField("Run ID", (v) {})),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _dateRangePicker(),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedReportType,
+                decoration: InputDecoration(
+                  hint: Text('Select Report'),
+                  contentPadding: EdgeInsets.all(8),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey)),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                items: [
+                  "Station Run Report",
+                  "Attendance Report",
+                  "Worker Activity Report",
+                  "Complaint Report"
+                ].map((type) => DropdownMenuItem(value: type, child: Text(type, style: TextStyle(fontWeight: FontWeight.normal, fontSize: 13)))).toList(),
+                onChanged: (value) {
+                  setState(() { selectedReportType = value; });
+                },
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.assessment, color: Colors.white),
+                label: const Text("Generate Report", style: TextStyle(color: Colors.white, fontSize: 15)),
+                onPressed: isLoading ? null : () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Station Cleaning Report Generation coming soon.")));
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 25),
+
+          _summaryContainer(
+            title: "Comprehensive Performance Summary",
+            children: [
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.5,
+                children: [
+                  _summaryCard(
+                    title: "Total Station Runs",
+                    value: isLoadingStats ? "..." : (stnCleaningStats['totalRuns']?.toString() ?? "0"),
+                    color: Colors.blue,
+                  ),
+                  _summaryCard(
+                    title: "Active Runs",
+                    value: isLoadingStats ? "..." : (stnCleaningStats['activeRuns']?.toString() ?? "0"),
+                    color: Colors.green,
+                  ),
+                  _summaryCard(
+                    title: "Completed Runs",
+                    value: isLoadingStats ? "..." : (stnCleaningStats['completedRuns']?.toString() ?? "0"),
+                    color: Colors.teal,
+                  ),
+                  _summaryCard(
+                    title: "Approved Runs",
+                    value: isLoadingStats ? "..." : (stnCleaningStats['approvedRuns']?.toString() ?? "0"),
+                    color: kSuccessGreen,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
