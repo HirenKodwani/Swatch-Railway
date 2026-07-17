@@ -42,8 +42,8 @@ import '../common_railways/station_management/area_history_screen.dart';
 import '../common_railways/station_management/area_assignment_screen.dart';
 import '../common_railways/station_management/platform_list_screen.dart';
 import '../common_railways/station_management/frequency_list_screen.dart';
-import '../repositories/station_run_repository.dart';
-import '../model/station_run_model.dart';
+import '../../repositories/station_run_repository.dart';
+import '../../model/station_run_model.dart';
 import 'attendance/worker_attendance_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
