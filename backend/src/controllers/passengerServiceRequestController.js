@@ -1,4 +1,4 @@
-import { passengerRequestService } from '../services/passengerService.js';
+import { passengerRequestService } from '../services/passengerRequestService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { verifyToken } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/authorization.js';
