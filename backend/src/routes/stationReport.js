@@ -18,7 +18,9 @@ router.post('/api/station-reports/daily/scorecard', verifyToken, ctrl.generateDa
 router.post('/api/station-reports/daily/complaint', verifyToken, ctrl.generateDailyComplaintReport);
 router.post('/api/station-reports/daily/feedback', verifyToken, ctrl.generateDailyFeedbackReport);
 router.post('/api/station-reports/daily/supervisor-log', verifyToken, ctrl.generateDailySupervisorLogReport);
+router.post('/api/station-reports/daily/inspection', verifyToken, ctrl.generateDailyInspectionReport);
 router.post('/api/station-reports/daily/missed-activity', verifyToken, ctrl.generateMissedActivityReport);
+router.post('/api/station-reports/archive-retrieval', verifyToken, ctrl.generateArchiveRetrievalReport);
 
 // 10.2 Monthly Reports
 router.post('/api/station-reports/monthly/attendance', verifyToken, ctrl.generateMonthlyAttendanceSummary);

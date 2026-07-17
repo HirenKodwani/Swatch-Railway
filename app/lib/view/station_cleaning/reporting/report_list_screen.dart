@@ -31,7 +31,8 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
 
   final List<String> _reportTypes = [
     'daily_attendance', 'daily_activity', 'daily_scorecard', 'daily_complaint',
-    'daily_feedback', 'daily_supervisor_log', 'missed_activity',
+    'daily_feedback', 'daily_inspection', 'daily_supervisor_log', 'missed_activity',
+    'archive_retrieval',
     'monthly_attendance', 'monthly_cleaning', 'monthly_scorecard',
     'monthly_complaint', 'monthly_feedback', 'monthly_billing', 'monthly_penalty',
     'monthly_performance',
@@ -92,77 +93,115 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
   void _showGenerateDialog() {
     String selectedType = _reportTypes.first;
     DateTime selectedDate = DateTime.now();
+    DateTime archiveStartDate = DateTime.now().subtract(const Duration(days: 7));
+    DateTime archiveEndDate = DateTime.now();
     int selectedMonth = DateTime.now().month;
     int selectedYear = DateTime.now().year;
     var isDaily = selectedType.startsWith('daily_');
+    var isArchive = selectedType == 'archive_retrieval';
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Generate Report'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: selectedType,
-                decoration: const InputDecoration(labelText: 'Report Type', border: OutlineInputBorder()),
-                items: _reportTypes.map((t) => DropdownMenuItem(
-                  value: t,
-                  child: Text(t.replaceAll('_', ' ').toUpperCase()),
-                )).toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setDialogState(() {
-                      selectedType = val;
-                      isDaily = val.startsWith('daily_');
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              if (isDaily)
-                InkWell(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: ctx,
-                      initialDate: selectedDate,
-                      firstDate: DateTime.now().subtract(const Duration(days: 90)),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) setDialogState(() => selectedDate = picked);
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Date', border: OutlineInputBorder()),
-                    child: Text('${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}'),
-                  ),
-                )
-              else ...[
-                DropdownButtonFormField<int>(
-                  value: selectedMonth,
-                  decoration: const InputDecoration(labelText: 'Month', border: OutlineInputBorder()),
-                  items: List.generate(12, (i) => DropdownMenuItem(
-                    value: i + 1,
-                    child: Text(DateTime(2000, i + 1).month.toString()),
-                  )),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedType,
+                  decoration: const InputDecoration(labelText: 'Report Type', border: OutlineInputBorder()),
+                  items: _reportTypes.map((t) => DropdownMenuItem(
+                    value: t,
+                    child: Text(t.replaceAll('_', ' ').toUpperCase()),
+                  )).toList(),
                   onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedMonth = val);
+                    if (val != null) {
+                      setDialogState(() {
+                        selectedType = val;
+                        isDaily = val.startsWith('daily_');
+                        isArchive = val == 'archive_retrieval';
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<int>(
-                  value: selectedYear,
-                  decoration: const InputDecoration(labelText: 'Year', border: OutlineInputBorder()),
-                  items: List.generate(5, (i) => DropdownMenuItem(
-                    value: DateTime.now().year - 2 + i,
-                    child: Text((DateTime.now().year - 2 + i).toString()),
-                  )),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedYear = val);
-                  },
-                ),
+                if (isArchive) ...[
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: archiveStartDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setDialogState(() => archiveStartDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Start Date', border: OutlineInputBorder()),
+                      child: Text('${archiveStartDate.year}-${archiveStartDate.month.toString().padLeft(2, '0')}-${archiveStartDate.day.toString().padLeft(2, '0')}'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: archiveEndDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setDialogState(() => archiveEndDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'End Date', border: OutlineInputBorder()),
+                      child: Text('${archiveEndDate.year}-${archiveEndDate.month.toString().padLeft(2, '0')}-${archiveEndDate.day.toString().padLeft(2, '0')}'),
+                    ),
+                  ),
+                ] else if (isDaily)
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 90)),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setDialogState(() => selectedDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Date', border: OutlineInputBorder()),
+                      child: Text('${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}'),
+                    ),
+                  )
+                else ...[
+                  DropdownButtonFormField<int>(
+                    value: selectedMonth,
+                    decoration: const InputDecoration(labelText: 'Month', border: OutlineInputBorder()),
+                    items: List.generate(12, (i) => DropdownMenuItem(
+                      value: i + 1,
+                      child: Text(DateTime(2000, i + 1).month.toString()),
+                    )),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedMonth = val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: selectedYear,
+                    decoration: const InputDecoration(labelText: 'Year', border: OutlineInputBorder()),
+                    items: List.generate(5, (i) => DropdownMenuItem(
+                      value: DateTime.now().year - 2 + i,
+                      child: Text((DateTime.now().year - 2 + i).toString()),
+                    )),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedYear = val);
+                    },
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -171,7 +210,11 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                 Navigator.pop(ctx);
                 setState(() => _isLoadingReports = true);
                 try {
-                  if (selectedType.startsWith('daily_')) {
+                  if (selectedType == 'archive_retrieval') {
+                    final startStr = '${archiveStartDate.year}-${archiveStartDate.month.toString().padLeft(2, '0')}-${archiveStartDate.day.toString().padLeft(2, '0')}';
+                    final endStr = '${archiveEndDate.year}-${archiveEndDate.month.toString().padLeft(2, '0')}-${archiveEndDate.day.toString().padLeft(2, '0')}';
+                    await StationReportRepository.generateArchiveRetrieval(widget.stationId, startStr, endStr);
+                  } else if (selectedType.startsWith('daily_')) {
                     final dateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
                     await StationReportRepository.generateDaily(selectedType, widget.stationId, dateStr);
                   } else {

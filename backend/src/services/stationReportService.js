@@ -18,7 +18,8 @@ import logger from '../logger/index.js';
 
 const DAILY_REPORT_TYPES = [
   'daily_attendance', 'daily_activity', 'daily_scorecard',
-  'daily_complaint', 'daily_feedback', 'daily_supervisor_log', 'missed_activity'
+  'daily_complaint', 'daily_feedback', 'daily_supervisor_log',
+  'daily_inspection', 'missed_activity', 'archive_retrieval'
 ];
 const MONTHLY_REPORT_TYPES = [
   'monthly_attendance', 'monthly_cleaning', 'monthly_scorecard',
@@ -184,12 +185,16 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const snap = await db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '==', date).limit(500).get();
     const records = []; snap.forEach(d => records.push(d.data()));
+    const now = new Date().toISOString();
     const completed = records.filter(r => r.status === 'COMPLETED' || r.status === 'APPROVED').length;
     const pending = records.filter(r => r.status === 'PENDING' || r.status === 'ASSIGNED').length;
+    const overdue = records.filter(r => r.status === 'PENDING' && r.scheduledEnd && r.scheduledEnd < now).length;
+    const rejected = records.filter(r => r.status === 'REJECTED').length;
+    const resubmitted = records.filter(r => r.status === 'RESUBMITTED').length;
     const missedInf = records.filter(r => r.status === 'MISSED').length;
     const report = await this._storeReport({
       stationId, stationName, reportType: 'daily_activity', date, month: parseInt(date.substring(5, 7)), year: parseInt(date.substring(0, 4)),
-      summary: { total: records.length, completed, pending, missed: missedInf, completionRate: records.length > 0 ? Math.round(completed / records.length * 100) : 0 },
+      summary: { total: records.length, completed, pending, overdue, rejected, resubmitted, missed: missedInf, completionRate: records.length > 0 ? Math.round(completed / records.length * 100) : 0 },
       generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
     });
     return report;
@@ -236,9 +241,66 @@ class StationReportService {
     const pendingMod = dayRecords.filter(r => r.status === 'pending').length;
     const ratings = dayRecords.filter(r => r.rating).map(r => r.rating);
     const avgRating = ratings.length > 0 ? (ratings.reduce((s, v) => s + v, 0) / ratings.length).toFixed(1) : 'N/A';
+    const negativeFeedback = dayRecords.filter(r => (r.rating || 0) <= 2);
+    const negativeTrends = negativeFeedback.reduce((acc, r) => {
+      const cat = r.category || r.feedbackCategory || 'General';
+      if (!acc[cat]) acc[cat] = { count: 0, comments: [] };
+      acc[cat].count++;
+      if (r.comment || r.remarks) acc[cat].comments.push(r.comment || r.remarks);
+      return acc;
+    }, {});
     const report = await this._storeReport({
       stationId, stationName, reportType: 'daily_feedback', date, month: parseInt(date.substring(5, 7)), year: parseInt(date.substring(0, 4)),
-      summary: { total: dayRecords.length, approved, pendingModeration: pendingMod, averageRating: avgRating, ratingDistribution: dayRecords.reduce((acc, r) => { const v = r.rating || 0; acc[v] = (acc[v] || 0) + 1; return acc; }, {}) },
+      summary: {
+        total: dayRecords.length, approved, pendingModeration: pendingMod,
+        averageRating: avgRating,
+        ratingDistribution: dayRecords.reduce((acc, r) => { const v = r.rating || 0; acc[v] = (acc[v] || 0) + 1; return acc; }, {}),
+        negativeCount: negativeFeedback.length, negativeRate: dayRecords.length > 0 ? Math.round(negativeFeedback.length / dayRecords.length * 100) : 0,
+        negativeTrends: Object.entries(negativeTrends).map(([cat, data]) => ({ category: cat, count: data.count, sampleComments: data.comments.slice(0, 5) })),
+      },
+      generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
+    });
+    return report;
+  }
+
+  async generateDailyInspectionReport(stationId, date, user) {
+    const stationName = await this._getStationName(stationId);
+    const start = `${date}T00:00:00`;
+    const end = `${date}T23:59:59`;
+    const snap = await db.collection('inspections').where('stationId', '==', stationId).get();
+    const records = []; snap.forEach(d => records.push({ id: d.id, ...d.data() }));
+    const dayRecords = records.filter(r => {
+      const d = r.inspectionDate || r.scheduledDate || r.createdAt || '';
+      return d >= start && d <= end;
+    });
+    const byType = dayRecords.reduce((acc, r) => {
+      const t = r.inspectionType || 'unknown';
+      if (!acc[t]) acc[t] = 0;
+      acc[t]++;
+      return acc;
+    }, {});
+    const byStatus = dayRecords.reduce((acc, r) => {
+      const s = r.status || 'unknown';
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+    const totalDeficiencies = dayRecords.reduce((s, r) => s + (r.deficiencies?.length || 0), 0);
+    const closedDeficiencies = dayRecords.reduce((s, r) => s + ((r.deficiencies || []).filter(d => d.status === 'CLOSED' || d.status === 'VERIFIED').length), 0);
+    const inspectionDetails = dayRecords.map(r => ({
+      id: r.id, inspectionType: r.inspectionType, status: r.status,
+      inspectorName: r.inspectorName || r.inspectorId || '',
+      overallScore: r.overallScore,
+      remarks: r.remarks || r.remark || '',
+      photos: r.photos || r.photoEvidence || [],
+      deficiencies: (r.deficiencies || []).map(d => ({ area: d.area, status: d.status, remark: d.remark })),
+    }));
+    const report = await this._storeReport({
+      stationId, stationName, reportType: 'daily_inspection', date, month: parseInt(date.substring(5, 7)), year: parseInt(date.substring(0, 4)),
+      summary: {
+        totalInspections: dayRecords.length, typeBreakdown: byType, statusBreakdown: byStatus,
+        totalDeficiencies, closedDeficiencies, openDeficiencies: totalDeficiencies - closedDeficiencies,
+        inspections: inspectionDetails,
+      },
       generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
     });
     return report;
@@ -262,10 +324,21 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const snap = await db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '==', date).limit(500).get();
     const records = []; snap.forEach(d => records.push(d.data()));
-    const missed = records.filter(r => r.status === 'MISSED' || (r.status === 'PENDING' && r.scheduledEnd && r.scheduledEnd < new Date().toISOString()));
+    const now = new Date().toISOString();
+    const overdue = records.filter(r => r.status === 'PENDING' && r.scheduledEnd && r.scheduledEnd < now);
+    const delayed = records.filter(r => r.status === 'IN_PROGRESS' && r.scheduledEnd && r.scheduledEnd < now);
+    const missed = records.filter(r => r.status === 'MISSED');
+    const totalIssues = overdue.length + delayed.length + missed.length;
     const report = await this._storeReport({
       stationId, stationName, reportType: 'missed_activity', date, month: parseInt(date.substring(5, 7)), year: parseInt(date.substring(0, 4)),
-      summary: { totalScheduled: records.length, missedCount: missed.length, missedRate: records.length > 0 ? Math.round(missed.length / records.length * 100) : 0, missedActivities: missed.map(m => ({ activityId: m.activityId, areaId: m.areaId, scheduledStart: m.scheduledStart, scheduledEnd: m.scheduledEnd, assignedWorkers: m.assignedWorkers })) },
+      summary: {
+        totalScheduled: records.length, totalIssues, missedCount: missed.length,
+        overdueCount: overdue.length, delayedCount: delayed.length,
+        issueRate: records.length > 0 ? Math.round(totalIssues / records.length * 100) : 0,
+        overdueActivities: overdue.map(m => ({ activityId: m.activityId, areaId: m.areaId, scheduledStart: m.scheduledStart, scheduledEnd: m.scheduledEnd, assignedWorkers: m.assignedWorkers })),
+        delayedActivities: delayed.map(m => ({ activityId: m.activityId, areaId: m.areaId, scheduledStart: m.scheduledStart, scheduledEnd: m.scheduledEnd, assignedWorkers: m.assignedWorkers })),
+        missedActivities: missed.map(m => ({ activityId: m.activityId, areaId: m.areaId, scheduledStart: m.scheduledStart, scheduledEnd: m.scheduledEnd, assignedWorkers: m.assignedWorkers })),
+      },
       generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
     });
     return report;
@@ -567,7 +640,49 @@ class StationReportService {
   }
 
   /* ==================================================================
-     6. SCHEDULED / AUTO-EMAIL
+     6. ARCHIVE RETRIEVAL REPORT
+     ================================================================== */
+
+  async generateArchiveRetrievalReport(stationId, startDate, endDate, user) {
+    const stationName = await this._getStationName(stationId);
+    const collections = ['stationCleaningForms', 'inspections', 'daily_scorecards',
+      'station_daily_activities', 'station_feedback', 'complaints', 'supervisor_daily_logs'];
+    const allRecords = [];
+    for (const collName of collections) {
+      let q = db.collection(collName).where('stationId', '==', stationId).limit(1000);
+      const snap = await q.get();
+      snap.forEach(d => {
+        const data = d.data();
+        const ts = data.createdAt || data.date || data.updatedAt || '';
+        if (ts && ts >= startDate && ts <= (endDate + 'T23:59:59')) {
+          allRecords.push({ collection: collName, id: d.id, ...data });
+        }
+      });
+    }
+    const byCollection = allRecords.reduce((acc, r) => {
+      acc[r.collection] = (acc[r.collection] || 0) + 1;
+      return acc;
+    }, {});
+    const report = await this._storeReport({
+      stationId, stationName, reportType: 'archive_retrieval',
+      date: startDate, month: parseInt(startDate.substring(5, 7)), year: parseInt(startDate.substring(0, 4)),
+      query: { startDate, endDate },
+      summary: {
+        totalRecords: allRecords.length, startDate, endDate,
+        collectionBreakdown: byCollection,
+        records: allRecords.map(r => ({
+          collection: r.collection, id: r.id, type: r.reportType || r.inspectionType || r.status || r.formType || 'N/A',
+          date: r.createdAt || r.date || r.updatedAt || '',
+          summary: JSON.stringify(r).substring(0, 200),
+        })),
+      },
+      generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
+    });
+    return report;
+  }
+
+  /* ==================================================================
+     7. SCHEDULED / AUTO-EMAIL
      ================================================================== */
 
   async scheduleReport(reportType, cronExpression, recipients, parameters) {
@@ -618,9 +733,17 @@ class StationReportService {
         const params = { stationId: schedule.parameters?.stationId, date: dateStr, month, year, ...schedule.parameters };
 
         if (schedule.reportType.startsWith('daily_') || schedule.reportType === 'missed_activity') {
-          const fnMap = { daily_attendance: 'generateDailyAttendanceReport', daily_activity: 'generateDailyActivityReport', daily_scorecard: 'generateDailyScorecardReport', daily_complaint: 'generateDailyComplaintReport', daily_feedback: 'generateDailyFeedbackReport', daily_supervisor_log: 'generateDailySupervisorLog', missed_activity: 'generateMissedActivityReport' };
-          await this[fnMap[schedule.reportType]](params.stationId, params.date, user);
-          await autoEmailService.dispatchDailyReport(schedule.reportType, params.stationId, params.date);
+          const fnMap = { daily_attendance: 'generateDailyAttendanceReport', daily_activity: 'generateDailyActivityReport', daily_scorecard: 'generateDailyScorecardReport', daily_complaint: 'generateDailyComplaintReport', daily_feedback: 'generateDailyFeedbackReport', daily_inspection: 'generateDailyInspectionReport', daily_supervisor_log: 'generateDailySupervisorLog', missed_activity: 'generateMissedActivityReport', archive_retrieval: 'generateArchiveRetrievalReport' };
+          if (fnMap[schedule.reportType]) {
+            if (schedule.reportType === 'archive_retrieval') {
+              await this[fnMap[schedule.reportType]](params.stationId, params.date, params.date, user);
+            } else {
+              await this[fnMap[schedule.reportType]](params.stationId, params.date, user);
+            }
+            if (schedule.reportType !== 'archive_retrieval') {
+              await autoEmailService.dispatchDailyReport(schedule.reportType, params.stationId, params.date);
+            }
+          }
         } else if (schedule.reportType.startsWith('monthly_')) {
           const fnMap = { monthly_attendance: 'generateMonthlyAttendanceSummary', monthly_cleaning: 'generateMonthlyCleaningSummary', monthly_scorecard: 'generateMonthlyScorecardReport', monthly_complaint: 'generateMonthlyComplaintSummary', monthly_feedback: 'generateMonthlyFeedbackSummary', monthly_billing: 'generateMonthlyBillingReport', monthly_penalty: 'generateMonthlyPenaltyReport', monthly_performance: 'generateMonthlyPerformanceReport' };
           await this[fnMap[schedule.reportType]](params.stationId, params.month, params.year, user);

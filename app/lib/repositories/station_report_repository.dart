@@ -32,6 +32,12 @@ class StationReportRepository {
     throw Exception('Failed to generate monthly report');
   }
 
+  static Future<StationReport> generateArchiveRetrieval(String stationId, String startDate, String endDate) async {
+    final res = await http.post(Uri.parse('$baseUrl/api/station-reports/archive-retrieval'), headers: await _headers(), body: jsonEncode({'stationId': stationId, 'startDate': startDate, 'endDate': endDate}));
+    if (res.statusCode == 200 || res.statusCode == 201) return StationReport.fromJson(jsonDecode(res.body));
+    throw Exception('Failed to generate archive retrieval report');
+  }
+
   static Future<void> schedule(String reportType, String cronExpression, List<String> recipients, Map<String, dynamic> parameters) async {
     final res = await http.post(Uri.parse('$baseUrl/api/station-reports/schedule'), headers: await _headers(), body: jsonEncode({'reportType': reportType, 'cronExpression': cronExpression, 'recipients': recipients, 'parameters': parameters}));
     if (res.statusCode != 201 && res.statusCode != 200) throw Exception('Failed to schedule report');
