@@ -89,7 +89,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         path: '/api/station-runs',
         body: {
           'stationId': _selectedStation!.uid,
-          'stationName': _selectedStation!.name,
+          'stationName': _selectedStation!.stationName,
           'date': _selectedDate,
           'shift': _shift,
           'contractorId': _selectedContractorId,
@@ -141,7 +141,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           DropdownButtonFormField<Station>(
                             value: _selectedStation,
                             decoration: const InputDecoration(labelText: 'Station', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business)),
-                            items: _stations.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
+                            items: _stations.map((s) => DropdownMenuItem(value: s, child: Text(s.stationName))).toList(),
                             onChanged: _stations.length == 1 ? null : (v) {
                               if (v != null) {
                                 setState(() { _selectedStation = v; });
