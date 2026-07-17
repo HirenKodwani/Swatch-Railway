@@ -74,8 +74,8 @@ export const createPlatformSchema = z.object({
   platformNumber: z.string().min(1, 'Platform number is required').max(50),
   platformName: z.string().max(200).optional().nullable(),
   surfaceType: z.string().max(100).optional().nullable(),
-  length: z.number().positive().max(10000).optional().nullable(),
-  width: z.number().positive().max(1000).optional().nullable()
+  length: z.coerce.number().positive().max(1000000).optional().nullable(),
+  width: z.coerce.number().positive().max(100000).optional().nullable()
 });
 
 export const createAreaSchema = z.object({

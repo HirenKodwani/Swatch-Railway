@@ -1,7 +1,9 @@
 import 'package:crm_train/model/station_cleaning_models.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/inspection_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'inspection_form_screen.dart';
 
 class InspectionListScreen extends StatefulWidget {
@@ -65,6 +67,13 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
     }
   }
 
+  bool _canManage() {
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (user == null) return false;
+    final r = (user.role ?? '').toUpperCase().replaceAll(' ', '_');
+    return ['SUPER_ADMIN', 'ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'RAILWAY_ADMIN', 'STATION_MASTER', 'AREA_MASTER', 'CONTRACTOR_MASTER'].contains(r);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,11 +99,13 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
                       isExpanded: true,
                       items: const [
                         DropdownMenuItem(value: 'all', child: Text('All Status')),
-                        DropdownMenuItem(value: 'scheduled', child: Text('Scheduled')),
-                        DropdownMenuItem(value: 'inProgress', child: Text('In Progress')),
-                        DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                        DropdownMenuItem(value: 'approved', child: Text('Approved')),
-                        DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                        DropdownMenuItem(value: 'SCHEDULED', child: Text('Scheduled')),
+                        DropdownMenuItem(value: 'IN_PROGRESS', child: Text('In Progress')),
+                        DropdownMenuItem(value: 'COMPLETED', child: Text('Completed')),
+                        DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
+                        DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
+                        DropdownMenuItem(value: 'RESUBMITTED', child: Text('Resubmitted')),
+                        DropdownMenuItem(value: 'CANCELLED', child: Text('Cancelled')),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -204,21 +215,23 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: kRailwayBlue,
-        child: const Icon(Icons.add, color: Colors.white),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => InspectionFormScreen(
-                stationId: widget.stationId,
-                stationName: widget.stationName,
-              ),
-            ),
-          ).then((_) => _loadInspections());
-        },
-      ),
+      floatingActionButton: _canManage()
+          ? FloatingActionButton(
+              backgroundColor: kRailwayBlue,
+              child: const Icon(Icons.add, color: Colors.white),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InspectionFormScreen(
+                      stationId: widget.stationId,
+                      stationName: widget.stationName,
+                    ),
+                  ),
+                ).then((_) => _loadInspections());
+              },
+            )
+          : null,
     );
   }
 }

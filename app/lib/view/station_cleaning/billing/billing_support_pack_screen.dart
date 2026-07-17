@@ -1,8 +1,10 @@
 import 'package:crm_train/model/station_cleaning_models.dart';
+import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/station_billing_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class BillingSupportPackScreen extends StatefulWidget {
   final String? contractId;
@@ -134,6 +136,91 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
     }
   }
 
+  bool _can(String permission) {
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (user == null) return false;
+    final r = (user.role ?? '').toUpperCase().replaceAll(' ', '_');
+    const perms = {
+      'SUPER_ADMIN': {'GENERATE', 'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'COMPANY_MASTER': {'GENERATE', 'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'RAILWAY_MASTER': {'GENERATE', 'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'ADMIN': {'GENERATE', 'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'RAILWAY_ADMIN': {'GENERATE', 'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'CONTRACTOR_MASTER': {'GENERATE', 'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'CONTRACTOR_ADMIN': {'GENERATE', 'VIEW', 'APPROVE', 'PAY'},
+    };
+    return (perms[r] ?? <String>{}).contains(permission);
+  }
+
+  Future<void> _recordPayment() async {
+    final amountCtrl = TextEditingController();
+    final refCtrl = TextEditingController();
+    String mode = 'bank_transfer';
+    final modes = ['bank_transfer', 'cheque', 'cash', 'online'];
+    final recorded = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Record Payment'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Amount *', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: mode,
+                decoration: const InputDecoration(labelText: 'Mode *', border: OutlineInputBorder()),
+                items: modes.map((m) => DropdownMenuItem(value: m, child: Text(m.replaceAll('_', ' ').toUpperCase()))).toList(),
+                onChanged: (v) { if (v != null) mode = v; },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: refCtrl,
+                decoration: const InputDecoration(labelText: 'Reference (optional)', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final amount = double.tryParse(amountCtrl.text.trim());
+              if (amount == null || amount <= 0) return;
+              Navigator.pop(ctx, {'amount': amountCtrl.text.trim(), 'mode': mode, 'reference': refCtrl.text.trim()});
+            },
+            child: const Text('Record Payment'),
+          ),
+        ],
+      ),
+    );
+    if (recorded == null) return;
+    try {
+      await StationBillingRepository.recordPayment(
+        _billingPack!.uid,
+        amount: double.parse(recorded['amount']!),
+        mode: recorded['mode']!,
+        reference: recorded['reference'],
+      );
+      _fetchOrGenerate();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment recorded'), backgroundColor: kSuccessGreen),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Payment failed: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -228,7 +315,7 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
                               );
                             }),
                             const SizedBox(height: 16),
-                            if (_billingPack!.status == 'DRAFT')
+                            if (_billingPack!.status == 'DRAFT' && _can('MANAGE'))
                               SizedBox(
                                 width: double.infinity,
                                 height: 48,
@@ -238,7 +325,7 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
                                   child: const Text('Submit Pack for Review'),
                                 ),
                               ),
-                            if (_billingPack!.status == 'SUBMITTED') ...[
+                            if (_billingPack!.status == 'SUBMITTED' && _can('APPROVE')) ...[
                               const SizedBox(height: 12),
                               Row(
                                 children: [
@@ -279,6 +366,19 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ],
+                            if (_billingPack!.status == 'APPROVED' && _can('PAY')) ...[
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton.icon(
+                                  onPressed: _recordPayment,
+                                  icon: const Icon(Icons.payment),
+                                  style: ElevatedButton.styleFrom(backgroundColor: kSuccessGreen, foregroundColor: Colors.white),
+                                  label: const Text('Record Payment'),
+                                ),
                               ),
                             ],
                           ],

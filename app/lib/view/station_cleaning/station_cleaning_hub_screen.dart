@@ -31,6 +31,7 @@ import 'contractor/contractor_mapping_screen.dart';
 import 'worker_tasks/worker_task_view_screen.dart';
 import 'supervisor_review/supervisor_review_screen.dart';
 import 'hierarchical_dashboard/hierarchical_dashboard_screen.dart';
+import 'workforce/workforce_deployment_screen.dart';
 import '../common_railways/station_management/qr_code_screen.dart';
 import '../common_railways/station_management/worker_checkin_screen.dart';
 import '../common_railways/station_management/task_generation_screen.dart';
@@ -40,6 +41,10 @@ import '../common_railways/station_management/area_comparison_screen.dart';
 import '../common_railways/station_management/area_history_screen.dart';
 import '../common_railways/station_management/area_assignment_screen.dart';
 import '../common_railways/station_management/platform_list_screen.dart';
+import '../common_railways/station_management/frequency_list_screen.dart';
+import '../../repositories/station_run_repository.dart';
+import '../../model/station_run_model.dart';
+import 'attendance/worker_attendance_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
   final String stationId;
@@ -57,22 +62,22 @@ class StationCleaningHubScreen extends StatelessWidget {
   Set<int> _visibleCards(String role) {
     final r = role.toUpperCase().replaceAll(' ', '_');
     if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
     }
     if (r == 'RAILWAY_SUPERVISOR') {
-      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 24, 25, 26, 28, 29, 30, 31};
+      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 24, 25, 26, 28, 29, 30, 31, 35, 36};
     }
     if (r == 'CONTRACTOR_ADMIN') {
-      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25, 28, 30};
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25, 28, 30, 35, 36};
     }
     if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
     }
     if (r == 'PLATFORM_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
     }
     if (r == 'CONTRACTOR_SUPERVISOR') {
-      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20, 24, 25, 28, 30};
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20, 24, 25, 28, 30, 35};
     }
     if (['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r)) {
       return {0, 1, 2, 20, 22, 27};
@@ -121,6 +126,8 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.history, 'Area\nHistory', Colors.brown, () => _openAreaHistory(context)),         // 32
       _moduleCard(context, Icons.people, 'Area\nAssign', Colors.blueGrey, () => _openAreaAssignment(context)),     // 33
       _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 34
+      _moduleCard(context, Icons.groups, 'Workforce', Colors.indigo.shade700, () => _openWorkforce(context)),       // 35
+      _moduleCard(context, Icons.repeat, 'Frequency', Colors.cyan.shade700, () => _openFrequency(context)),         // 36
     ];
 
     final cards = <Widget>[];
@@ -188,7 +195,84 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openAttendance(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: stationId, stationName: stationName)));
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    final role = user?.role?.toUpperCase().replaceAll(' ', '_') ?? '';
+    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(role);
+    if (isWorker) {
+      _openWorkerAttendance(context, user!.uid, user.fullName ?? '');
+    } else {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: stationId, stationName: stationName)));
+    }
+  }
+
+  void _openWorkerAttendance(BuildContext context, String workerId, String workerName) {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => FutureBuilder<List<StationCleaningRunModel>>(
+        future: StationRunRepository.getMyStationRuns(),
+        builder: (ctx, snapshot) {
+          String resolvedRunId;
+          String resolvedStationId;
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const AlertDialog(content: SizedBox(height: 80, child: Center(child: CircularProgressIndicator())));
+          }
+          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+            final runs = snapshot.data!;
+            StationCleaningRunModel? todayRun;
+            try {
+              todayRun = runs.firstWhere(
+                (r) => r.date == today && ['scheduled', 'in progress', 'active'].contains(r.status.toLowerCase()),
+              );
+            } catch (_) {
+              todayRun = runs.isNotEmpty ? runs.first : null;
+            }
+            resolvedRunId = todayRun?.runInstanceId ?? '${stationId}_$today';
+            resolvedStationId = todayRun?.stationId ?? stationId;
+          } else {
+            resolvedRunId = '${stationId}_$today';
+            resolvedStationId = stationId;
+          }
+          return AlertDialog(
+            title: const Text('Select Attendance Type'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'start', 'Start Attendance', Icons.play_arrow, Colors.green),
+                const SizedBox(height: 8),
+                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'mid', 'Mid Attendance', Icons.pause, Colors.orange),
+                const SizedBox(height: 8),
+                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'end', 'End Attendance', Icons.stop, Colors.red),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _attendanceTypeButton(BuildContext context, String workerId, String workerName, String runInstanceId, String stationId, String type, String label, IconData icon, Color color) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.pop(context);
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => StationWorkerAttendanceScreen(
+              workerId: workerId,
+              workerName: workerName,
+              runInstanceId: runInstanceId,
+              stationId: stationId,
+              attendanceType: type,
+            ),
+          ));
+        },
+        icon: Icon(icon),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+      ),
+    );
   }
 
   void _openActivities(BuildContext context) {
@@ -425,5 +509,13 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openPlatforms(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformListScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openWorkforce(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkforceDeploymentScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openFrequency(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const FrequencyListScreen()));
   }
 }

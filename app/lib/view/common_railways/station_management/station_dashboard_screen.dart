@@ -569,9 +569,9 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const StationAttendanceScreen(
-                          stationId: 'ADI',
-                          stationName: 'Ahmedabad Junction',
+                        builder: (_) => StationAttendanceScreen(
+                          stationId: _selectedStation?.uid ?? '',
+                          stationName: _selectedStation?.stationName ?? '',
                         ),
                       ),
                     ),
@@ -587,9 +587,9 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const DailyActivityListScreen(
-                          stationId: 'ADI',
-                          stationName: 'Ahmedabad Junction',
+                        builder: (_) => DailyActivityListScreen(
+                          stationId: _selectedStation?.uid ?? '',
+                          stationName: _selectedStation?.stationName ?? '',
                         ),
                       ),
                     ),
@@ -605,10 +605,9 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const BillingSupportPackScreen(
-                          contractId: 'CON-123456',
-                          stationId: 'ADI',
-                          stationName: 'Ahmedabad Junction',
+                        builder: (_) => BillingSupportPackScreen(
+                          stationId: _selectedStation?.uid ?? '',
+                          stationName: _selectedStation?.stationName ?? '',
                         ),
                       ),
                     ),

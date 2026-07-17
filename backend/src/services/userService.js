@@ -727,7 +727,6 @@ class UserService {
     const isMaster = requesterLevel >= 60;
 
     let query = db.collection('users')
-      .where('role', '==', 'Railway Supervisor')
       .where('status', '==', 'APPROVED');
 
     if (isMaster) {
@@ -750,7 +749,7 @@ class UserService {
 
     let snapshot;
     try {
-      snapshot = await query.limit(200).get();
+      snapshot = await query.limit(500).get();
     } catch (error) {
       if (error.code === 'FAILED_PRECONDITION') {
         throw new ValidationError(`Query requires an index. Firebase Console check karo. ${error.message}`);
@@ -762,15 +761,20 @@ class UserService {
       return { count: 0, supervisors: [] };
     }
 
-    const supervisorList = [];
+    const allowedRoles = ['RAILWAY_SUPERVISOR', 'STATION_MASTER', 'RAILWAY_ADMIN', 'AREA_MASTER', 'PLATFORM_MASTER', 'RAILWAY_MASTER'];
+
     snapshot.forEach(doc => {
       const data = doc.data();
-      supervisorList.push({
-        uid: data.uid,
-        fullName: data.fullName,
-        division: data.division,
-        depot: data.depot || ""
-      });
+      const normalizedRole = (data.role || '').toUpperCase().replace(/\s+/g, '_');
+      
+      if (allowedRoles.includes(normalizedRole)) {
+        supervisorList.push({
+          uid: data.uid,
+          fullName: data.fullName,
+          division: data.division,
+          depot: data.depot
+        });
+      }
     });
 
     return { count: supervisorList.length, supervisors: supervisorList };

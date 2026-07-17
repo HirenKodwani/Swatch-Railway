@@ -85,4 +85,14 @@ class InspectionRepository {
     final res = await http.post(Uri.parse('$baseUrl/api/inspections/templates'), headers: await _headers(), body: jsonEncode(data));
     if (res.statusCode != 201 && res.statusCode != 200) throw Exception('Failed to create template');
   }
+
+  static Future<void> update(String uid, Map<String, dynamic> data) async {
+    final res = await http.put(Uri.parse('$baseUrl/api/inspections/$uid'), headers: await _headers(), body: jsonEncode(data));
+    if (res.statusCode != 200) throw Exception('Failed to update inspection');
+  }
+
+  static Future<void> remove(String uid) async {
+    final res = await http.delete(Uri.parse('$baseUrl/api/inspections/$uid'), headers: await _headers());
+    if (res.statusCode != 200) throw Exception('Failed to delete inspection');
+  }
 }

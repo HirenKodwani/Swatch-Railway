@@ -5,7 +5,7 @@ enum CaptureMode { biometric, manual, api, autoFlag }
 enum DailyActivityStatus { pending, inProgress, completed, partiallyCompleted, rejected, resubmitted, approved }
 enum DeficiencyStatus { open, closed, railwayVerified }
 enum PlanStatus { draft, submitted, approved, rejected, deleted }
-enum ComplaintStatus { reported, assigned, inProgress, resolved, closed, reopened, rejected, escalated, railwayVerified }
+enum ComplaintStatus { reported, assigned, inProgress, resolved, closed, reopened, rejected, escalated, railwayVerified, resubmitted }
 enum SupervisorLogStatus { draft, submitted, acknowledged, accepted, returned, rejected }
 enum ScorecardStatus { draft, submitted, approved, rejected }
 enum PestTreatmentStatus { pendingReview, approved, rejected, followUp, closed }
@@ -290,6 +290,10 @@ class StationInspection {
   final String remarks;
   final List<String> photos;
   final List<Deficiency> deficiencies;
+  final String? templateId;
+  final String? templateName;
+  final List<dynamic> checklist;
+  final List<dynamic> checklistResults;
 
   StationInspection({
     required this.uid,
@@ -308,6 +312,10 @@ class StationInspection {
     required this.remarks,
     required this.photos,
     required this.deficiencies,
+    this.templateId,
+    this.templateName,
+    this.checklist = const [],
+    this.checklistResults = const [],
   });
 
   factory StationInspection.fromJson(Map<String, dynamic> json) => StationInspection(
@@ -327,6 +335,10 @@ class StationInspection {
     remarks: json['remarks'] ?? '',
     photos: List<String>.from(json['photos'] ?? []),
     deficiencies: (json['deficiencies'] as List?)?.map((e) => Deficiency.fromJson(e)).toList() ?? [],
+    templateId: json['templateId'],
+    templateName: json['templateName'],
+    checklist: json['checklist'] ?? [],
+    checklistResults: json['checklistResults'] ?? [],
   );
 }
 
@@ -595,7 +607,7 @@ class Complaint {
     uid: json['uid'] ?? '', stationId: json['stationId'] ?? '',
     category: json['category'] ?? '',
     description: json['description'] ?? '',
-    status: json['status'] ?? '',
+    status: _toCamelCase((json['status'] ?? '').toString()),
     reportedBy: json['reportedBy'] ?? '',
     reportedByName: json['reportedByName'] ?? '',
     assignedTo: json['assignedTo'], assignedToName: json['assignedToName'],
@@ -864,6 +876,57 @@ class DashboardKpis {
     billingReady: json['billingReadiness']?['ready'] ?? 0,
     reportsSent: json['reportsSent']?['count'] ?? 0,
     raw: json,
+  );
+}
+
+class WorkforceDeployment {
+  final String uid;
+  final String workerId;
+  final String workerName;
+  final String stationId;
+  final String? platformId;
+  final String? areaId;
+  final String taskId;
+  final String shiftId;
+  final String? shiftType;
+  final String? supervisorId;
+  final String? supervisorName;
+  final String startDate;
+  final String? endDate;
+  final String status;
+
+  WorkforceDeployment({
+    required this.uid,
+    required this.workerId,
+    required this.workerName,
+    required this.stationId,
+    this.platformId,
+    this.areaId,
+    required this.taskId,
+    required this.shiftId,
+    this.shiftType,
+    this.supervisorId,
+    this.supervisorName,
+    required this.startDate,
+    this.endDate,
+    required this.status,
+  });
+
+  factory WorkforceDeployment.fromJson(Map<String, dynamic> json) => WorkforceDeployment(
+    uid: json['uid'] ?? '',
+    workerId: json['workerId'] ?? '',
+    workerName: json['workerName'] ?? '',
+    stationId: json['stationId'] ?? '',
+    platformId: json['platformId'],
+    areaId: json['areaId'],
+    taskId: json['taskId'] ?? '',
+    shiftId: json['shiftId'] ?? '',
+    shiftType: json['shiftType'],
+    supervisorId: json['supervisorId'],
+    supervisorName: json['supervisorName'],
+    startDate: json['startDate'] ?? '',
+    endDate: json['endDate'],
+    status: json['status'] ?? 'active',
   );
 }
 

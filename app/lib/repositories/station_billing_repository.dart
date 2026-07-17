@@ -95,4 +95,20 @@ class StationBillingRepository {
       throw Exception('Failed to reject billing pack');
     }
   }
+
+  static Future<void> recordPayment(String uid, {required double amount, required String mode, String? reference, String? date}) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/station-billing/$uid/payment'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'amount': amount,
+        'mode': mode,
+        if (reference != null) 'reference': reference,
+        if (date != null) 'date': date,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to record payment');
+    }
+  }
 }

@@ -1,9 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/repositories/worker_repo.dart';
+import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/helper/api_error_handler.dart';
+import 'package:crm_train/utills/app_colors.dart';
 
 class WorkerTaskViewScreen extends StatefulWidget {
   final String workerId;
@@ -26,13 +32,33 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
   String _selectedDate = DateTime.now().toIso8601String().split('T')[0];
   bool _startInProgress = false;
 
+  bool _startAttendanceMarked = false;
+  bool _midAttendanceMarked = false;
+  bool _endAttendanceMarked = false;
+
   final List<String> _statusChips = ['all', 'pending', 'in_progress', 'completed', 'approved', 'rejected'];
   String _statusFilter = 'all';
 
   @override
   void initState() {
     super.initState();
+    _loadAttendanceStatus();
     _loadTasks();
+  }
+
+  Future<void> _loadAttendanceStatus() async {
+    try {
+      final result = await StationCleaningRepository.getStationAttendanceStatus(
+        workerId: widget.workerId,
+      );
+      if (result['exists'] == true) {
+        setState(() {
+          _startAttendanceMarked = result['isStartMarked'] == true;
+          _midAttendanceMarked = result['isMidMarked'] == true;
+          _endAttendanceMarked = result['isEndMarked'] == true;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadTasks() async {
@@ -82,6 +108,27 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
     return list;
   }
 
+  Future<Map<String, double>?> _captureGps() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+      return {'lat': pos.latitude, 'lng': pos.longitude};
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _startTask(String taskId) async {
     setState(() => _startInProgress = true);
     try {
@@ -89,10 +136,17 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
       final token = prefs.getString('token');
       if (token == null) throw Exception('AUTH_ERROR');
 
+      final gps = await _captureGps();
+      final body = <String, dynamic>{};
+      if (gps != null) {
+        body['gpsLat'] = gps['lat']!;
+        body['gpsLng'] = gps['lng']!;
+      }
+
       final response = await http.post(
         Uri.parse('${ApiService.baseUrl}/api/tasks-v2/$taskId/start'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({}),
+        body: jsonEncode(body),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -108,108 +162,283 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
     }
   }
 
-  Future<void> _completeTask(String taskId) async {
-    final photoCtrl = TextEditingController();
-    final remarksCtrl = TextEditingController();
-
-    await showDialog(
+  Future<String?> _captureAndUploadPhoto() async {
+    final source = await showDialog<ImageSource>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Complete Task'),
+        title: const Text('Select Photo Source'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: photoCtrl, decoration: const InputDecoration(labelText: 'After Photo URL', hintText: 'Paste image URL after cleaning')),
-            TextField(controller: remarksCtrl, decoration: const InputDecoration(labelText: 'Remarks (optional)')),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Camera'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Gallery'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (photoCtrl.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('After photo is required')));
-                return;
-              }
-              try {
-                final prefs = await SharedPreferences.getInstance();
-                final token = prefs.getString('token');
-                if (token == null) throw Exception('AUTH_ERROR');
-
-                final response = await http.post(
-                  Uri.parse('${ApiService.baseUrl}/api/tasks-v2/$taskId/complete'),
-                  headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-                  body: jsonEncode({'afterPhoto': photoCtrl.text, 'remarks': remarksCtrl.text}),
-                ).timeout(const Duration(seconds: 30));
-
-                if (response.statusCode == 200) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task completed')));
-                  _loadTasks();
-                } else {
-                  throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-              }
-            },
-            child: const Text('Submit'),
-          ),
-        ],
       ),
     );
+    if (source == null) return null;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 70, maxWidth: 1920);
+    if (picked == null) return null;
+
+    try {
+      return await WorkerRepository.uploadMedia(picked.path);
+    } catch (_) {
+      return 'captured';
+    }
+  }
+
+  Future<void> _completeTask(String taskId) async {
+    final remarksCtrl = TextEditingController();
+    String? afterPhotoUrl;
+    Map<String, double>? gps;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Complete Task'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (afterPhotoUrl == null && afterPhotoUrl != 'captured')
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final url = await _captureAndUploadPhoto();
+                      if (url != null) {
+                        setDialogState(() => afterPhotoUrl = url);
+                      }
+                    },
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Capture After Photo'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kRailwayBlue, foregroundColor: Colors.white,
+                    ),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle, color: kSuccessGreen),
+                      const SizedBox(width: 8),
+                      const Text('Photo captured', style: TextStyle(color: kSuccessGreen)),
+                      TextButton(
+                        onPressed: () => setDialogState(() => afterPhotoUrl = null),
+                        child: const Text('Retake'),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.gps_fixed, size: 16, color: gps != null ? kSuccessGreen : Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                      gps != null ? 'GPS captured' : 'GPS will be captured on submit',
+                      style: TextStyle(fontSize: 12, color: gps != null ? kSuccessGreen : Colors.grey),
+                    ),
+                    if (gps != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => setDialogState(() => gps = null),
+                        child: const Text('Recapture', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(controller: remarksCtrl, decoration: const InputDecoration(labelText: 'Remarks (optional)')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (afterPhotoUrl == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('After photo is required'), backgroundColor: kWarningOrange),
+                  );
+                  return;
+                }
+                try {
+                  if (gps == null) {
+                    gps = await _captureGps();
+                  }
+                  final prefs = await SharedPreferences.getInstance();
+                  final token = prefs.getString('token');
+                  if (token == null) throw Exception('AUTH_ERROR');
+
+                  final body = <String, dynamic>{
+                    'afterPhoto': afterPhotoUrl,
+                    'remarks': remarksCtrl.text,
+                  };
+                  if (gps != null) {
+                    final g = gps!;
+                    body['gpsLat'] = g['lat'];
+                    body['gpsLng'] = g['lng'];
+                  }
+
+                  final response = await http.post(
+                    Uri.parse('${ApiService.baseUrl}/api/tasks-v2/$taskId/complete'),
+                    headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+                    body: jsonEncode(body),
+                  ).timeout(const Duration(seconds: 30));
+
+                  if (response.statusCode == 200) {
+                    Navigator.pop(ctx, true);
+                  } else {
+                    throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task completed')));
+      }
+      _loadTasks();
+    }
   }
 
   Future<void> _resubmitTask(String taskId) async {
-    final photoCtrl = TextEditingController();
     final remarksCtrl = TextEditingController();
+    String? afterPhotoUrl;
+    Map<String, double>? gps;
 
-    await showDialog(
+    final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Resubmit Task'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: photoCtrl, decoration: const InputDecoration(labelText: 'After Photo URL (updated)')),
-            TextField(controller: remarksCtrl, decoration: const InputDecoration(labelText: 'Remarks')),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Resubmit Task'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (afterPhotoUrl == null)
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final url = await _captureAndUploadPhoto();
+                      if (url != null) {
+                        setDialogState(() => afterPhotoUrl = url);
+                      }
+                    },
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Capture Updated Photo'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kRailwayBlue, foregroundColor: Colors.white,
+                    ),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle, color: kSuccessGreen),
+                      const SizedBox(width: 8),
+                      const Text('Photo captured', style: TextStyle(color: kSuccessGreen)),
+                      TextButton(
+                        onPressed: () => setDialogState(() => afterPhotoUrl = null),
+                        child: const Text('Retake'),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.gps_fixed, size: 16, color: gps != null ? kSuccessGreen : Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                      gps != null ? 'GPS captured' : 'GPS will be captured on submit',
+                      style: TextStyle(fontSize: 12, color: gps != null ? kSuccessGreen : Colors.grey),
+                    ),
+                    if (gps != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => setDialogState(() => gps = null),
+                        child: const Text('Recapture', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(controller: remarksCtrl, decoration: const InputDecoration(labelText: 'Remarks')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (afterPhotoUrl == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('After photo is required'), backgroundColor: kWarningOrange),
+                  );
+                  return;
+                }
+                try {
+                  if (gps == null) {
+                    gps = await _captureGps();
+                  }
+                  final prefs = await SharedPreferences.getInstance();
+                  final token = prefs.getString('token');
+                  if (token == null) throw Exception('AUTH_ERROR');
+
+                  final body = <String, dynamic>{
+                    'afterPhoto': afterPhotoUrl,
+                    'remarks': remarksCtrl.text,
+                  };
+                  if (gps != null) {
+                    final g = gps!;
+                    body['gpsLat'] = g['lat'];
+                    body['gpsLng'] = g['lng'];
+                  }
+
+                  final response = await http.post(
+                    Uri.parse('${ApiService.baseUrl}/api/tasks-v2/$taskId/resubmit'),
+                    headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+                    body: jsonEncode(body),
+                  ).timeout(const Duration(seconds: 30));
+
+                  if (response.statusCode == 200) {
+                    Navigator.pop(ctx, true);
+                  } else {
+                    throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              },
+              child: const Text('Resubmit'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (photoCtrl.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('After photo is required')));
-                return;
-              }
-              try {
-                final prefs = await SharedPreferences.getInstance();
-                final token = prefs.getString('token');
-                if (token == null) throw Exception('AUTH_ERROR');
-
-                final response = await http.post(
-                  Uri.parse('${ApiService.baseUrl}/api/tasks-v2/$taskId/resubmit'),
-                  headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-                  body: jsonEncode({'afterPhoto': photoCtrl.text, 'remarks': remarksCtrl.text}),
-                ).timeout(const Duration(seconds: 30));
-
-                if (response.statusCode == 200) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task resubmitted for review')));
-                  _loadTasks();
-                } else {
-                  throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-              }
-            },
-            child: const Text('Resubmit'),
-          ),
-        ],
       ),
     );
+
+    if (result == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task resubmitted for review')));
+      }
+      _loadTasks();
+    }
   }
 
   Color _statusColor(String status) {
@@ -272,6 +501,29 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
               ],
             ),
           ),
+          if (!_startAttendanceMarked)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: kWarningOrange.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kWarningOrange),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.access_time, color: kWarningOrange, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Start attendance not marked. Mark attendance from the hub screen.',
+                      style: TextStyle(color: kWarningOrange, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           SizedBox(
             height: 40,
             child: ListView(
