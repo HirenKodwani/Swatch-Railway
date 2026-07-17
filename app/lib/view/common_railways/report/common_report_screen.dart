@@ -22,6 +22,7 @@ import 'package:printing/printing.dart';
 import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
+import 'package:crm_train/repositories/base_repository.dart';
 class CommonReportScreen extends StatefulWidget {
   final int initialIndex;
   const CommonReportScreen({super.key, this.initialIndex = 0});
@@ -3229,6 +3230,8 @@ class _CommonReportScreenState extends State<CommonReportScreen>
     } catch (_) {}
   }
 
+  String? _stnCleaningSelectedReportType;
+
   Future<void> _generateStnCleaningReport() async {
     if (_stnCleaningSelectedStation == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a station *")));
@@ -3240,10 +3243,8 @@ class _CommonReportScreenState extends State<CommonReportScreen>
     });
 
     try {
-      final path = _stnCleaningSelectedPlatform != null
-          ? '/api/dashboard/platform/${_stnCleaningSelectedPlatform!.id}'
-          : '/api/dashboard/station/${_stnCleaningSelectedStation!.uid}';
-
+      final path = '/api/station-runs?stationId=${_stnCleaningSelectedStation!.uid}';
+      
       final result = await BaseRepository.apiCall(
         method: 'GET',
         path: path,
@@ -3251,17 +3252,28 @@ class _CommonReportScreenState extends State<CommonReportScreen>
       );
 
       if (mounted) {
+        final runs = (result['runs'] as List?) ?? [];
+        int completed = 0;
+        int active = 0;
+        int approved = 0;
+        
+        for (var run in runs) {
+          if (run['status'] == 'completed') completed++;
+          else if (run['status'] == 'approved') approved++;
+          else active++;
+        }
+
         setState(() {
           stnCleaningStats = {
-            'totalRuns': result['data']?['totalTasks'] ?? 0,
-            'activeRuns': result['data']?['pendingTasks'] ?? 0,
-            'completedRuns': result['data']?['completedTasks'] ?? 0,
-            'approvedRuns': result['data']?['approvedTasks'] ?? 0,
+            'totalRuns': runs.length,
+            'activeRuns': active,
+            'completedRuns': completed,
+            'approvedRuns': approved,
           };
           isLoadingStats = false;
           isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Report generated successfully!"), backgroundColor: Colors.green));
+        _showStnCleaningReportGeneratedDialog(runs);
       }
     } catch (e) {
       if (mounted) {
@@ -3270,6 +3282,242 @@ class _CommonReportScreenState extends State<CommonReportScreen>
           isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to fetch report data: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _showStnCleaningReportGeneratedDialog(List<dynamic> runs) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Success", style: TextStyle(color: Colors.green)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Report Generated Successfully!"),
+            const SizedBox(height: 8),
+            Text(
+              "${runs.length} record(s) found",
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text("Close"),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.table_chart, color: Colors.white, size: 18),
+            label: const Text("Excel", style: TextStyle(color: Colors.white)),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _downloadStnCleaningExcel(runs);
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 18),
+            label: const Text("PDF", style: TextStyle(color: Colors.white)),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _downloadStnCleaningPdf(runs);
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kRailwayBlue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.send, color: Colors.white, size: 18),
+            label: const Text("Email", style: TextStyle(color: Colors.white)),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _sendStnCleaningEmailToHigherAuthority(runs);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadStnCleaningPdf(List<dynamic> runInstances) async {
+    setState(() => isDownloading = true);
+    try {
+      final runs = runInstances.cast<Map<String, dynamic>>();
+      Uint8List? pdfBytes;
+
+      switch (_stnCleaningSelectedReportType) {
+        case 'Station Run Report':
+          // Using train report pdf template as fallback for now
+          pdfBytes = await PDFReportService.generateTrainReportPdf(runs);
+          break;
+        case 'Attendance Report':
+          final allAttendance = <Map<String, dynamic>>[];
+          for (final run in runs) {
+            final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
+            if (runId.isNotEmpty) {
+              allAttendance.addAll(await FirebaseOBHSService.getAttendanceForRun(runId));
+            }
+          }
+          pdfBytes = await PDFReportService.generateAttendanceReportPdf(runs, allAttendance);
+          break;
+        case 'Worker Activity Report':
+          final allTasks = <Map<String, dynamic>>[];
+          for (final run in runs) {
+            final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
+            if (runId.isNotEmpty) {
+              allTasks.addAll(await FirebaseOBHSService.getTasksForRun(runId));
+            }
+          }
+          pdfBytes = await PDFReportService.generateWorkerActivityReportPdf(runs, allTasks);
+          break;
+        case 'Complaint Report':
+          final allComplaints = <Map<String, dynamic>>[];
+          for (final run in runs) {
+            final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
+            if (runId.isNotEmpty) {
+              allComplaints.addAll(await FirebaseOBHSService.getComplaintsForRun(runId));
+            }
+          }
+          pdfBytes = await PDFReportService.generateComplaintReportPdf(runs, allComplaints);
+          break;
+        default:
+          pdfBytes = await PDFReportService.generateTrainReportPdf(runs);
+      }
+
+      setState(() => isDownloading = false);
+      
+      if (pdfBytes != null) {
+        final typeSlug = (_stnCleaningSelectedReportType ?? 'report').toLowerCase().replaceAll(' ', '_');
+        final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+        await Printing.sharePdf(bytes: pdfBytes, filename: 'StationCleaning_${typeSlug}_$timestamp.pdf');
+      }
+    } catch (e) {
+      setState(() => isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendStnCleaningEmailToHigherAuthority(List<dynamic> runInstances) async {
+    setState(() => isDownloading = true);
+    int successCount = 0;
+    try {
+      for (final run in runInstances) {
+        final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
+        if (runId.isNotEmpty) {
+          String backendReportType = 'OPERATIONAL_AUDIT';
+          if (_stnCleaningSelectedReportType == 'Attendance Report') backendReportType = 'ATTENDANCE_AUDIT';
+          else if (_stnCleaningSelectedReportType == 'Worker Activity Report') backendReportType = 'WORKER_ACTIVITY_AUDIT';
+          else if (_stnCleaningSelectedReportType == 'Complaint Report') backendReportType = 'COMPLAINT_AUDIT';
+          
+          await ApiService.sendAuditReportEmail(backendReportType, runId, 'hirenkodwani@gmail.com');
+          successCount++;
+        }
+      }
+      setState(() => isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Email successfully sent to Higher Authority for $successCount run(s).'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      setState(() => isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send email: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadStnCleaningExcel(List<dynamic> runs) async {
+    if (runs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No data available to download")),
+      );
+      return;
+    }
+
+    setState(() => isDownloading = true);
+
+    try {
+      final workbook = xlsio.Workbook();
+      final sheet = workbook.worksheets[0];
+      sheet.name = 'Station Cleaning Report';
+
+      final headerStyle = workbook.styles.add('headerStyle')
+        ..bold = true
+        ..hAlign = xlsio.HAlignType.center
+        ..vAlign = xlsio.VAlignType.center
+        ..wrapText = true
+        ..borders.all.lineStyle = xlsio.LineStyle.thin;
+
+      final row1Headers = [
+        'Run ID', 'Date', 'Shift', 'Status', 'Completed At'
+      ];
+
+      for (int i = 0; i < row1Headers.length; i++) {
+        sheet.getRangeByIndex(1, i + 1).setText(row1Headers[i]);
+        sheet.getRangeByIndex(1, i + 1).cellStyle = headerStyle;
+      }
+
+      for (int i = 0; i < runs.length; i++) {
+        final run = runs[i];
+        final rowIndex = i + 2;
+
+        sheet.getRangeByIndex(rowIndex, 1).setText(run['id']?.toString() ?? '-');
+        sheet.getRangeByIndex(rowIndex, 2).setText(run['date']?.toString() ?? '-');
+        sheet.getRangeByIndex(rowIndex, 3).setText(run['shift']?.toString() ?? '-');
+        sheet.getRangeByIndex(rowIndex, 4).setText(run['status']?.toString() ?? '-');
+        sheet.getRangeByIndex(rowIndex, 5).setText(run['completedAt']?.toString() ?? '-');
+      }
+
+      final List<int> bytes = workbook.saveAsStream();
+      workbook.dispose();
+
+      final dir = await getApplicationDocumentsDirectory();
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final file = File('${dir.path}/Station_Cleaning_Report_$timestamp.xlsx');
+      await file.writeAsBytes(bytes);
+
+      setState(() => isDownloading = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Report downloaded successfully!"),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'Open',
+              textColor: Colors.white,
+              onPressed: () {
+                OpenFilex.open(file.path);
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to download report: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -3326,7 +3574,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
               _dateRangePicker(),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedReportType,
+                value: _stnCleaningSelectedReportType,
                 decoration: InputDecoration(
                   hint: Text('Select Report'),
                   contentPadding: EdgeInsets.all(8),
@@ -3341,7 +3589,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                   "Complaint Report"
                 ].map((type) => DropdownMenuItem(value: type, child: Text(type, style: TextStyle(fontWeight: FontWeight.normal, fontSize: 13)))).toList(),
                 onChanged: (value) {
-                  setState(() { selectedReportType = value; });
+                  setState(() { _stnCleaningSelectedReportType = value; });
                 },
               ),
               const SizedBox(height: 20),
