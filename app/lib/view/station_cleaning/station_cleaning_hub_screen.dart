@@ -206,49 +206,44 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openWorkerAttendance(BuildContext context, String workerId, String workerName) {
+    final today = DateTime.now().toIso8601String().split('T')[0];
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => FutureBuilder<List<StationCleaningRunModel>>(
         future: StationRunRepository.getMyStationRuns(),
         builder: (ctx, snapshot) {
+          String resolvedRunId;
+          String resolvedStationId;
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const AlertDialog(content: SizedBox(height: 80, child: Center(child: CircularProgressIndicator())));
           }
-          if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-            return AlertDialog(
-              title: const Text('No Station Cleaning Run'),
-              content: const Text('You are not assigned to any station cleaning run. Contact your supervisor to get assigned.'),
-              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-            );
-          }
-          final runs = snapshot.data!;
-          final today = DateTime.now().toIso8601String().split('T')[0];
-          StationCleaningRunModel? todayRun;
-          try {
-            todayRun = runs.firstWhere(
-              (r) => r.date == today && ['scheduled', 'in progress', 'active'].contains(r.status.toLowerCase()),
-            );
-          } catch (_) {
-            todayRun = runs.isNotEmpty ? runs.first : null;
-          }
-          if (todayRun == null) {
-            return AlertDialog(
-              title: const Text('No Active Run Today'),
-              content: const Text('You have station run assignments but none are scheduled for today.'),
-              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-            );
+          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+            final runs = snapshot.data!;
+            StationCleaningRunModel? todayRun;
+            try {
+              todayRun = runs.firstWhere(
+                (r) => r.date == today && ['scheduled', 'in progress', 'active'].contains(r.status.toLowerCase()),
+              );
+            } catch (_) {
+              todayRun = runs.isNotEmpty ? runs.first : null;
+            }
+            resolvedRunId = todayRun?.runInstanceId ?? '${stationId}_$today';
+            resolvedStationId = todayRun?.stationId ?? stationId;
+          } else {
+            resolvedRunId = '${stationId}_$today';
+            resolvedStationId = stationId;
           }
           return AlertDialog(
             title: const Text('Select Attendance Type'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _attendanceTypeButton(ctx, workerId, workerName, todayRun.runInstanceId, todayRun.stationId, 'start', 'Start Attendance', Icons.play_arrow, Colors.green),
+                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'start', 'Start Attendance', Icons.play_arrow, Colors.green),
                 const SizedBox(height: 8),
-                _attendanceTypeButton(ctx, workerId, workerName, todayRun.runInstanceId, todayRun.stationId, 'mid', 'Mid Attendance', Icons.pause, Colors.orange),
+                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'mid', 'Mid Attendance', Icons.pause, Colors.orange),
                 const SizedBox(height: 8),
-                _attendanceTypeButton(ctx, workerId, workerName, todayRun.runInstanceId, todayRun.stationId, 'end', 'End Attendance', Icons.stop, Colors.red),
+                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'end', 'End Attendance', Icons.stop, Colors.red),
               ],
             ),
           );
