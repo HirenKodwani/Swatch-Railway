@@ -37,8 +37,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   String _selectedShift = 'Morning';
   String _selectedFrequency = 'daily';
 
-  // Override worker ID
-  String? _overrideWorkerId;
+
 
   // Selected areas and worker assignments
   final Set<String> _selectedAreaIds = {};
@@ -251,15 +250,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       if (area == null) continue;
       final platformName = _getPlatformName(area.platformId);
 
-      List<RailwayWorkerModel> workersToAssign = [];
-      if (_overrideWorkerId != null && _overrideWorkerId!.isNotEmpty) {
-        final overrideWorker = _workers.where((w) => w.uid == _overrideWorkerId).firstOrNull;
-        if (overrideWorker != null) {
-          workersToAssign = [overrideWorker];
-        }
-      } else {
-        workersToAssign = _areaWorkerAssignments[areaId] ?? [];
-      }
+      List<RailwayWorkerModel> workersToAssign = _areaWorkerAssignments[areaId] ?? [];
 
       if (workersToAssign.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -424,32 +415,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               }
                             },
                           ),
-                          const SizedBox(height: 12),
 
-                          // Assign to specific worker (Optional)
-                          DropdownButtonFormField<String?>(
-                            value: _overrideWorkerId,
-                            decoration: const InputDecoration(
-                              labelText: 'Assign to specific worker (Optional)',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.person),
-                            ),
-                            items: [
-                              const DropdownMenuItem<String?>(
-                                value: null,
-                                child: Text('Use default assigned worker(s)'),
-                              ),
-                              ..._workers.map((w) => DropdownMenuItem<String?>(
-                                value: w.uid,
-                                child: Text(w.fullName),
-                              )),
-                            ],
-                            onChanged: (v) {
-                              setState(() {
-                                _overrideWorkerId = v;
-                              });
-                            },
-                          ),
                         ],
                       ),
                     ),
