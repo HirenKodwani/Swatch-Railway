@@ -294,6 +294,53 @@ class StationCleaningService {
     return { message: 'Schedule deleted', uid };
   }
 
+  _shiftDefaultTime(shift) {
+    const s = (shift || '').toLowerCase();
+    if (s.includes('morning')) return '08:00';
+    if (s.includes('afternoon')) return '12:00';
+    if (s.includes('evening')) return '16:00';
+    if (s.includes('night')) return '20:00';
+    return '08:00';
+  }
+
+  async _createPlatformTasks(platforms, runData, user) {
+    const batch = admin.firestore().batch();
+    const tasks = [];
+    const now = new Date().toISOString();
+    const scheduledTime = this._shiftDefaultTime(runData.shift);
+    for (const plat of (platforms || [])) {
+      if (!plat.janitorId) continue;
+      const taskRef = db.collection('cleaningTasks').doc();
+      const areaId = `platform_${plat.platformNumber || 'unknown'}_${runData.stationId}`;
+      const taskData = {
+        uid: taskRef.id,
+        stationId: runData.stationId,
+        stationName: runData.stationName || '',
+        platformId: plat.platformNumber || '',
+        areaId,
+        areaName: plat.platformNumber ? `Platform ${plat.platformNumber}` : 'Station Area',
+        workerId: plat.janitorId,
+        workerName: plat.janitorName || '',
+        supervisorId: runData.supervisorId || (user && user.uid) || null,
+        activityType: 'station_cleaning',
+        frequency: 'daily',
+        scheduledDate: runData.date || runData.runDate,
+        scheduledTime,
+        priority: 3,
+        shift: runData.shift || 'morning',
+        status: 'pending',
+        runInstanceId: runData.runInstanceId || '',
+        createdBy: user && user.uid,
+        createdAt: now,
+        updatedAt: now
+      };
+      batch.set(taskRef, taskData);
+      tasks.push(taskData);
+    }
+    if (tasks.length > 0) await batch.commit();
+    return tasks;
+  }
+
   // ─── Station Runs ───────────────────────────────────────────────────────────
   async createStationRun(body, user) {
     const { stationId } = body;
@@ -323,7 +370,10 @@ class StationCleaningService {
       updatedAt: new Date().toISOString()
     };
     await ref.set(data);
-    return { message: 'Station run created', uid: ref.id, data };
+
+    const tasks = await this._createPlatformTasks(body.platforms, data, user);
+
+    return { message: 'Station run created', uid: ref.id, data, tasksCreated: tasks.length };
   }
 
   async listStationRuns(query, user) {

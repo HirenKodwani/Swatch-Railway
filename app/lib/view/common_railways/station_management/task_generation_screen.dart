@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/model/station_run_model.dart';
@@ -142,6 +145,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
 
     setState(() => _isSubmitting = true);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) throw Exception('Auth token not available');
       final run = StationCleaningRunModel(
         runInstanceId: 'SCR-${DateTime.now().millisecondsSinceEpoch}',
         stationId: _selectedStation!.uid ?? '',
@@ -151,12 +157,25 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         status: 'active',
         platforms: _assignments,
       );
-      await StationRunRepository.createStationRun(run);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Station run generated successfully!'), backgroundColor: kSuccessGreen),
-        );
-        Navigator.pop(context, true);
+      final resp = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/station-runs'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(run.toJson()),
+      );
+      final decoded = jsonDecode(resp.body);
+      if (resp.statusCode == 201 && decoded['success'] == true) {
+        final tasksCount = decoded['tasksCreated'] ?? 0;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Station run created! $tasksCount task(s) generated.'),
+              backgroundColor: kSuccessGreen,
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+      } else {
+        throw Exception(decoded['error'] ?? 'Failed to create run');
       }
     } catch (e) {
       if (mounted) {

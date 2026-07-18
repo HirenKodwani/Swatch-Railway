@@ -103,7 +103,7 @@ export const deleteSchedule = asyncHandler(async (req, res) => {
 
 export const createStationRun = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.createStationRun(req.body, req.user);
-  res.status(201).json({ success: true, data: result.data || result, message: result.message });
+  res.status(201).json({ success: true, data: result.data || result, message: result.message, tasksCreated: result.tasksCreated || 0 });
 });
 
 export const listStationRuns = asyncHandler(async (req, res) => {
