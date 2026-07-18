@@ -471,6 +471,37 @@ class StationCleaningService {
     return { count: runs.length, runs };
   }
 
+  async completePlatform(runId, user) {
+    const ref = db.collection('stationRuns').doc(runId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Station run not found');
+
+    const runData = doc.data();
+    if (runData.status === 'deleted') throw new NotFoundError('Station run not found');
+
+    const platforms = runData.platforms || [];
+    const myPlatform = platforms.find(p => p.janitorId === user.uid && p.status !== 'Completed');
+    if (!myPlatform) throw new ForbiddenError('No pending platform assignment found for you');
+
+    const updatedPlatforms = platforms.map(p => {
+      if (p.janitorId === user.uid && p.status !== 'Completed') {
+        return { ...p, status: 'Completed' };
+      }
+      return p;
+    });
+
+    const allCompleted = updatedPlatforms.every(p => p.status === 'Completed');
+    const newStatus = allCompleted ? 'Completed' : 'In Progress';
+
+    await ref.update({
+      platforms: updatedPlatforms,
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    });
+
+    return { message: `Platform ${myPlatform.platformNumber} marked complete`, runId, platformNumber: myPlatform.platformNumber };
+  }
+
   // ─── Station Tasks ──────────────────────────────────────────────────────────
   // Tasks are primarily managed via taskManagementService (used by tasksV2 routes).
   // These methods provide station-task CRUD for admin use cases.

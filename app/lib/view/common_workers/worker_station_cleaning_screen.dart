@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../model/station_run_model.dart';
 import '../../repositories/station_run_repository.dart';
+import '../../services/api_services.dart';
 import '../../utills/app_colors.dart';
 import 'worker_pest_control_screen.dart';
 import 'worker_garbage_screen.dart';
@@ -305,39 +309,36 @@ class _WorkerStationRunDetailScreenState extends State<WorkerStationRunDetailScr
 
     setState(() => _isSubmitting = true);
     try {
-      // Build updated platforms list
-      final updatedPlatforms = widget.run.platforms.map((p) {
-        if (p.platformNumber == platform.platformNumber && p.janitorId == platform.janitorId) {
-          return StationPlatformAssignment(
-            platformNumber: p.platformNumber,
-            janitorId: p.janitorId,
-            janitorName: p.janitorName,
-            status: 'Completed',
-          );
-        }
-        return p;
-      }).toList();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) throw Exception('Auth token not available');
 
-      final updatedRun = StationCleaningRunModel(
-        id: widget.run.id,
-        runInstanceId: widget.run.runInstanceId,
-        stationId: widget.run.stationId,
-        stationName: widget.run.stationName,
-        shift: widget.run.shift,
-        date: widget.run.date,
-        status: updatedPlatforms.every((p) => p.status == 'Completed') ? 'Completed' : 'In Progress',
-        platforms: updatedPlatforms,
-        createdAt: widget.run.createdAt,
+      final resp = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/station-runs/${widget.run.id ?? widget.run.runInstanceId}/complete-platform'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
-
-      await StationRunRepository.updateStationRun(widget.run.id ?? widget.run.runInstanceId, updatedRun);
+      final decoded = jsonDecode(resp.body);
+      if (resp.statusCode != 200 || decoded['success'] != true) {
+        throw Exception(decoded['error'] ?? 'Failed to complete platform');
+      }
 
       if (!mounted) return;
       // Update local state
       setState(() {
+        final updatedPlatforms = widget.run.platforms.map((p) {
+          if (p.platformNumber == platform.platformNumber && p.janitorId == platform.janitorId) {
+            return StationPlatformAssignment(
+              platformNumber: p.platformNumber,
+              janitorId: p.janitorId,
+              janitorName: p.janitorName,
+              status: 'Completed',
+            );
+          }
+          return p;
+        }).toList();
         widget.run.platforms.clear();
         widget.run.platforms.addAll(updatedPlatforms);
-        widget.run.status = updatedRun.status;
+        widget.run.status = updatedPlatforms.every((p) => p.status == 'Completed') ? 'Completed' : 'In Progress';
       });
 
       ScaffoldMessenger.of(context).showSnackBar(

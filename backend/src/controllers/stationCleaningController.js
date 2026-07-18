@@ -131,6 +131,11 @@ export const getWorkerStationRuns = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: result.runs || result.data || [], count: result.count });
 });
 
+export const completePlatform = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.completePlatform(req.params.runId, req.user);
+  res.status(200).json({ success: true, ...result });
+});
+
 export const getSupervisorStationRuns = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.getSupervisorStationRuns(req.params.supervisorId, req.user);
   res.status(200).json({ success: true, data: result.runs || result.data || [], count: result.count });

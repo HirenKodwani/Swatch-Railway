@@ -44,6 +44,7 @@ router.get('/api/station-runs/my-runs', verifyToken, requirePermission(PERMISSIO
 router.get('/api/station-runs/worker/:workerId', verifyToken, requirePermission(PERMISSIONS.VIEW_RUNS), stationCleaning.getWorkerStationRuns);
 router.get('/api/station-runs/supervisor/:supervisorId', verifyToken, requirePermission(PERMISSIONS.VIEW_RUNS), stationCleaning.getSupervisorStationRuns);
 router.put('/api/station-runs/:runId', verifyToken, requirePermission(PERMISSIONS.MANAGE_RUNS), requireStationAccess, requirePlatformAccess, stationCleaning.updateStationRun);
+router.post('/api/station-runs/:runId/complete-platform', verifyToken, requirePermission(PERMISSIONS.SUBMIT_TASKS), stationCleaning.completePlatform);
 router.delete('/api/station-runs/:runId', verifyToken, requirePermission(PERMISSIONS.MANAGE_RUNS), requireStationAccess, requirePlatformAccess, stationCleaning.deleteStationRun);
 
 // ─── Station Tasks ────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ import 'package:crm_train/view/common_workers/worker_attendance_screen.dart';
 import 'package:crm_train/view/common_workers/worker_complaints_screen.dart';
 import 'package:crm_train/view/common_workers/worker_mobile_home_screen.dart';
 import 'package:crm_train/view/common_workers/worker_rating_screen.dart';
-import 'package:crm_train/view/common_workers/worker_task_screen.dart';
+import 'package:crm_train/view/station_cleaning/worker_tasks/worker_task_view_screen.dart';
 import 'package:crm_train/view/station_cleaning/attendance/worker_attendance_screen.dart'
     as station_cleaning;
 import 'package:flutter/material.dart';
@@ -69,7 +69,7 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
   List<Widget> _buildScreens() {
     return [
       WorkerMobileHomeScreen(),
-      WorkerTaskScreen(),
+      WorkerTaskViewScreen(workerId: widget.user.uid, workerName: widget.user.fullName),
       const _AttendanceTab(),
       WorkerComplaintsScreen(),
       const WorkerRatingScreen(isOfficialMode: false),
