@@ -41,7 +41,6 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
 
   Station? _selectedStation;
   Platform? _selectedPlatform;
-  StationArea? _selectedArea;
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'Morning';
 
@@ -141,7 +140,6 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
             ];
           }
           _selectedPlatform = _platforms.first;
-          _selectedArea = null;
         });
       }
     } catch (e) {
@@ -152,41 +150,12 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
             Platform(uid: 'fallback_p2_${stationId}', platformNumber: '2', stationId: stationId, platformName: 'Platform 2'),
           ];
           _selectedPlatform = _platforms.first;
-          _selectedArea = null;
         });
       }
     }
   }
 
-  void _addLocalAssignment() {
-    if (_selectedPlatform == null) return;
 
-    final platName = _selectedPlatform!.displayName;
-    final areaName = _selectedArea?.name;
-
-    final isDuplicate = _assignments.any((a) =>
-        a.platformId == _selectedPlatform!.uid &&
-        a.area?.uid == _selectedArea?.uid);
-
-    if (isDuplicate) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${_selectedArea != null ? areaName : platName} already added to assignments.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _assignments.add(LocalAssignment(
-        platformNumber: _selectedPlatform!.platformNumber,
-        platformId: _selectedPlatform!.uid,
-        area: _selectedArea,
-      ));
-    });
-  }
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -402,51 +371,74 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
                       onChanged: (v) {
                         setState(() {
                           _selectedPlatform = v;
-                          _selectedArea = null;
                         });
                       },
                     ),
                     if (_selectedPlatform != null) ...[
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<StationArea?>(
-                        key: ValueKey('area_dropdown_${_selectedPlatform!.uid}'),
-                        decoration: const InputDecoration(labelText: 'Select Specific Area', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
-                        value: _selectedArea,
-                        items: [
-                          const DropdownMenuItem<StationArea?>(
-                            value: null,
-                            child: Text('Entire Platform / All Areas'),
-                          ),
-                          ..._allAreas
-                              .where((a) => a.platformId == _selectedPlatform!.uid)
-                              .map((a) => DropdownMenuItem<StationArea?>(value: a, child: Text(a.name))),
-                        ],
-                        onChanged: (v) {
-                          setState(() {
-                            _selectedArea = v;
-                          });
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Select Areas to Assign:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 8),
+                      Builder(
+                        builder: (context) {
+                          final platformAreas = _allAreas.where((a) => a.platformId == _selectedPlatform!.uid).toList();
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilterChip(
+                                label: const Text('Entire Platform / All Areas'),
+                                selected: _assignments.any((a) => a.platformId == _selectedPlatform!.uid && a.area == null),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      if (!_assignments.any((a) => a.platformId == _selectedPlatform!.uid && a.area == null)) {
+                                        _assignments.add(LocalAssignment(
+                                          platformNumber: _selectedPlatform!.platformNumber,
+                                          platformId: _selectedPlatform!.uid,
+                                          area: null,
+                                        ));
+                                      }
+                                    } else {
+                                      _assignments.removeWhere((a) => a.platformId == _selectedPlatform!.uid && a.area == null);
+                                    }
+                                  });
+                                },
+                                selectedColor: kRailwayBlue.withOpacity(0.2),
+                                checkmarkColor: kRailwayBlue,
+                              ),
+                              ...platformAreas.map((area) {
+                                final isSelected = _assignments.any((a) => a.platformId == _selectedPlatform!.uid && a.area?.uid == area.uid);
+                                return FilterChip(
+                                  label: Text(area.name),
+                                  selected: isSelected,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        if (!isSelected) {
+                                          _assignments.add(LocalAssignment(
+                                            platformNumber: _selectedPlatform!.platformNumber,
+                                            platformId: _selectedPlatform!.uid,
+                                            area: area,
+                                          ));
+                                        }
+                                      } else {
+                                        _assignments.removeWhere((a) => a.platformId == _selectedPlatform!.uid && a.area?.uid == area.uid);
+                                      }
+                                    });
+                                  },
+                                  selectedColor: kRailwayBlue.withOpacity(0.2),
+                                  checkmarkColor: kRailwayBlue,
+                                );
+                              }),
+                            ],
+                          );
                         },
                       ),
                     ],
                   ],
-                  const SizedBox(height: 12),
-                  // Add platform/area button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _selectedPlatform == null ? null : _addLocalAssignment,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Platform / Area to Run'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kRailwayBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 24),
                   const Text('Platform & Worker Assignments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
