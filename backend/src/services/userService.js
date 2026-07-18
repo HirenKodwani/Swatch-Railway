@@ -704,7 +704,11 @@ class UserService {
         role: data.role || '',
         designation: data.designation || '',
         status: data.status || 'PENDING',
-        userType: data.userType || ''
+        userType: data.userType || '',
+        stationId: data.stationId || '',
+        depot: data.depot || '',
+        zone: data.zone || '',
+        division: data.division || ''
       });
     });
 

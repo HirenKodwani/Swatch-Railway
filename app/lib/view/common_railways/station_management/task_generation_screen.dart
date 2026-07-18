@@ -169,6 +169,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     final currentAssigned = _areaWorkerAssignments[areaId] ?? [];
     final selectedWorkers = List<RailwayWorkerModel>.from(currentAssigned);
 
+    final stationWorkers = _selectedStation == null
+        ? _workers
+        : _workers.where((w) => w.stationId == _selectedStation!.uid).toList();
+
     await showDialog(
       context: context,
       builder: (ctx) {
@@ -190,30 +194,38 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                       constraints: BoxConstraints(
                         maxHeight: MediaQuery.of(context).size.height * 0.5,
                       ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _workers.length,
-                        itemBuilder: (context, index) {
-                          final worker = _workers[index];
-                          final isSelected = selectedWorkers.any((w) => w.uid == worker.uid);
-                          return CheckboxListTile(
-                            title: Text(worker.fullName),
-                            subtitle: Text(worker.role),
-                            value: isSelected,
-                            onChanged: (val) {
-                              setDialogState(() {
-                                if (val == true) {
-                                  if (!selectedWorkers.any((w) => w.uid == worker.uid)) {
-                                    selectedWorkers.add(worker);
-                                  }
-                                } else {
-                                  selectedWorkers.removeWhere((w) => w.uid == worker.uid);
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
+                      child: stationWorkers.isEmpty
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Text(
+                                'No workers registered at this station.',
+                                style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: stationWorkers.length,
+                              itemBuilder: (context, index) {
+                                final worker = stationWorkers[index];
+                                final isSelected = selectedWorkers.any((w) => w.uid == worker.uid);
+                                return CheckboxListTile(
+                                  title: Text(worker.fullName),
+                                  subtitle: Text(worker.role),
+                                  value: isSelected,
+                                  onChanged: (val) {
+                                    setDialogState(() {
+                                      if (val == true) {
+                                        if (!selectedWorkers.any((w) => w.uid == worker.uid)) {
+                                          selectedWorkers.add(worker);
+                                        }
+                                      } else {
+                                        selectedWorkers.removeWhere((w) => w.uid == worker.uid);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
