@@ -11,7 +11,7 @@ class StationWorkerAttendanceScreen extends StatefulWidget {
   final String workerName;
   final String? runInstanceId;
   final String? stationId;
-  final String attendanceType; // 'start', 'mid', or 'end'
+  final String attendanceType;
 
   const StationWorkerAttendanceScreen({
     super.key,
@@ -35,31 +35,13 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
   Position? _gpsPosition;
   bool _submitting = false;
 
-  Future<Map<String, dynamic>?> _captureAndUploadSelfie() async {
-    final source = await showDialog<ImageSource>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Select Selfie Source'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Front Camera'),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Gallery'),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
+  Future<Map<String, dynamic>?> _captureSelfie() async {
+    final picked = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+      maxWidth: 1280,
+      preferredCameraDevice: CameraDevice.front,
     );
-    if (source == null) return null;
-
-    final picked = await picker.pickImage(source: source, imageQuality: 70, maxWidth: 1920);
     if (picked == null) return null;
 
     final file = File(picked.path);
@@ -240,7 +222,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
         const SizedBox(height: 16),
         const Text('Take a Selfie', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Text('Capture a clear selfie for identity verification.',
+        Text('Camera capture only — no gallery allowed.',
             style: TextStyle(color: Colors.grey[600])),
         const SizedBox(height: 24),
         if (_selfie != null)
@@ -261,7 +243,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
         else
           ElevatedButton.icon(
             onPressed: () async {
-              final result = await _captureAndUploadSelfie();
+              final result = await _captureSelfie();
               if (result != null) {
                 setState(() {
                   _selfie = result['file'];
@@ -270,7 +252,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
               }
             },
             icon: const Icon(Icons.camera_alt),
-            label: const Text('Take Selfie'),
+            label: const Text('Open Camera'),
             style: ElevatedButton.styleFrom(
               backgroundColor: kRailwayBlue, foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
