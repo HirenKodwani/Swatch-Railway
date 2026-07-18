@@ -60,30 +60,7 @@ class _TaskCompletionScreenState extends State<TaskCompletionScreen> {
   }
 
   Future<Map<String, dynamic>?> _pickAndUploadPhoto() async {
-    final source = await showDialog<ImageSource>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Select Photo Source'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Camera'),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Gallery'),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return null;
-
-    final picked = await picker.pickImage(source: source, imageQuality: 70, maxWidth: 1920);
+    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, maxWidth: 1920);
     if (picked == null) return null;
 
     final file = File(picked.path);

@@ -37,9 +37,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   String _selectedShift = 'Morning';
   String _selectedFrequency = 'daily';
 
-  String _userRole = '';
   String? _assignedPlatformId;
-  String? _assignedAreaId;
+  bool _isStationLocked = false;
   bool _isPlatformLocked = false;
 
   // Selected areas and worker assignments
@@ -58,28 +57,40 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
       
-      final assignedPlatformId = user?.platformId;
-      final assignedAreaId = user?.areaId;
+      final assignedPlatformId = (user?.areaId != null && user!.areaId!.isNotEmpty)
+          ? user.areaId
+          : user?.platformId;
 
       final stData = await ApiService.getStations(active: true);
       List<Station> filtered = stData;
+      bool stationLocked = false;
       if (widget.stationId != null) {
         filtered = stData.where((s) => s.uid == widget.stationId).toList();
+        stationLocked = true;
       } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
         if (user?.stationId != null && user!.stationId!.isNotEmpty) {
           filtered = stData.where((s) => s.uid == user.stationId).toList();
+          stationLocked = true;
         }
       }
       final wkData = await OBHSRepository.getWorkers();
       final seen = <String>{};
       final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
+      
+      final selectedSt = filtered.isNotEmpty ? filtered.first : null;
+      final stationWorkers = selectedSt != null
+          ? uniqueWorkers.where((w) => w.stationId == selectedSt.uid).toList()
+          : uniqueWorkers;
+
       if (mounted) {
         setState(() {
           _stations = filtered;
-          _workers = uniqueWorkers;
-          _userRole = role;
+          _workers = stationWorkers;
           _assignedPlatformId = assignedPlatformId;
-          _assignedAreaId = assignedAreaId;
+          _isPlatformLocked = (role == 'Area Master' || role == 'Platform Master') &&
+              assignedPlatformId != null &&
+              assignedPlatformId.isNotEmpty;
+          _isStationLocked = stationLocked;
           if (_stations.isNotEmpty) _selectedStation = _stations.first;
         });
         if (_selectedStation != null) {
@@ -102,20 +113,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _platforms = platforms;
           _allAreas = areas;
           
-          if (_userRole == 'Platform Master' && _assignedPlatformId != null && _assignedPlatformId!.isNotEmpty) {
-            _isPlatformLocked = true;
+          if (_isPlatformLocked && _assignedPlatformId != null && _assignedPlatformId!.isNotEmpty) {
             _selectedPlatform = _platforms.where((p) => p.uid == _assignedPlatformId).firstOrNull;
-          } else if (_userRole == 'Area Master' && _assignedAreaId != null && _assignedAreaId!.isNotEmpty) {
-            final assignedArea = _allAreas.where((a) => a.uid == _assignedAreaId).firstOrNull;
-            if (assignedArea != null && assignedArea.platformId != null) {
-              _isPlatformLocked = true;
-              _selectedPlatform = _platforms.where((p) => p.uid == assignedArea.platformId).firstOrNull;
-            } else {
-              _isPlatformLocked = false;
-              _selectedPlatform = null;
-            }
           } else {
-            _isPlatformLocked = false;
             _selectedPlatform = null;
           }
           
@@ -139,9 +139,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   }
 
   List<StationArea> get _filteredAreas {
-    if (_userRole == 'Area Master' && _assignedAreaId != null && _assignedAreaId!.isNotEmpty) {
-      return _allAreas.where((a) => a.uid == _assignedAreaId).toList();
-    }
     if (_selectedPlatform == null) {
       return _allAreas;
     }
@@ -169,9 +166,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     final currentAssigned = _areaWorkerAssignments[areaId] ?? [];
     final selectedWorkers = List<RailwayWorkerModel>.from(currentAssigned);
 
-    final stationWorkers = _selectedStation == null
-        ? _workers
-        : _workers.where((w) => w.stationId == _selectedStation!.uid).toList();
+    final availableWorkers = _workers;
 
     await showDialog(
       context: context,
@@ -194,7 +189,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                       constraints: BoxConstraints(
                         maxHeight: MediaQuery.of(context).size.height * 0.5,
                       ),
-                      child: stationWorkers.isEmpty
+                      child: availableWorkers.isEmpty
                           ? const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
                               child: Text(
@@ -204,9 +199,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             )
                           : ListView.builder(
                               shrinkWrap: true,
-                              itemCount: stationWorkers.length,
+                              itemCount: availableWorkers.length,
                               itemBuilder: (context, index) {
-                                final worker = stationWorkers[index];
+                                final worker = availableWorkers[index];
                                 final isSelected = selectedWorkers.any((w) => w.uid == worker.uid);
                                 return CheckboxListTile(
                                   title: Text(worker.fullName),
@@ -390,12 +385,24 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           // Station Dropdown
                           DropdownButtonFormField<Station>(
                             value: _selectedStation,
-                            decoration: const InputDecoration(labelText: 'Station', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business)),
+                            decoration: InputDecoration(
+                              labelText: 'Station',
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.business),
+                              hintText: _isStationLocked ? 'Assigned Station (locked)' : null,
+                            ),
                             items: _stations.map((s) => DropdownMenuItem(value: s, child: Text(s.stationName))).toList(),
-                            onChanged: _stations.length == 1 ? null : (v) {
+                            onChanged: _isStationLocked ? null : (v) async {
                               if (v != null) {
+                                final allWorkers = await OBHSRepository.getWorkers();
+                                final seen = <String>{};
+                                final uniqueWorkers = allWorkers.where((w) => seen.add(w.uid)).toList();
+                                final stationWorkers = uniqueWorkers.where((w) => w.stationId == v.uid).toList();
                                 setState(() {
                                   _selectedStation = v;
+                                  _workers = stationWorkers;
+                                  _selectedAreaIds.clear();
+                                  _areaWorkerAssignments.clear();
                                 });
                                 _loadPlatforms(v.uid!);
                               }
@@ -405,7 +412,12 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
 
                           // Platform Dropdown (Optional)
                           DropdownButtonFormField<Platform?>(
-                            decoration: const InputDecoration(labelText: 'Platform (optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.view_quilt)),
+                            decoration: InputDecoration(
+                              labelText: 'Platform',
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.view_quilt),
+                              hintText: _isPlatformLocked ? 'Assigned Platform (locked)' : null,
+                            ),
                             value: _selectedPlatform,
                             items: [
                               const DropdownMenuItem<Platform?>(
