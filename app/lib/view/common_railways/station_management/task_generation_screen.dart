@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/model/station_run_model.dart';
 import 'package:crm_train/repositories/station_run_repository.dart';
 import 'package:crm_train/repositories/obhs_repository.dart';
@@ -12,6 +14,20 @@ import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:intl/intl.dart';
+
+class LocalAssignment {
+  final String platformNumber;
+  final String? platformId;
+  final StationArea? area; // Null means Entire Platform
+  List<RailwayWorkerModel> workers;
+
+  LocalAssignment({
+    required this.platformNumber,
+    this.platformId,
+    this.area,
+    List<RailwayWorkerModel>? workers,
+  }) : workers = workers ?? [];
+}
 
 class TaskGenerationScreen extends StatefulWidget {
   final String? stationId;
@@ -27,14 +43,18 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   bool _isSubmitting = false;
 
   List<Station> _stations = [];
-  List<StationArea> _platforms = [];
+  List<Platform> _platforms = [];
+  List<StationArea> _allAreas = [];
   List<RailwayWorkerModel> _workers = [];
 
   Station? _selectedStation;
+  Platform? _selectedPlatform;
+  StationArea? _selectedArea;
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'Morning';
+  String _selectedFrequency = 'daily';
 
-  final List<StationPlatformAssignment> _assignments = [];
+  final List<LocalAssignment> _assignments = [];
 
   @override
   void initState() {
@@ -78,43 +98,64 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
 
   Future<void> _loadPlatforms(String stationId) async {
     try {
+      final platforms = await PlatformRepository.getByStation(stationId);
       final areas = await ApiService.getStationAreas(stationId);
       if (mounted) {
         setState(() {
-          final seen = <String>{};
-          _platforms = areas.where((a) => a.name.toLowerCase().contains('platform')).where((a) {
-            final id = a.uid ?? a.name;
-            if (seen.contains(id)) return false;
-            seen.add(id);
-            return true;
-          }).toList();
+          _platforms = platforms;
+          _allAreas = areas;
           if (_platforms.isEmpty) {
             _platforms = [
-              StationArea(uid: 'fallback_p1_$stationId', stationId: stationId, name: 'Platform 1'),
-              StationArea(uid: 'fallback_p2_$stationId', stationId: stationId, name: 'Platform 2'),
+              Platform(uid: 'fallback_p1_$stationId', platformNumber: '1', stationId: stationId, platformName: 'Platform 1'),
+              Platform(uid: 'fallback_p2_$stationId', platformNumber: '2', stationId: stationId, platformName: 'Platform 2'),
             ];
           }
+          _selectedPlatform = _platforms.first;
+          _selectedArea = null;
         });
       }
     } catch (e) {
+      debugPrint('Error loading platforms: $e');
       if (mounted) {
         setState(() {
           _platforms = [
-            StationArea(uid: 'fallback_p1_$stationId', stationId: stationId, name: 'Platform 1'),
-            StationArea(uid: 'fallback_p2_$stationId', stationId: stationId, name: 'Platform 2'),
+            Platform(uid: 'fallback_p1_$stationId', platformNumber: '1', stationId: stationId, platformName: 'Platform 1'),
+            Platform(uid: 'fallback_p2_$stationId', platformNumber: '2', stationId: stationId, platformName: 'Platform 2'),
           ];
+          _selectedPlatform = _platforms.first;
+          _selectedArea = null;
         });
       }
     }
   }
 
-  void _addPlatformAssignment(StationArea platform) {
-    if (_assignments.any((a) => a.platformNumber == platform.name)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Platform already added')));
+  void _addLocalAssignment() {
+    if (_selectedPlatform == null) return;
+
+    final platName = _selectedPlatform!.displayName;
+    final areaName = _selectedArea?.name;
+
+    final isDuplicate = _assignments.any((a) =>
+        a.platformId == _selectedPlatform!.uid &&
+        a.area?.uid == _selectedArea?.uid);
+
+    if (isDuplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${_selectedArea != null ? areaName : platName} already added to assignments.',
+          ),
+        ),
+      );
       return;
     }
+
     setState(() {
-      _assignments.add(StationPlatformAssignment(platformNumber: platform.name, janitorId: '', janitorName: ''));
+      _assignments.add(LocalAssignment(
+        platformNumber: _selectedPlatform!.platformNumber,
+        platformId: _selectedPlatform!.uid,
+        area: _selectedArea,
+      ));
     });
   }
 
@@ -134,13 +175,31 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       return;
     }
     if (_assignments.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please assign at least one platform with a worker')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please assign at least one platform/area')));
       return;
     }
-    final incomplete = _assignments.where((a) => a.janitorId.isEmpty);
-    if (incomplete.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please assign a worker for all platforms')));
-      return;
+
+    final List<StationPlatformAssignment> apiAssignments = [];
+    for (final assign in _assignments) {
+      if (assign.workers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Please assign at least one worker for ${assign.area != null ? assign.area!.name : "Platform " + assign.platformNumber}',
+            ),
+          ),
+        );
+        return;
+      }
+      for (final worker in assign.workers) {
+        apiAssignments.add(StationPlatformAssignment(
+          platformNumber: assign.platformNumber,
+          areaId: assign.area?.uid,
+          areaName: assign.area?.name,
+          janitorId: worker.uid,
+          janitorName: worker.fullName ?? 'Worker',
+        ));
+      }
     }
 
     setState(() => _isSubmitting = true);
@@ -153,9 +212,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         stationId: _selectedStation!.uid ?? '',
         stationName: _selectedStation!.stationName,
         shift: _selectedShift,
+        frequency: _selectedFrequency,
         date: DateFormat('yyyy-MM-dd').format(_selectedDate),
         status: 'active',
-        platforms: _assignments,
+        platforms: apiAssignments,
       );
       final resp = await http.post(
         Uri.parse('${ApiService.baseUrl}/api/station-runs'),
@@ -184,6 +244,82 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Future<void> _showWorkerSelectionDialog(int assignmentIndex) async {
+    final assignment = _assignments[assignmentIndex];
+    final selectedWorkers = List<RailwayWorkerModel>.from(assignment.workers);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Workers', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Select one or more workers to assign to this platform/area.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.5,
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _workers.length,
+                        itemBuilder: (context, index) {
+                          final worker = _workers[index];
+                          final isSelected = selectedWorkers.any((w) => w.uid == worker.uid);
+                          return CheckboxListTile(
+                            title: Text(worker.fullName ?? 'Unknown'),
+                            subtitle: Text(worker.role ?? ''),
+                            value: isSelected,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                if (val == true) {
+                                  if (!selectedWorkers.any((w) => w.uid == worker.uid)) {
+                                    selectedWorkers.add(worker);
+                                  }
+                                } else {
+                                  selectedWorkers.removeWhere((w) => w.uid == worker.uid);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _assignments[assignmentIndex].workers = selectedWorkers;
+                    });
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -228,14 +364,61 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 12),
                           // 2. Platform
-                          if (_selectedStation != null)
-                            DropdownButtonFormField<StationArea>(
+                          if (_selectedStation != null) ...[
+                            DropdownButtonFormField<Platform>(
                               key: ValueKey('platform_dropdown_${_selectedStation!.uid}'),
-                              decoration: const InputDecoration(labelText: 'Add Platform', border: OutlineInputBorder(), prefixIcon: Icon(Icons.view_quilt)),
-                              items: _platforms.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
-                              onChanged: (v) { if (v != null) _addPlatformAssignment(v); },
+                              decoration: const InputDecoration(labelText: 'Select Platform', border: OutlineInputBorder(), prefixIcon: Icon(Icons.view_quilt)),
+                              value: _selectedPlatform,
+                              items: _platforms.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName))).toList(),
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedPlatform = v;
+                                  _selectedArea = null;
+                                });
+                              },
                             ),
+                            if (_selectedPlatform != null) ...[
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<StationArea?>(
+                                key: ValueKey('area_dropdown_${_selectedPlatform!.uid}'),
+                                decoration: const InputDecoration(labelText: 'Select Specific Area', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
+                                value: _selectedArea,
+                                items: [
+                                  const DropdownMenuItem<StationArea?>(
+                                    value: null,
+                                    child: Text('Entire Platform / All Areas'),
+                                  ),
+                                  ..._allAreas
+                                      .where((a) => a.platformId == _selectedPlatform!.uid)
+                                      .map((a) => DropdownMenuItem<StationArea?>(value: a, child: Text(a.name))),
+                                ],
+                                onChanged: (v) {
+                                  setState(() {
+                                    _selectedArea = v;
+                                  });
+                                },
+                              ),
+                            ],
+                          ],
                           const SizedBox(height: 12),
+                          // Add platform/area button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _selectedPlatform == null ? null : _addLocalAssignment,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Platform / Area to Run'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: kRailwayBlue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           // 3. Date
                           InkWell(
                             onTap: _pickDate,
@@ -254,11 +437,26 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               if (v != null) setState(() => _selectedShift = v);
                             },
                           ),
+                          const SizedBox(height: 12),
+                          // 5. Frequency
+                          DropdownButtonFormField<String>(
+                            value: _selectedFrequency,
+                            decoration: const InputDecoration(labelText: 'Frequency', border: OutlineInputBorder(), prefixIcon: Icon(Icons.repeat)),
+                            items: const [
+                              DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                              DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                              DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) {
+                                setState(() => _selectedFrequency = v);
+                              }
+                            },
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  // 5. Workers/Areas assignments
                   const SizedBox(height: 16),
                   Card(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -274,41 +472,82 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             final a = entry.value;
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey.shade200),
+                              ),
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text('Platform: ${a.platformNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('Platform: Platform ${a.platformNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                a.area != null ? 'Area: ${a.area!.name}' : 'Area: Entire Platform',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                         IconButton(
                                           icon: const Icon(Icons.close, color: Colors.red),
                                           onPressed: () => setState(() => _assignments.removeAt(idx)),
                                         ),
                                       ],
                                     ),
-                                    DropdownButtonFormField<RailwayWorkerModel>(
-                                      key: ValueKey('worker_${idx}_${a.platformNumber}'),
-                                      value: a.janitorId.isEmpty
-                                          ? null
-                                          : (_workers.any((w) => w.uid == a.janitorId)
-                                              ? _workers.firstWhere((w) => w.uid == a.janitorId)
-                                              : null),
-                                      decoration: const InputDecoration(labelText: 'Assign Worker', border: OutlineInputBorder()),
-                                      items: _workers.map((w) => DropdownMenuItem(value: w, child: Text('${w.fullName} (${w.role})'))).toList(),
-                                      onChanged: (v) {
-                                        if (v != null) {
-                                          setState(() {
-                                            _assignments[idx] = StationPlatformAssignment(
-                                              platformNumber: a.platformNumber,
-                                              janitorId: v.uid,
-                                              janitorName: v.fullName,
-                                              status: a.status,
-                                            );
-                                          });
-                                        }
-                                      },
+                                    const Divider(),
+                                    const SizedBox(height: 4),
+                                    const Text('Assigned Workers:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                                    const SizedBox(height: 8),
+                                    if (a.workers.isEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 8.0),
+                                        child: Text(
+                                          'No workers assigned yet.',
+                                          style: TextStyle(color: kErrorRed.withOpacity(0.8), fontSize: 12, fontStyle: FontStyle.italic),
+                                        ),
+                                      )
+                                    else
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 6,
+                                        children: a.workers.map((w) {
+                                          return Chip(
+                                            label: Text(w.fullName ?? 'Worker', style: const TextStyle(fontSize: 11)),
+                                            deleteIcon: const Icon(Icons.cancel, size: 14),
+                                            onDeleted: () {
+                                              setState(() {
+                                                a.workers.remove(w);
+                                              });
+                                            },
+                                            padding: EdgeInsets.zero,
+                                            visualDensity: VisualDensity.compact,
+                                            backgroundColor: Colors.blue.shade50,
+                                            side: BorderSide(color: Colors.blue.shade100),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    const SizedBox(height: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showWorkerSelectionDialog(idx),
+                                      icon: const Icon(Icons.person_add_alt_1, size: 16),
+                                      label: const Text('Manage Workers'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: kRailwayBlue,
+                                        side: BorderSide(color: kRailwayBlue.withOpacity(0.5)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -317,9 +556,15 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           }).toList(),
                           if (_assignments.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(vertical: 24),
                               child: Center(
-                                child: Text('Add platforms above to assign workers', style: TextStyle(color: Colors.grey[500])),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.assignment_ind_outlined, size: 48, color: Colors.grey[400]),
+                                    const SizedBox(height: 8),
+                                    Text('No platforms or areas added yet.', style: TextStyle(color: Colors.grey[500])),
+                                  ],
+                                ),
                               ),
                             ),
                         ],

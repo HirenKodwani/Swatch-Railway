@@ -311,19 +311,20 @@ class StationCleaningService {
     for (const plat of (platforms || [])) {
       if (!plat.janitorId) continue;
       const taskRef = db.collection('cleaningTasks').doc();
-      const areaId = `platform_${plat.platformNumber || 'unknown'}_${runData.stationId}`;
+      const areaId = plat.areaId || `platform_${plat.platformNumber || 'unknown'}_${runData.stationId}`;
+      const areaName = plat.areaName || (plat.platformNumber ? `Platform ${plat.platformNumber}` : 'Station Area');
       const taskData = {
         uid: taskRef.id,
         stationId: runData.stationId,
         stationName: runData.stationName || '',
         platformId: plat.platformNumber || '',
         areaId,
-        areaName: plat.platformNumber ? `Platform ${plat.platformNumber}` : 'Station Area',
+        areaName,
         workerId: plat.janitorId,
         workerName: plat.janitorName || '',
         supervisorId: runData.supervisorId || (user && user.uid) || null,
         activityType: 'station_cleaning',
-        frequency: 'daily',
+        frequency: runData.frequency || 'daily',
         scheduledDate: runData.date || runData.runDate,
         scheduledTime,
         priority: 3,
