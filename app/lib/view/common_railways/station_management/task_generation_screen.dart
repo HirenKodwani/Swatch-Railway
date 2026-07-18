@@ -37,10 +37,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   String _selectedShift = 'Morning';
   String _selectedFrequency = 'daily';
 
-  bool _isPlatformLocked = false;
+  String _userRole = '';
   String? _assignedPlatformId;
-
-
+  String? _assignedAreaId;
+  bool _isPlatformLocked = false;
 
   // Selected areas and worker assignments
   final Set<String> _selectedAreaIds = {};
@@ -58,9 +58,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
       
-      final assignedPlatformId = (user?.areaId != null && user!.areaId!.isNotEmpty)
-          ? user.areaId
-          : user?.platformId;
+      final assignedPlatformId = user?.platformId;
+      final assignedAreaId = user?.areaId;
 
       final stData = await ApiService.getStations(active: true);
       List<Station> filtered = stData;
@@ -78,10 +77,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         setState(() {
           _stations = filtered;
           _workers = uniqueWorkers;
+          _userRole = role;
           _assignedPlatformId = assignedPlatformId;
-          _isPlatformLocked = (role == 'Area Master' || role == 'Platform Master') &&
-              assignedPlatformId != null &&
-              assignedPlatformId.isNotEmpty;
+          _assignedAreaId = assignedAreaId;
           if (_stations.isNotEmpty) _selectedStation = _stations.first;
         });
         if (_selectedStation != null) {
@@ -104,10 +102,21 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _platforms = platforms;
           _allAreas = areas;
           
-          if (_isPlatformLocked && _assignedPlatformId != null) {
+          if (_userRole == 'Platform Master' && _assignedPlatformId != null && _assignedPlatformId!.isNotEmpty) {
+            _isPlatformLocked = true;
             _selectedPlatform = _platforms.where((p) => p.uid == _assignedPlatformId).firstOrNull;
+          } else if (_userRole == 'Area Master' && _assignedAreaId != null && _assignedAreaId!.isNotEmpty) {
+            final assignedArea = _allAreas.where((a) => a.uid == _assignedAreaId).firstOrNull;
+            if (assignedArea != null && assignedArea.platformId != null) {
+              _isPlatformLocked = true;
+              _selectedPlatform = _platforms.where((p) => p.uid == assignedArea.platformId).firstOrNull;
+            } else {
+              _isPlatformLocked = false;
+              _selectedPlatform = null;
+            }
           } else {
-            _selectedPlatform = null; // Default to "All Platforms"
+            _isPlatformLocked = false;
+            _selectedPlatform = null;
           }
           
           _selectedAreaIds.clear();
@@ -121,6 +130,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _platforms = [];
           _allAreas = [];
           _selectedPlatform = null;
+          _isPlatformLocked = false;
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
         });
@@ -129,6 +139,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   }
 
   List<StationArea> get _filteredAreas {
+    if (_userRole == 'Area Master' && _assignedAreaId != null && _assignedAreaId!.isNotEmpty) {
+      return _allAreas.where((a) => a.uid == _assignedAreaId).toList();
+    }
     if (_selectedPlatform == null) {
       return _allAreas;
     }
