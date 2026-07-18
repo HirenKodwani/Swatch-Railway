@@ -173,7 +173,15 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
 
     final stationWorkers = _selectedStation == null
         ? _workers
-        : _workers.where((w) => w.stationId == _selectedStation!.uid).toList();
+        : _workers.where((w) {
+            if (w.stationId == _selectedStation!.uid) return true;
+            if (w.depot != null && w.depot!.isNotEmpty) {
+              final sName = _selectedStation!.stationName.toLowerCase();
+              final wDepot = w.depot!.toLowerCase();
+              if (sName.contains(wDepot) || wDepot.contains(sName)) return true;
+            }
+            return false;
+          }).toList();
 
     await showDialog(
       context: context,

@@ -76,16 +76,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final wkData = await OBHSRepository.getWorkers();
       final seen = <String>{};
       final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
-      
-      final selectedSt = filtered.isNotEmpty ? filtered.first : null;
-      final stationWorkers = selectedSt != null
-          ? uniqueWorkers.where((w) => w.stationId == selectedSt.uid).toList()
-          : uniqueWorkers;
 
       if (mounted) {
         setState(() {
           _stations = filtered;
-          _workers = stationWorkers;
+          _workers = uniqueWorkers;
           _assignedPlatformId = assignedPlatformId;
           _isPlatformLocked = (role == 'Area Master' || role == 'Platform Master') &&
               assignedPlatformId != null &&
@@ -166,7 +161,17 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     final currentAssigned = _areaWorkerAssignments[areaId] ?? [];
     final selectedWorkers = List<RailwayWorkerModel>.from(currentAssigned);
 
-    final availableWorkers = _workers;
+    final availableWorkers = _selectedStation == null
+        ? _workers
+        : _workers.where((w) {
+            if (w.stationId == _selectedStation!.uid) return true;
+            if (w.depot != null && w.depot!.isNotEmpty) {
+              final sName = _selectedStation!.stationName.toLowerCase();
+              final wDepot = w.depot!.toLowerCase();
+              if (sName.contains(wDepot) || wDepot.contains(sName)) return true;
+            }
+            return false;
+          }).toList();
 
     await showDialog(
       context: context,
@@ -394,13 +399,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             items: _stations.map((s) => DropdownMenuItem(value: s, child: Text(s.stationName))).toList(),
                             onChanged: _isStationLocked ? null : (v) async {
                               if (v != null) {
-                                final allWorkers = await OBHSRepository.getWorkers();
-                                final seen = <String>{};
-                                final uniqueWorkers = allWorkers.where((w) => seen.add(w.uid)).toList();
-                                final stationWorkers = uniqueWorkers.where((w) => w.stationId == v.uid).toList();
                                 setState(() {
                                   _selectedStation = v;
-                                  _workers = stationWorkers;
                                   _selectedAreaIds.clear();
                                   _areaWorkerAssignments.clear();
                                 });
