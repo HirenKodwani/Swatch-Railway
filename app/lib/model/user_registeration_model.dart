@@ -19,6 +19,9 @@ class UserRegistrationModel {
   final String? division;
   final String? depot;
   final String? status;
+  final String? stationId;
+  final String? areaId;
+  final String? platformId;
 
 
   final DateTime? createdAt;
@@ -58,6 +61,9 @@ class UserRegistrationModel {
     this.division,
     this.depot,
     this.status,
+    this.stationId,
+    this.areaId,
+    this.platformId,
     this.createdAt,
     this.submittedAt,
     this.approvedAt,
@@ -97,6 +103,9 @@ class UserRegistrationModel {
       division: json['division'],
       depot: json['depot'],
       status: json['status'],
+      stationId: json['stationId'],
+      areaId: json['areaId'],
+      platformId: json['platformId'],
 
       createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
       submittedAt: _parseDateTime(json['submittedAt'] ?? json['submitted_at']),

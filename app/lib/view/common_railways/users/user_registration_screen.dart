@@ -326,7 +326,10 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                   },
                 ),
 
-              if (_selectedRole == 'Station Master' || _selectedRole == 'Area Master' || _selectedRole == 'Platform Master')
+              if (_selectedRole == 'Station Master' ||
+                  _selectedRole == 'Area Master' ||
+                  _selectedRole == 'Platform Master' ||
+                  _selectedRole?.toLowerCase().contains('worker') == true)
                 FutureBuilder<List<Station>>(
                   future: ApiService.getStations(),
                   builder: (ctx, snap) {
@@ -343,9 +346,23 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: DropdownButtonFormField<String>(
                         value: _selectedStationId,
-                        decoration: const InputDecoration(labelText: 'Station *', border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          labelText: _selectedRole?.toLowerCase().contains('worker') == true
+                              ? 'Station (Required for Station Worker)'
+                              : 'Station *',
+                          border: const OutlineInputBorder(),
+                        ),
                         items: stations.map((s) => DropdownMenuItem(value: s.uid, child: Text(s.stationName))).toList(),
-                        validator: (v) => v == null ? 'Select station' : null,
+                        validator: (v) {
+                          if (v == null) {
+                            if (_selectedRole == 'Station Master' ||
+                                _selectedRole == 'Area Master' ||
+                                _selectedRole == 'Platform Master') {
+                              return 'Select station';
+                            }
+                          }
+                          return null;
+                        },
                         onChanged: (v) => setState(() {
                           _selectedStationId = v;
                           _selectedAreaId = null;
