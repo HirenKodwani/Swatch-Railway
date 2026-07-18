@@ -37,6 +37,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   String _selectedShift = 'Morning';
   String _selectedFrequency = 'daily';
 
+  bool _isPlatformLocked = false;
+  String? _assignedPlatformId;
+
 
 
   // Selected areas and worker assignments
@@ -54,6 +57,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
+      
+      final assignedPlatformId = (user?.areaId != null && user!.areaId!.isNotEmpty)
+          ? user.areaId
+          : user?.platformId;
+
       final stData = await ApiService.getStations(active: true);
       List<Station> filtered = stData;
       if (widget.stationId != null) {
@@ -70,6 +78,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         setState(() {
           _stations = filtered;
           _workers = uniqueWorkers;
+          _assignedPlatformId = assignedPlatformId;
+          _isPlatformLocked = (role == 'Area Master' || role == 'Platform Master') &&
+              assignedPlatformId != null &&
+              assignedPlatformId.isNotEmpty;
           if (_stations.isNotEmpty) _selectedStation = _stations.first;
         });
         if (_selectedStation != null) {
@@ -91,7 +103,13 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         setState(() {
           _platforms = platforms;
           _allAreas = areas;
-          _selectedPlatform = null; // Default to "All Platforms"
+          
+          if (_isPlatformLocked && _assignedPlatformId != null) {
+            _selectedPlatform = _platforms.where((p) => p.uid == _assignedPlatformId).firstOrNull;
+          } else {
+            _selectedPlatform = null; // Default to "All Platforms"
+          }
+          
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
         });
@@ -371,7 +389,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               ),
                               ..._platforms.map((p) => DropdownMenuItem<Platform?>(value: p, child: Text(p.displayName))),
                             ],
-                            onChanged: (v) {
+                            onChanged: _isPlatformLocked ? null : (v) {
                               setState(() {
                                 _selectedPlatform = v;
                               });
