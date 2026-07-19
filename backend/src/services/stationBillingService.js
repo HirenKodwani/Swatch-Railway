@@ -28,7 +28,7 @@ class StationBillingService {
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${year}-${monthPad}-${String(lastDay).padStart(2, '0')}`;
 
-    const [attendanceSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap, stationRunSnap] = await Promise.all([
+    const [attendanceSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap, stationRunSnap, formsSnap] = await Promise.all([
       db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
       db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
       db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
@@ -38,6 +38,7 @@ class StationBillingService {
       db.collection('machines').where('stationId', '==', stationId).get(),
       db.collection('machine_downtime').where('stationId', '==', stationId).where('startTime', '>=', startDate).where('startTime', '<=', endDate + 'T23:59:59').get(),
       db.collection('stationRuns').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
+      db.collection('stationCleaningForms').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
     ]);
 
     const attendanceRecords = []; attendanceSnap.forEach(d => attendanceRecords.push(d.data()));
@@ -66,7 +67,24 @@ class StationBillingService {
     const inspections = []; inspectionSnap.forEach(d => inspections.push(d.data()));
     const totalDeficiencies = inspections.reduce((s, i) => s + (i.deficiencies || []).length, 0);
     const closedDeficiencies = inspections.reduce((s, i) => s + ((i.deficiencies || []).filter(d => d.status === 'CLOSED' || d.status === 'VERIFIED').length), 0);
-    const inspectionSummary = { totalInspections: inspections.length, totalDeficiencies, closedDeficiencies, openDeficiencies: totalDeficiencies - closedDeficiencies, inspectionTypes: [...new Set(inspections.map(i => i.inspectionType || 'standard'))].length };
+    const inspectionScoreSummary = inspections.map(i => ({ id: i.id, type: i.inspectionType, score: i.overallScore, status: i.status, date: i.inspectionDate || i.createdAt }));
+    const inspectionSummary = { totalInspections: inspections.length, totalDeficiencies, closedDeficiencies, openDeficiencies: totalDeficiencies - closedDeficiencies, inspectionTypes: [...new Set(inspections.map(i => i.inspectionType || 'standard'))].length, averageScore: inspections.length > 0 ? Math.round(inspections.reduce((s, i) => s + (i.overallScore || 0), 0) / inspections.length) : 0, scores: inspectionScoreSummary };
+
+    // ── Petty issue summary (from complaints with petty_issue category) ──
+    const pettyIssues = complaints.filter(c => (c.category || '').toLowerCase().includes('petty') || c.type === 'petty_issue');
+    const pettyIssueSummary = { total: pettyIssues.length, resolved: pettyIssues.filter(c => c.status === 'CLOSED' || c.status === 'RESOLVED').length, open: pettyIssues.filter(c => ['REPORTED', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length };
+
+    // ── Photo evidence summary ──
+    const forms = []; formsSnap.forEach(d => forms.push(d.data()));
+    const formsWithPhotos = forms.filter(f => {
+      const photos = f.photos || f.photoEvidence || f.beforePhotos || f.afterPhotos || [];
+      return photos.length > 0;
+    });
+    const totalPhotos = forms.reduce((s, f) => {
+      const photos = f.photos || f.photoEvidence || f.beforePhotos || f.afterPhotos || [];
+      return s + photos.length;
+    }, 0);
+    const evidenceSummary = { totalForms: forms.length, formsWithPhotos: formsWithPhotos.length, totalPhotos, evidenceComplianceRate: forms.length > 0 ? Math.round(formsWithPhotos.length / forms.length * 100) : 0 };
 
     const downtimeRecords = []; downtimeSnap.forEach(d => downtimeRecords.push(d.data()));
     const totalDowntimeHours = downtimeRecords.reduce((s, d) => s + (d.totalDowntimeHours || 0), 0);
@@ -129,6 +147,7 @@ class StationBillingService {
       totalPayableWithGst: Math.round(billableAmount * (1 + (contractData.gstRate || 18) / 100)),
       attendanceSummary, activitySummary: { ...actSummary, completionRate: activityCompletionRate },
       scorecardSummary, complaintSummary: cmpSummary, feedbackSummary, inspectionSummary,
+      pettyIssueSummary, evidenceSummary,
       machineSummary: { total: machines.length, inMaintenance: inMaintenanceCount, deployed: machines.length - inMaintenanceCount, downtime: machineDowntimeSummary },
       penalties, billableAmount, status: 'DRAFT',
       paymentStatus: 'unpaid', paymentDate: null, paymentRef: null, paymentAmount: null,

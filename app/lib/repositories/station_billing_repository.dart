@@ -102,9 +102,8 @@ class StationBillingRepository {
       headers: await _headers(),
       body: jsonEncode({
         'amount': amount,
-        'mode': mode,
-        if (reference != null) 'reference': reference,
-        if (date != null) 'date': date,
+        'paymentRef': reference ?? '',
+        'paymentDate': date ?? DateTime.now().toIso8601String(),
       }),
     );
     if (response.statusCode != 200) {

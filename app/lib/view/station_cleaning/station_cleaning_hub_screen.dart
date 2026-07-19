@@ -43,6 +43,7 @@ import '../common_railways/station_management/area_assignment_screen.dart';
 import '../common_railways/station_management/platform_list_screen.dart';
 import '../common_railways/station_management/frequency_list_screen.dart';
 import '../../repositories/station_run_repository.dart';
+import '../../repositories/station_cleaning_repository.dart';
 import '../../model/station_run_model.dart';
 import 'attendance/worker_attendance_screen.dart';
 
@@ -62,7 +63,7 @@ class StationCleaningHubScreen extends StatelessWidget {
   Set<int> _visibleCards(String role) {
     final r = role.toUpperCase().replaceAll(' ', '_');
     if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
     }
     if (r == 'RAILWAY_SUPERVISOR') {
       return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 24, 25, 26, 28, 29, 30, 31, 35, 36};
@@ -71,10 +72,10 @@ class StationCleaningHubScreen extends StatelessWidget {
       return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25, 28, 30, 35, 36};
     }
     if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
     }
     if (r == 'PLATFORM_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
     }
     if (r == 'CONTRACTOR_SUPERVISOR') {
       return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20, 24, 25, 28, 30, 35};
@@ -114,7 +115,7 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.assignment_turned_in, 'My\nTasks', Colors.deepOrange, () => _openWorkerTasks(context)), // 20
       _moduleCard(context, Icons.rate_review, 'Super.\nReview', Colors.purple, () => _openSupervisorReview(context)), // 21
       _moduleCard(context, Icons.dashboard_customize, 'Hier.\nDashboard', Colors.indigo.shade400, () => _openHierDashboard(context)), // 22
-      _moduleCard(context, Icons.touch_app, 'Start\nTask', Colors.amber, () => _openQuickStart(context)),            // 23
+      const SizedBox.shrink(), // 23 - removed (duplicate of 20/21/22)
       _moduleCard(context, Icons.layers, 'Zones', Colors.teal.shade700, () => _openZones(context)),                 // 24
       _moduleCard(context, Icons.business, 'Contractors', Colors.brown, () => _openContractors(context)),           // 25
       _moduleCard(context, Icons.qr_code, 'QR\nGenerator', Colors.indigo, () => _openQRGenerator(context)),        // 26
@@ -234,29 +235,43 @@ class StationCleaningHubScreen extends StatelessWidget {
             resolvedRunId = '${stationId}_$today';
             resolvedStationId = stationId;
           }
-          return AlertDialog(
-            title: const Text('Select Attendance Type'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'start', 'Start Attendance', Icons.play_arrow, Colors.green),
-                const SizedBox(height: 8),
-                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'mid', 'Mid Attendance', Icons.pause, Colors.orange),
-                const SizedBox(height: 8),
-                _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId, 'end', 'End Attendance', Icons.stop, Colors.red),
-              ],
-            ),
+          return FutureBuilder<Map<String, dynamic>>(
+            future: StationCleaningRepository.getStationAttendanceStatus(workerId: workerId),
+            builder: (ctx, attSnapshot) {
+              final startMarked = attSnapshot.hasData && attSnapshot.data?['isStartMarked'] == true;
+              final midMarked = attSnapshot.hasData && attSnapshot.data?['isMidMarked'] == true;
+              final endMarked = attSnapshot.hasData && attSnapshot.data?['isEndMarked'] == true;
+              return AlertDialog(
+                title: const Text('Select Attendance Type'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId,
+                        'start', startMarked ? 'Start (Already Marked)' : 'Start Attendance',
+                        Icons.play_arrow, startMarked ? Colors.grey : Colors.green, enabled: !startMarked),
+                    const SizedBox(height: 8),
+                    _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId,
+                        'mid', midMarked ? 'Mid (Already Marked)' : 'Mid Attendance',
+                        Icons.pause, midMarked ? Colors.grey : Colors.orange, enabled: !midMarked),
+                    const SizedBox(height: 8),
+                    _attendanceTypeButton(ctx, workerId, workerName, resolvedRunId, resolvedStationId,
+                        'end', endMarked ? 'End (Already Marked)' : 'End Attendance',
+                        Icons.stop, endMarked ? Colors.grey : Colors.red, enabled: !endMarked),
+                  ],
+                ),
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _attendanceTypeButton(BuildContext context, String workerId, String workerName, String runInstanceId, String stationId, String type, String label, IconData icon, Color color) {
+  Widget _attendanceTypeButton(BuildContext context, String workerId, String workerName, String runInstanceId, String stationId, String type, String label, IconData icon, Color color, {bool enabled = true}) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () {
+        onPressed: enabled ? () {
           Navigator.pop(context);
           Navigator.push(context, MaterialPageRoute(
             builder: (_) => StationWorkerAttendanceScreen(
@@ -267,10 +282,10 @@ class StationCleaningHubScreen extends StatelessWidget {
               attendanceType: type,
             ),
           ));
-        },
+        } : null,
         icon: Icon(icon),
         label: Text(label),
-        style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+        style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, disabledBackgroundColor: Colors.grey[300], padding: const EdgeInsets.symmetric(vertical: 14)),
       ),
     );
   }
@@ -416,55 +431,6 @@ class StationCleaningHubScreen extends StatelessWidget {
       levelId = stationId;
     }
     Navigator.push(context, MaterialPageRoute(builder: (_) => HierarchicalDashboardScreen(initialLevel: level, levelId: levelId)));
-  }
-
-  void _openQuickStart(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.play_arrow, color: Colors.white)),
-                title: const Text('Start Next Pending Task'),
-                subtitle: const Text('Open your first pending task for today'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => WorkerTaskViewScreen(workerId: user?.uid ?? '', workerName: user?.fullName ?? ''),
-                  ));
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.preview, color: Colors.white)),
-                title: const Text('Review Pending Tasks'),
-                subtitle: const Text('View completed tasks awaiting approval'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorReviewScreen(stationId: stationId)));
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.dashboard, color: Colors.white)),
-                title: const Text('View Dashboard'),
-                subtitle: const Text('Open the hierarchical dashboard'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const HierarchicalDashboardScreen()));
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   void _openZones(BuildContext context) {

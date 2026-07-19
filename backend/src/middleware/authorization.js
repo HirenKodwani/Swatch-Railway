@@ -52,12 +52,8 @@ export function requireEntityAccess(req, res, next) {
 }
 
 export function requireStationAccess(req, res, next) {
-  const role = (req.user?.role || '').toUpperCase();
-  if (role === 'STATION_MASTER' || role === 'AREA_MASTER' || role === 'PLATFORM_MASTER') {
-    const stationId = req.user.stationId;
-    if (!stationId) {
-      throw new ForbiddenError('No station assigned to your account');
-    }
+  const stationId = req.user?.stationId;
+  if (stationId) {
     const targetStationId = req.params.stationId || req.body.stationId || req.query.stationId;
     if (targetStationId && targetStationId !== stationId) {
       throw new ForbiddenError('You can only access your assigned station');
@@ -67,12 +63,8 @@ export function requireStationAccess(req, res, next) {
 }
 
 export function requirePlatformAccess(req, res, next) {
-  const role = (req.user?.role || '').toUpperCase();
-  if (role === 'PLATFORM_MASTER') {
-    const platformId = req.user.platformId || req.user.areaId;
-    if (!platformId) {
-      throw new ForbiddenError('No platform assigned to your account');
-    }
+  const platformId = req.user?.platformId || req.user?.areaId;
+  if (platformId) {
     const targetPlatformId = req.params.platformId || req.body.platformId || req.query.platformId;
     if (targetPlatformId && targetPlatformId !== platformId) {
       throw new ForbiddenError('You can only access your assigned platform');

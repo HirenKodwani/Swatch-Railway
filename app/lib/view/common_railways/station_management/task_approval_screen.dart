@@ -402,35 +402,27 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
 
   // ─── Photo Helpers ──────────────────────────────────────────────────────
 
+  @Deprecated('Use _extractBeforeAfterUrls instead')
   String _extractPhotoUrl(Map<String, dynamic> record) {
-    final before = record['beforePhoto']?.toString() ?? '';
-    final after = record['afterPhoto']?.toString() ?? '';
-    if (before.isNotEmpty) return before;
-    if (after.isNotEmpty) return after;
-    final evidence = record['evidence'];
-    if (evidence is List && evidence.isNotEmpty) {
-      final first = evidence.first;
-      if (first is String) return first;
-      if (first is Map) return first['url']?.toString() ?? '';
-    }
-    return '';
+    return _extractBeforeAfterUrls(record).values.firstWhere((u) => u.isNotEmpty, orElse: () => '');
   }
 
-  List<String> _extractAllPhotoUrls(Map<String, dynamic> record) {
-    final urls = <String>[];
+  Map<String, String> _extractBeforeAfterUrls(Map<String, dynamic> record) {
     final before = record['beforePhoto']?.toString() ?? '';
     final after = record['afterPhoto']?.toString() ?? '';
-    if (before.isNotEmpty) urls.add(before);
-    if (after.isNotEmpty && after != before) urls.add(after);
     final evidence = record['evidence'];
-    if (evidence is List) {
-      for (final e in evidence) {
-        final url = e is String ? e : (e is Map ? e['url']?.toString() ?? '' : '');
-        if (url.isNotEmpty && !urls.contains(url)) urls.add(url);
-      }
+    if (evidence is List && evidence.isNotEmpty) {
+      final first = evidence.isNotEmpty && evidence[0] is String ? evidence[0].toString() : '';
+      final last = evidence.length > 1 && evidence[1] is String ? evidence[1].toString() : '';
+      return {
+        'before': before.isNotEmpty ? before : first,
+        'after': after.isNotEmpty ? after : last,
+      };
     }
-    return urls;
+    return {'before': before, 'after': after};
   }
+
+
 
   // ─── Photo Preview ──────────────────────────────────────────────────────
 
@@ -770,7 +762,7 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
   }
 
   Widget _buildGarbageCard(Map<String, dynamic> record) {
-    final photoUrls = _extractAllPhotoUrls(record);
+    final photos = _extractBeforeAfterUrls(record);
     final qty = record['quantityKg']?.toString() ?? '0';
     final type = record['garbageType']?.toString() ?? record['wasteType']?.toString() ?? 'General';
     final date = record['disposalDate']?.toString() ?? record['createdAt']?.toString() ?? '';
@@ -806,44 +798,74 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
                 ),
               ],
             ),
-            if (photoUrls.isNotEmpty)
+            if ((photos['before'] ?? '').isNotEmpty || (photos['after'] ?? '').isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: SizedBox(
-                  height: 80,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: photoUrls.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) => GestureDetector(
-                      onTap: () => _showPhotoPreview(photoUrls[i]),
-                      child: Container(
-                        width: 100,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          color: Colors.grey[200],
-                          image: DecorationImage(
-                            image: NetworkImage(photoUrls[i]),
-                            fit: BoxFit.cover,
-                            onError: (_, __) => const SizedBox(),
-                          ),
-                        ),
-                        child: Container(
-                          alignment: Alignment.topCenter,
-                          padding: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(
+                  children: [
+                    if ((photos['before'] ?? '').isNotEmpty)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showPhotoPreview(photos['before']!),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            height: 80,
+                            margin: const EdgeInsets.only(right: 6),
                             decoration: BoxDecoration(
-                              color: Colors.black54,
                               borderRadius: BorderRadius.circular(8),
+                              color: Colors.grey[200],
+                              image: DecorationImage(
+                                image: NetworkImage(photos['before']!),
+                                fit: BoxFit.cover,
+                                onError: (_, __) => const SizedBox(),
+                              ),
                             ),
-                            child: Text(i == 0 ? 'BEFORE' : 'AFTER',
-                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                            child: Container(
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text('BEFORE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                    if ((photos['after'] ?? '').isNotEmpty)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showPhotoPreview(photos['after']!),
+                          child: Container(
+                            height: 80,
+                            margin: const EdgeInsets.only(left: 6),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.grey[200],
+                              image: DecorationImage(
+                                image: NetworkImage(photos['after']!),
+                                fit: BoxFit.cover,
+                                onError: (_, __) => const SizedBox(),
+                              ),
+                            ),
+                            child: Container(
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text('AFTER', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             const SizedBox(height: 10),
@@ -913,7 +935,7 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
   }
 
   Widget _buildPestCard(Map<String, dynamic> record) {
-    final photoUrls = _extractAllPhotoUrls(record);
+    final photos = _extractBeforeAfterUrls(record);
     final pestType = record['pestType']?.toString() ?? 'General';
     final date = record['conductedDate']?.toString() ?? record['createdAt']?.toString() ?? '';
     final remarks = record['remarks']?.toString() ?? '';
@@ -949,50 +971,80 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
                 ),
               ],
             ),
+            if ((photos['before'] ?? '').isNotEmpty || (photos['after'] ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(
+                  children: [
+                    if ((photos['before'] ?? '').isNotEmpty)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showPhotoPreview(photos['before']!),
+                          child: Container(
+                            height: 80,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.grey[200],
+                              image: DecorationImage(
+                                image: NetworkImage(photos['before']!),
+                                fit: BoxFit.cover,
+                                onError: (_, __) => const SizedBox(),
+                              ),
+                            ),
+                            child: Container(
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text('BEFORE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if ((photos['after'] ?? '').isNotEmpty)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showPhotoPreview(photos['after']!),
+                          child: Container(
+                            height: 80,
+                            margin: const EdgeInsets.only(left: 6),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.grey[200],
+                              image: DecorationImage(
+                                image: NetworkImage(photos['after']!),
+                                fit: BoxFit.cover,
+                                onError: (_, __) => const SizedBox(),
+                              ),
+                            ),
+                            child: Container(
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text('AFTER', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             if (remarks.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(remarks, style: const TextStyle(fontSize: 12, color: kTextSecondary)),
-              ),
-            if (photoUrls.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: SizedBox(
-                  height: 80,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: photoUrls.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) => GestureDetector(
-                      onTap: () => _showPhotoPreview(photoUrls[i]),
-                      child: Container(
-                        width: 100,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          color: Colors.grey[200],
-                          image: DecorationImage(
-                            image: NetworkImage(photoUrls[i]),
-                            fit: BoxFit.cover,
-                            onError: (_, __) => const SizedBox(),
-                          ),
-                        ),
-                        child: Container(
-                          alignment: Alignment.topCenter,
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(i == 0 ? 'PHOTO' : 'PHOTO',
-                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ),
             const SizedBox(height: 10),
             const Divider(height: 1),

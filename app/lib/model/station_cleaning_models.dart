@@ -208,15 +208,22 @@ class StationBillingPack {
   final String contractNumber;
   final String contractorName;
   final int monthlyContractValue;
+  final int gstRate;
+  final int gstAmount;
+  final int totalPayableWithGst;
   final Map<String, dynamic> attendanceSummary;
   final Map<String, dynamic> activitySummary;
   final Map<String, dynamic> scorecardSummary;
   final Map<String, dynamic> complaintSummary;
   final Map<String, dynamic> feedbackSummary;
+  final Map<String, dynamic> inspectionSummary;
+  final Map<String, dynamic> pettyIssueSummary;
+  final Map<String, dynamic> evidenceSummary;
   final Map<String, dynamic> machineSummary;
   final Map<String, dynamic> penalties;
   final int billableAmount;
   final String status;
+  final String? rejectionReason;
   final Map<String, dynamic> complianceChecklist;
   final String generatedBy;
   final String generatedByName;
@@ -232,15 +239,22 @@ class StationBillingPack {
     required this.contractNumber,
     required this.contractorName,
     required this.monthlyContractValue,
+    this.gstRate = 18,
+    this.gstAmount = 0,
+    this.totalPayableWithGst = 0,
     required this.attendanceSummary,
     required this.activitySummary,
     required this.scorecardSummary,
     required this.complaintSummary,
     required this.feedbackSummary,
+    this.inspectionSummary = const {},
+    this.pettyIssueSummary = const {},
+    this.evidenceSummary = const {},
     required this.machineSummary,
     required this.penalties,
     required this.billableAmount,
     required this.status,
+    this.rejectionReason,
     required this.complianceChecklist,
     required this.generatedBy,
     required this.generatedByName,
@@ -257,15 +271,22 @@ class StationBillingPack {
     contractNumber: json['contractNumber'] ?? '',
     contractorName: json['contractorName'] ?? '',
     monthlyContractValue: json['monthlyContractValue'] ?? 0,
+    gstRate: json['gstRate'] ?? 18,
+    gstAmount: json['gstAmount'] ?? 0,
+    totalPayableWithGst: json['totalPayableWithGst'] ?? 0,
     attendanceSummary: json['attendanceSummary'] ?? {},
     activitySummary: json['activitySummary'] ?? {},
     scorecardSummary: json['scorecardSummary'] ?? {},
     complaintSummary: json['complaintSummary'] ?? {},
     feedbackSummary: json['feedbackSummary'] ?? {},
+    inspectionSummary: json['inspectionSummary'] ?? {},
+    pettyIssueSummary: json['pettyIssueSummary'] ?? {},
+    evidenceSummary: json['evidenceSummary'] ?? {},
     machineSummary: json['machineSummary'] ?? {},
     penalties: json['penalties'] ?? {},
     billableAmount: json['billableAmount'] ?? 0,
     status: json['status'] ?? 'DRAFT',
+    rejectionReason: json['rejectionReason'],
     complianceChecklist: json['complianceChecklist'] ?? {},
     generatedBy: json['generatedBy'] ?? '',
     generatedByName: json['generatedByName'] ?? '',

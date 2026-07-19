@@ -97,7 +97,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
     DateTime archiveEndDate = DateTime.now();
     int selectedMonth = DateTime.now().month;
     int selectedYear = DateTime.now().year;
-    var isDaily = selectedType.startsWith('daily_');
+    var isDaily = selectedType.startsWith('daily_') || selectedType == 'missed_activity';
     var isArchive = selectedType == 'archive_retrieval';
 
     showDialog(
@@ -120,7 +120,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                     if (val != null) {
                       setDialogState(() {
                         selectedType = val;
-                        isDaily = val.startsWith('daily_');
+                        isDaily = val.startsWith('daily_') || val == 'missed_activity';
                         isArchive = val == 'archive_retrieval';
                       });
                     }
@@ -214,7 +214,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                     final startStr = '${archiveStartDate.year}-${archiveStartDate.month.toString().padLeft(2, '0')}-${archiveStartDate.day.toString().padLeft(2, '0')}';
                     final endStr = '${archiveEndDate.year}-${archiveEndDate.month.toString().padLeft(2, '0')}-${archiveEndDate.day.toString().padLeft(2, '0')}';
                     await StationReportRepository.generateArchiveRetrieval(widget.stationId, startStr, endStr);
-                  } else if (selectedType.startsWith('daily_')) {
+                  } else if (selectedType.startsWith('daily_') || selectedType == 'missed_activity') {
                     final dateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
                     await StationReportRepository.generateDaily(selectedType, widget.stationId, dateStr);
                   } else {
@@ -247,6 +247,14 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
 
   void _sendEmail(StationReport report) {
     try {
+      if (report.reportType == 'archive_retrieval') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Archive retrieval reports are on-demand only; no email dispatch'), backgroundColor: kWarningOrange),
+          );
+        }
+        return;
+      }
       if (report.reportType.startsWith('monthly_')) {
         final parts = report.date.split('-');
         final m = parts.length > 1 ? int.tryParse(parts[1]) ?? DateTime.now().month : DateTime.now().month;

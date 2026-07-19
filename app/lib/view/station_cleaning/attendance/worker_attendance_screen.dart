@@ -27,7 +27,6 @@ class StationWorkerAttendanceScreen extends StatefulWidget {
 }
 
 class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceScreen> {
-  int currentStep = 0;
   final picker = ImagePicker();
 
   File? _selfie;
@@ -35,6 +34,9 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
   Position? _gpsPosition;
   bool _submitting = false;
   String _livenessChallenge = '';
+
+  bool _isCapturingSelfie = false;
+  bool _isCapturingGps = false;
 
   @override
   void initState() {
@@ -170,298 +172,170 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Column(
-        children: [
-          _buildStepper(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: _buildCurrentStepContent(),
-            ),
-          ),
-          _buildBottomBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepper() {
-    final labels = ['Selfie', 'GPS', 'Submit'];
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey[200]!))),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(3, (index) {
-          final isActive = index == currentStep;
-          final isCompleted = index < currentStep;
-          return Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isActive ? kRailwayBlue : isCompleted ? kSuccessGreen : Colors.grey[300],
+      body: _submitting
+          ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Submitting attendance...'),
+            ]))
+          : Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Daily Attendance',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kRailwayBlue),
+                    textAlign: TextAlign.center,
                   ),
-                  alignment: Alignment.center,
-                  child: isCompleted
-                      ? const Icon(Icons.check, size: 14, color: Colors.white)
-                      : Text('${index + 1}',
-                          style: TextStyle(color: isActive ? Colors.white : Colors.grey[600], fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(height: 4),
-                Text(labels[index], style: TextStyle(fontSize: 9, color: isActive ? kRailwayBlue : Colors.grey[500])),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
-  Widget _buildCurrentStepContent() {
-    if (_submitting) {
-      return const Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Submitting attendance...'),
-        ]),
-      );
-    }
-    switch (currentStep) {
-      case 0: return _buildSelfieStep();
-      case 1: return _buildGpsStep();
-      case 2: return _buildSubmitStep();
-      default: return const SizedBox.shrink();
-    }
-  }
-
-  Widget _buildSelfieStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Icon(Icons.camera_front_outlined, size: 64, color: Colors.grey),
-        const SizedBox(height: 16),
-        const Text('Take a Selfie', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: kWarningOrange.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: kWarningOrange.withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.warning_amber_rounded, color: kWarningOrange, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Show a ${_challengeDisplayText()} in your selfie',
-                  style: TextStyle(color: kWarningOrange, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text('Camera capture only', style: TextStyle(color: Colors.grey[600])),
-        const SizedBox(height: 24),
-        if (_selfie != null)
-          Column(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(_selfie!, height: 220, width: double.infinity, fit: BoxFit.cover),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: () => setState(() { _selfie = null; _selfieUrl = null; _generateChallenge(); }),
-                icon: const Icon(Icons.delete_outline, color: kErrorRed),
-                label: const Text('Remove', style: TextStyle(color: kErrorRed)),
-              ),
-            ],
-          )
-        else
-          ElevatedButton.icon(
-            onPressed: () async {
-              final result = await _captureSelfie();
-              if (result != null) {
-                setState(() {
-                  _selfie = result['file'];
-                  if (result['url'] != null) _selfieUrl = result['url'];
-                });
-              }
-            },
-            icon: const Icon(Icons.camera_alt),
-            label: const Text('Open Camera'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kRailwayBlue, foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildGpsStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Icon(Icons.location_on_outlined, size: 64, color: Colors.grey),
-        const SizedBox(height: 16),
-        const Text('Location Capture', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Text('GPS coordinates are mandatory for attendance.',
-            style: TextStyle(color: Colors.grey[600])),
-        const SizedBox(height: 24),
-        if (_gpsPosition != null)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: kSuccessGreen),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle, color: kSuccessGreen),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Location Captured', style: TextStyle(fontWeight: FontWeight.bold, color: kSuccessGreen)),
-                      Text('Lat: ${_gpsPosition!.latitude.toStringAsFixed(5)}, Lng: ${_gpsPosition!.longitude.toStringAsFixed(5)}',
-                          style: TextStyle(fontSize: 12, color: Colors.green[800])),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Show a ${_challengeDisplayText()} in your selfie.\nCamera capture only.',
+                    style: const TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 48),
+
+                  _buildVerificationCard(
+                    title: 'Selfie Verification',
+                    subtitle: _selfie != null ? 'Selfie captured successfully' : 'Take a selfie with ${_challengeDisplayText()}',
+                    icon: Icons.camera_front,
+                    isVerified: _selfie != null,
+                    isVerifying: _isCapturingSelfie,
+                    onVerify: () async {
+                      setState(() => _isCapturingSelfie = true);
+                      final result = await _captureSelfie();
+                      if (result != null) {
+                        setState(() {
+                          _selfie = result['file'];
+                          if (result['url'] != null) _selfieUrl = result['url'];
+                        });
+                      }
+                      if (mounted) setState(() => _isCapturingSelfie = false);
+                    },
+                    onRemove: _selfie != null ? () => setState(() { _selfie = null; _selfieUrl = null; _generateChallenge(); }) : null,
+                  ),
+                  const SizedBox(height: 24),
+
+                  _buildVerificationCard(
+                    title: 'Location Verification',
+                    subtitle: _gpsPosition != null
+                        ? 'GPS: ${_gpsPosition!.latitude.toStringAsFixed(5)}, ${_gpsPosition!.longitude.toStringAsFixed(5)}'
+                        : 'Verify your current location',
+                    icon: Icons.location_on,
+                    isVerified: _gpsPosition != null,
+                    isVerifying: _isCapturingGps,
+                    onVerify: () async {
+                      setState(() => _isCapturingGps = true);
+                      final pos = await _captureGps();
+                      if (pos != null) {
+                        setState(() => _gpsPosition = pos);
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not get GPS. Check location permissions.')),
+                          );
+                        }
+                      }
+                      if (mounted) setState(() => _isCapturingGps = false);
+                    },
+                  ),
+
+                  const Spacer(),
+
+                  ElevatedButton(
+                    onPressed: (_selfie != null && _gpsPosition != null) ? _submitAttendance : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kRailwayBlue,
+                      disabledBackgroundColor: Colors.grey[300],
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text(
+                      'Mark Present',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
-          )
-        else
-          ElevatedButton.icon(
-            onPressed: () async {
-              final pos = await _captureGps();
-              if (pos != null) {
-                setState(() => _gpsPosition = pos);
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Could not get GPS. Check location permissions.')),
-                  );
-                }
-              }
-            },
-            icon: const Icon(Icons.my_location),
-            label: const Text('Capture Location Now'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kRailwayBlue, foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            ),
-          ),
-      ],
     );
   }
 
-  Widget _buildSubmitStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Icon(Icons.fact_check_outlined, size: 64, color: kRailwayBlue),
-        const SizedBox(height: 16),
-        Text('Review & Submit', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[300]!),
-          ),
-          child: Column(
-            children: [
-              _reviewRow('Selfie Captured', _selfieUrl != null || _selfie != null),
-              const Divider(),
-              _reviewRow('GPS Attached', _gpsPosition != null),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _reviewRow(String label, bool done) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-        Icon(done ? Icons.check_circle : Icons.cancel, color: done ? kSuccessGreen : kErrorRed, size: 20),
-      ]),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    final canProceed = _canProceedFromCurrentStep();
+  Widget _buildVerificationCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isVerified,
+    required bool isVerifying,
+    required VoidCallback onVerify,
+    VoidCallback? onRemove,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, -2), blurRadius: 4)],
-      ),
-      child: Row(
-        children: [
-          if (currentStep > 0)
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => setState(() => currentStep--),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: BorderSide(color: Colors.grey[300]!),
-                ),
-                child: const Text('Back', style: TextStyle(color: Colors.black87)),
-              ),
-            ),
-          if (currentStep > 0) const SizedBox(width: 16),
-          Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              onPressed: canProceed
-                  ? () {
-                      if (currentStep < 2) {
-                        setState(() => currentStep++);
-                      } else {
-                        _submitAttendance();
-                      }
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kRailwayBlue, disabledBackgroundColor: Colors.grey[300],
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text(
-                currentStep == 2 ? 'Submit Attendance' : 'Continue',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isVerified ? kSuccessGreen : Colors.grey[300]!, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isVerified ? kSuccessGreen.withOpacity(0.1) : kRailwayBlue.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: isVerified ? kSuccessGreen : kRailwayBlue, size: 32),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              ],
+            ),
+          ),
+          if (isVerified)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onRemove != null)
+                  GestureDetector(
+                    onTap: onRemove,
+                    child: const Icon(Icons.delete_outline, color: kErrorRed, size: 20),
+                  ),
+                const SizedBox(width: 8),
+                const Icon(Icons.check_circle, color: kSuccessGreen, size: 32),
+              ],
+            )
+          else if (isVerifying)
+            const SizedBox(
+              width: 24, height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2, color: kRailwayBlue),
+            )
+          else
+            TextButton(
+              onPressed: onVerify,
+              style: TextButton.styleFrom(
+                backgroundColor: kRailwayBlue.withOpacity(0.1),
+                foregroundColor: kRailwayBlue,
+              ),
+              child: const Text('Verify'),
+            ),
+        ],
+      ),
     );
-  }
-
-  bool _canProceedFromCurrentStep() {
-    if (_submitting) return false;
-    switch (currentStep) {
-      case 0: return _selfieUrl != null || _selfie != null;
-      case 1: return _gpsPosition != null;
-      case 2: return (_selfieUrl != null || _selfie != null) && _gpsPosition != null;
-      default: return false;
-    }
   }
 }
