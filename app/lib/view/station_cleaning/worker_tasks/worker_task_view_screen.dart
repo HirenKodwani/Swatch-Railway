@@ -229,7 +229,28 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
         backgroundColor: kRailwayBlue,
         foregroundColor: Colors.white,
       ),
-      body: Column(
+      body: !_startAttendanceMarked
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline, size: 80, color: kWarningOrange.withOpacity(0.5)),
+                    const SizedBox(height: 24),
+                    const Text('Start Attendance Required',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kWarningOrange)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Please mark your Start Attendance from the Attendance tab before viewing tasks.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
@@ -260,29 +281,6 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
               ],
             ),
           ),
-          if (!_startAttendanceMarked)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: kWarningOrange.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: kWarningOrange),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.lock, color: kWarningOrange, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Start attendance required. Mark it from the Attendance tab first.',
-                      style: TextStyle(color: kWarningOrange, fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
