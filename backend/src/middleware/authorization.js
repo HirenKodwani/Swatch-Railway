@@ -69,7 +69,7 @@ export function requireStationAccess(req, res, next) {
 export function requirePlatformAccess(req, res, next) {
   const role = (req.user?.role || '').toUpperCase();
   if (role === 'PLATFORM_MASTER') {
-    const platformId = req.user.platformId;
+    const platformId = req.user.platformId || req.user.areaId;
     if (!platformId) {
       throw new ForbiddenError('No platform assigned to your account');
     }
@@ -84,7 +84,7 @@ export function requirePlatformAccess(req, res, next) {
 export function requireAreaAccess(req, res, next) {
   const role = (req.user?.role || '').toUpperCase();
   if (role === 'AREA_MASTER') {
-    const areaId = req.user.areaId;
+    const areaId = req.user.areaId || req.user.platformId;
     if (!areaId) {
       throw new ForbiddenError('No area assigned to your account');
     }
