@@ -6,8 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../utills/app_colors.dart';
-import 'package:provider/provider.dart';
-import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/worker_repo.dart';
 import '../../services/api_services.dart';
 
@@ -75,10 +73,8 @@ class _WorkerPestControlScreenState extends State<WorkerPestControlScreen> {
   }
 
   Future<String?> _getAuthToken() async {
-    final authProvider = context.read<AuthProvider>();
-    if (authProvider.token != null) return authProvider.token;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token') ?? prefs.getString('token');
+    return prefs.getString('token') ?? prefs.getString('auth_token');
   }
 
   Widget _buildPhotoWidget(XFile? photo, VoidCallback onCapture) {

@@ -712,7 +712,7 @@ class _RaiseComplaintScreenState extends State<RaiseComplaintScreen> {
 
       // 3️⃣ Build category string — combine category + subcategory if set
       final categoryStr = selectedSubcategory != null
-          ? selectedCategory!
+          ? '${selectedCategory!} - ${selectedSubcategory!}'
           : selectedCategory!;
 
       // 4️⃣ POST raise complaint
@@ -774,13 +774,14 @@ class _RaiseComplaintScreenState extends State<RaiseComplaintScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', '')),
           backgroundColor: kErrorRed,
         ),
       );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 

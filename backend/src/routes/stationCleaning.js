@@ -94,6 +94,8 @@ router.get('/api/station-area-task-frequency', verifyToken, requirePermission(PE
 // ─── Garbage Disposal ───────────────────────────────────────────────────────
 router.post('/api/station-garbage/record', verifyToken, requirePermission(PERMISSIONS.MANAGE_GARBAGE), requireEntityAccess, requireStationAccess, requirePlatformAccess, stationCleaning.recordGarbageDisposal);
 router.get('/api/station-garbage/records', verifyToken, requirePermission(PERMISSIONS.VIEW_GARBAGE), requireStationAccess, requirePlatformAccess, stationCleaning.listGarbageRecords);
+router.post('/api/station-garbage/:uid/approve', verifyToken, requirePermission(PERMISSIONS.MANAGE_GARBAGE), requireStationAccess, requirePlatformAccess, stationCleaning.approveGarbageRecord);
+router.post('/api/station-garbage/:uid/reject', verifyToken, requirePermission(PERMISSIONS.MANAGE_GARBAGE), requireStationAccess, requirePlatformAccess, stationCleaning.rejectGarbageRecord);
 router.get('/api/station-garbage/report', verifyToken, requirePermission(PERMISSIONS.VIEW_GARBAGE), requireStationAccess, requirePlatformAccess, stationCleaning.garbageReport);
 
 // ─── Worker Dashboard ─────────────────────────────────────────────────────

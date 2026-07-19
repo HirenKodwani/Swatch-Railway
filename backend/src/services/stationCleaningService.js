@@ -911,14 +911,48 @@ class StationCleaningService {
   }
 
   async listGarbageRecords(query, user) {
-    const { stationId, startDate, endDate } = query || {};
+    const { stationId, startDate, endDate, status } = query || {};
     let q = db.collection('garbageDisposalRecords').limit(300);
     if (stationId) q = q.where('stationId', '==', stationId);
+    if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
     let records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     if (startDate) records = records.filter(r => (r.disposalDate || '') >= startDate);
     if (endDate) records = records.filter(r => (r.disposalDate || '') <= endDate);
     return records;
+  }
+
+  async approveGarbageRecord(uid, user) {
+    const ref = db.collection('garbageDisposalRecords').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Garbage record not found');
+    const record = doc.data();
+    if (record.status !== 'recorded') throw new ValidationError(`Cannot approve. Current status: ${record.status}`);
+    await ref.update({
+      status: 'approved',
+      reviewedBy: user && user.uid,
+      reviewedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Garbage record approved', uid };
+  }
+
+  async rejectGarbageRecord(uid, body, user) {
+    const reason = body.reason || '';
+    if (!reason.trim()) throw new ValidationError('Rejection reason is required');
+    const ref = db.collection('garbageDisposalRecords').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Garbage record not found');
+    const record = doc.data();
+    if (record.status !== 'recorded') throw new ValidationError(`Cannot reject. Current status: ${record.status}`);
+    await ref.update({
+      status: 'rejected',
+      reviewedBy: user && user.uid,
+      reviewedAt: new Date().toISOString(),
+      rejectionReason: reason,
+      updatedAt: new Date().toISOString()
+    });
+    return { message: 'Garbage record rejected', uid };
   }
 
   async garbageReport(query) {

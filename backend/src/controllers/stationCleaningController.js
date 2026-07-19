@@ -275,6 +275,16 @@ export const listGarbageRecords = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, count: result.length, data: result });
 });
 
+export const approveGarbageRecord = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.approveGarbageRecord(req.params.uid, req.user);
+  res.status(200).json({ success: true, message: 'Garbage record approved' });
+});
+
+export const rejectGarbageRecord = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.rejectGarbageRecord(req.params.uid, req.body, req.user);
+  res.status(200).json({ success: true, message: 'Garbage record rejected' });
+});
+
 export const garbageReport = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.garbageReport(req.query);
   res.status(200).json({ success: true, ...result });
