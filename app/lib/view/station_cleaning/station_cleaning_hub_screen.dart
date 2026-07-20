@@ -11,6 +11,7 @@ import 'attendance/station_attendance_screen.dart';
 import 'activities/daily_activity_list_screen.dart';
 import 'billing/billing_support_pack_screen.dart';
 import 'pest_control/pest_control_list_screen.dart';
+import 'complaint/complaint_list_screen.dart';
 import 'machine/machine_tracking_screen.dart';
 import 'garbage/garbage_management_screen.dart';
 import 'reporting/report_list_screen.dart';
@@ -32,6 +33,7 @@ import '../common_railways/station_management/task_approval_screen.dart';
 import '../common_railways/station_management/area_performance_dashboard.dart';
 import '../common_railways/station_management/area_comparison_screen.dart';
 import '../common_railways/station_management/area_assignment_screen.dart';
+import '../common_railways/station_management/platform_list_screen.dart';
 import '../common_railways/station_management/frequency_list_screen.dart';
 import '../../repositories/station_run_repository.dart';
 import '../../repositories/station_cleaning_repository.dart';
@@ -52,29 +54,7 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
-    final r = role.toUpperCase().replaceAll(' ', '_');
-    if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
-    }
-    if (r == 'RAILWAY_SUPERVISOR') {
-      return {0, 1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 16, 17, 18, 20, 21, 22, 23, 25, 26, 27};
-    }
-    if (r == 'CONTRACTOR_ADMIN') {
-      return {0, 1, 2, 3, 4, 5, 6, 10, 12, 16, 17, 20, 22, 25, 26, 27};
-    }
-    if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
-    }
-    if (r == 'PLATFORM_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
-    }
-    if (r == 'CONTRACTOR_SUPERVISOR') {
-      return {0, 1, 2, 3, 4, 5, 6, 12, 13, 16, 17, 20, 22, 25};
-    }
-    if (['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(r)) {
-      return {0, 1, 2, 13, 15, 19};
-    }
-    return {};
+    return {0, 1, 5, 8, 9, 21, 22, 29};
   }
 
   @override
@@ -88,29 +68,31 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.assignment, 'Activities', Colors.orange, () => _openActivities(context)),         // 2
       _moduleCard(context, Icons.cleaning_services, 'Cleaning\nForm', Colors.lightBlue, () => _openCleaningForm(context)), // 3
       _moduleCard(context, Icons.bug_report, 'Pest\nControl', Colors.green, () => _openPestControl(context)),       // 4
-      _moduleCard(context, Icons.precision_manufacturing, 'Machines', Colors.blueGrey, () => _openMachine(context)),// 5
-      _moduleCard(context, Icons.delete, 'Garbage', Colors.brown.shade700, () => _openGarbage(context)),            // 6
-      _moduleCard(context, Icons.receipt, 'Billing', Colors.deepOrange, () => _openBilling(context)),               // 7
-      _moduleCard(context, Icons.assessment, 'Reports', Colors.purple, () => _openReports(context)),                // 8
-      _moduleCard(context, Icons.security, 'Audit\nReports', Colors.indigo, () => _openAuditReports(context)),      // 9
-      _moduleCard(context, Icons.feedback, 'Feedback', Colors.amber.shade700, () => _openFeedback(context)),        // 10
-      _moduleCard(context, Icons.schedule, 'Schedule', Colors.teal, () => _openSchedule(context)),                  // 11
-      _moduleCard(context, Icons.map, 'Area\nConfig', Colors.lightGreen, () => _openAreaConfig(context)),            // 12
-      _moduleCard(context, Icons.assignment_turned_in, 'My\nTasks', Colors.deepOrange, () => _openWorkerTasks(context)), // 13
-      _moduleCard(context, Icons.rate_review, 'Super.\nReview', Colors.purple, () => _openSupervisorReview(context)), // 14
-      _moduleCard(context, Icons.dashboard_customize, 'Hier.\nDashboard', Colors.indigo.shade400, () => _openHierDashboard(context)), // 15
-      _moduleCard(context, Icons.layers, 'Zones', Colors.teal.shade700, () => _openZones(context)),                 // 16
-      _moduleCard(context, Icons.business, 'Contractors', Colors.brown, () => _openContractors(context)),           // 17
-      _moduleCard(context, Icons.qr_code, 'QR\nGenerator', Colors.indigo, () => _openQRGenerator(context)),        // 18
-      _moduleCard(context, Icons.login, 'Check-in', kSuccessGreen, () => _openCheckin(context)),                  // 19
-      _moduleCard(context, Icons.auto_awesome, 'Task\nGen', Colors.deepPurple, () => _openTaskGen(context)),       // 20
-      _moduleCard(context, Icons.rate_review_outlined, 'Task\nApproval', kWarningOrange, () => _openTaskApproval(context)), // 21
-      _moduleCard(context, Icons.speed, 'Area\nPerf.', kRailwayBlue, () => _openAreaPerformance(context)),         // 22
-      _moduleCard(context, Icons.compare_arrows, 'Area\nCompare', Colors.teal, () => _openAreaComparison(context)),// 23
-      _moduleCard(context, Icons.people, 'Area\nAssign', Colors.blueGrey, () => _openAreaAssignment(context)),     // 24
-      _moduleCard(context, Icons.groups, 'Workforce', Colors.indigo.shade700, () => _openWorkforce(context)),       // 25
-      _moduleCard(context, Icons.repeat, 'Frequency', Colors.cyan.shade700, () => _openFrequency(context)),         // 26
-      _moduleCard(context, Icons.warning_amber_rounded, 'Att.\nExceptions', Colors.deepOrange, () => _openExceptionAction(context)), // 27
+      _moduleCard(context, Icons.report, 'Complaints', Colors.red, () => _openComplaint(context)),                  // 5
+      _moduleCard(context, Icons.precision_manufacturing, 'Machines', Colors.blueGrey, () => _openMachine(context)),// 6
+      _moduleCard(context, Icons.delete, 'Garbage', Colors.brown.shade700, () => _openGarbage(context)),            // 7
+      _moduleCard(context, Icons.receipt, 'Billing', Colors.deepOrange, () => _openBilling(context)),               // 8
+      _moduleCard(context, Icons.assessment, 'Reports', Colors.purple, () => _openReports(context)),                // 9
+      _moduleCard(context, Icons.security, 'Audit\nReports', Colors.indigo, () => _openAuditReports(context)),      // 10
+      _moduleCard(context, Icons.feedback, 'Feedback', Colors.amber.shade700, () => _openFeedback(context)),        // 11
+      _moduleCard(context, Icons.schedule, 'Schedule', Colors.teal, () => _openSchedule(context)),                  // 12
+      _moduleCard(context, Icons.map, 'Area\nConfig', Colors.lightGreen, () => _openAreaConfig(context)),            // 13
+      _moduleCard(context, Icons.assignment_turned_in, 'My\nTasks', Colors.deepOrange, () => _openWorkerTasks(context)), // 14
+      _moduleCard(context, Icons.rate_review, 'Super.\nReview', Colors.purple, () => _openSupervisorReview(context)), // 15
+      _moduleCard(context, Icons.dashboard_customize, 'Hier.\nDashboard', Colors.indigo.shade400, () => _openHierDashboard(context)), // 16
+      _moduleCard(context, Icons.layers, 'Zones', Colors.teal.shade700, () => _openZones(context)),                 // 17
+      _moduleCard(context, Icons.business, 'Contractors', Colors.brown, () => _openContractors(context)),           // 18
+      _moduleCard(context, Icons.qr_code, 'QR\nGenerator', Colors.indigo, () => _openQRGenerator(context)),        // 19
+      _moduleCard(context, Icons.login, 'Check-in', kSuccessGreen, () => _openCheckin(context)),                  // 20
+      _moduleCard(context, Icons.auto_awesome, 'Task\nGen', Colors.deepPurple, () => _openTaskGen(context)),       // 21
+      _moduleCard(context, Icons.rate_review_outlined, 'Task\nApproval', kWarningOrange, () => _openTaskApproval(context)), // 22
+      _moduleCard(context, Icons.speed, 'Area\nPerf.', kRailwayBlue, () => _openAreaPerformance(context)),         // 23
+      _moduleCard(context, Icons.compare_arrows, 'Area\nCompare', Colors.teal, () => _openAreaComparison(context)),// 24
+      _moduleCard(context, Icons.people, 'Area\nAssign', Colors.blueGrey, () => _openAreaAssignment(context)),     // 25
+      _moduleCard(context, Icons.groups, 'Workforce', Colors.indigo.shade700, () => _openWorkforce(context)),       // 26
+      _moduleCard(context, Icons.repeat, 'Frequency', Colors.cyan.shade700, () => _openFrequency(context)),         // 27
+      _moduleCard(context, Icons.warning_amber_rounded, 'Att.\nExceptions', Colors.deepOrange, () => _openExceptionAction(context)), // 28
+      _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 29
     ];
 
     final cards = <Widget>[];
@@ -280,6 +262,10 @@ class StationCleaningHubScreen extends StatelessWidget {
     Navigator.push(context, MaterialPageRoute(builder: (_) => PestControlListScreen(stationId: stationId, stationName: stationName)));
   }
 
+  void _openComplaint(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintListScreen(stationId: stationId, stationName: stationName)));
+  }
+
   void _openMachine(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => MachineTrackingScreen(stationId: stationId, stationName: stationName)));
   }
@@ -433,5 +419,9 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openExceptionAction(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openPlatforms(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformListScreen(stationId: stationId, stationName: stationName)));
   }
 }
