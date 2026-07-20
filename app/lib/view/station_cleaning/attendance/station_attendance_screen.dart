@@ -147,7 +147,7 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
           unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(text: 'Mark Attendance'),
-            Tab(text: 'Planned vs Actual'),
+            Tab(text: 'Attendance List'),
             Tab(text: 'Exceptions'),
           ],
         ),
@@ -158,7 +158,7 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
               controller: _tabCtrl,
               children: [
                 _buildMarkAttendanceTab(),
-                _buildPlannedVsActualTab(),
+                _buildAttendanceListTab(),
                 _buildExceptionsTab(),
               ],
             ),
@@ -322,8 +322,8 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
     );
   }
 
-  Widget _buildPlannedVsActualTab() {
-    return PlannedVsActualView(stationId: widget.stationId);
+  Widget _buildAttendanceListTab() {
+    return _AttendanceListView(stationId: widget.stationId);
   }
 
   Widget _buildExceptionsTab() {
@@ -331,38 +331,35 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
   }
 }
 
-class PlannedVsActualView extends StatefulWidget {
+// ─── Attendance List (OBHS-style: workers with start/mid/end chips) ──────────────
+
+class _AttendanceListView extends StatefulWidget {
   final String stationId;
-  const PlannedVsActualView({super.key, required this.stationId});
+  const _AttendanceListView({required this.stationId});
 
   @override
-  State<PlannedVsActualView> createState() => _PlannedVsActualViewState();
+  State<_AttendanceListView> createState() => _AttendanceListViewState();
 }
 
-class _PlannedVsActualViewState extends State<PlannedVsActualView> {
+class _AttendanceListViewState extends State<_AttendanceListView> {
   String _shift = 'morning';
   DateTime _date = DateTime.now();
-  Map<String, dynamic>? _data;
+  List<Map<String, dynamic>> _records = [];
   bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
+  String? _error;
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final formattedDate = "${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}";
-      _data = await StationAttendanceRepository.getPlannedVsActual(widget.stationId, formattedDate, _shift);
+      final result = await StationCleaningRepository.getStationAttendanceList(stationId: widget.stationId);
+      final raw = result['records'] as List? ?? [];
+      final filtered = raw.where((r) {
+        final rDate = (r['createdAt']?.toString() ?? '').substring(0, 10);
+        return rDate == "${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}";
+      }).toList();
+      setState(() { _records = List<Map<String, dynamic>>.from(filtered); _error = null; });
     } catch (e) {
-      _data = null;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Planned vs Actual: $e'), backgroundColor: kErrorRed, duration: const Duration(seconds: 4)),
-        );
-      }
+      setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -373,9 +370,7 @@ class _PlannedVsActualViewState extends State<PlannedVsActualView> {
     return Column(
       children: [
         Card(
-          margin: const EdgeInsets.all(16),
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(12),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -395,7 +390,7 @@ class _PlannedVsActualViewState extends State<PlannedVsActualView> {
                 const SizedBox(width: 12),
                 InkWell(
                   onTap: () async {
-                    final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now());
+                    final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime.now().subtract(const Duration(days: 7)), lastDate: DateTime.now());
                     if (picked != null) setState(() => _date = picked);
                   },
                   child: Container(
@@ -421,61 +416,83 @@ class _PlannedVsActualViewState extends State<PlannedVsActualView> {
           ),
         ),
         if (_isLoading)
-          const Center(child: CircularProgressIndicator())
-        else if (_data == null)
-          const Center(child: Text('No data available'))
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (_error != null)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 8),
+                  ElevatedButton(onPressed: _load, child: const Text('Retry')),
+                ],
+              ),
+            ),
+          )
+        else if (_records.isEmpty)
+          const Expanded(child: Center(child: Text('No attendance records found', style: TextStyle(color: Colors.grey, fontSize: 16))))
         else
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        const Text('Manpower Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        const Divider(),
-                        _statRow('Planned Manpower', '${_data!['plannedManpower'] ?? _data!['planned'] ?? '-'}', kRailwayBlue),
-                        _statRow('Actual Manpower', '${_data!['actualManpower'] ?? _data!['actual'] ?? '-'}', kSuccessGreen),
-                        _statRow('Variance', '${_data!['variance'] ?? '-'}', (_data!['variance'] is int && _data!['variance'] > 0) ? kErrorRed : kSuccessGreen),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (_data!['workers'] != null)
-                  ...(_data!['workers'] as List).map((w) => Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: w['status'] == 'present' ? kSuccessGreen.withOpacity(0.1) : kErrorRed.withOpacity(0.1),
-                        child: Icon(w['status'] == 'present' ? Icons.check_circle : Icons.cancel, color: w['status'] == 'present' ? kSuccessGreen : kErrorRed),
-                      ),
-                      title: Text(w['workerName'] ?? ''),
-                      subtitle: Text('Status: ${w['status'] ?? 'unknown'}'),
-                      trailing: w['photoUrl'] != null && (w['photoUrl'] as String).isNotEmpty
-                          ? CircleAvatar(radius: 18, backgroundImage: NetworkImage(w['photoUrl']))
-                          : null,
-                    ),
-                  )),
-              ],
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _records.length,
+              itemBuilder: (_, i) => _buildWorkerCard(_records[i]),
             ),
           ),
       ],
     );
   }
 
-  Widget _statRow(String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 14)),
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-        ],
+  Widget _buildWorkerCard(Map<String, dynamic> record) {
+    final name = record['workerName']?.toString() ?? 'Unknown Worker';
+    final isStart = record['isStartMarked'] == true;
+    final isMid = record['isMidMarked'] == true;
+    final isEnd = record['isEndMarked'] == true;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: kRailwayBlue.withOpacity(0.1),
+              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: kRailwayBlue, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _chip('Start', isStart ? kSuccessGreen : Colors.grey, isStart),
+                      const SizedBox(width: 6),
+                      _chip('Mid', isMid ? Colors.orange : Colors.grey, isMid),
+                      const SizedBox(width: 6),
+                      _chip('End', isEnd ? Colors.red : Colors.grey, isEnd),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _chip(String label, Color color, bool active) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: active ? color.withOpacity(0.15) : Colors.grey.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: active ? color : Colors.grey.shade300),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: active ? color : Colors.grey)),
     );
   }
 }

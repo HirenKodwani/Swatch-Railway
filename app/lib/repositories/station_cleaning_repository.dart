@@ -669,6 +669,20 @@ class StationCleaningRepository {
     );
   }
 
+  // ─── ATTENDANCE LIST ────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getStationAttendanceList({String? stationId, String? runInstanceId}) async {
+    final params = <String, String>{};
+    if (stationId != null) params['stationId'] = stationId;
+    if (runInstanceId != null) params['runInstanceId'] = runInstanceId;
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-cleaning/attendance/list',
+      queryParams: params.isNotEmpty ? params : null,
+      parser: (d) => d,
+    );
+  }
+
   // ─── ATTENDANCE EXCEPTIONS ──────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> reportAttendanceIssue({
