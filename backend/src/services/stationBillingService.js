@@ -28,46 +28,49 @@ class StationBillingService {
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${year}-${monthPad}-${String(lastDay).padStart(2, '0')}`;
 
-    const [attendanceSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap, stationRunSnap, formsSnap] = await Promise.all([
-      db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('complaints').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
-      db.collection('station_feedback').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
-      db.collection('inspections').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
+    const [attendanceSnap, cleaningAttSnap, activitySnap, scorecardSnap, complaintSnap, feedbackSnap, inspectionSnap, machineSnap, downtimeSnap, stationRunSnap, formsSnap] = await Promise.all([
+      db.collection('station_attendance').where('stationId', '==', stationId).get(),
+      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
+      db.collection('station_daily_activities').where('stationId', '==', stationId).get(),
+      db.collection('daily_scorecards').where('stationId', '==', stationId).get(),
+      db.collection('complaints').where('stationId', '==', stationId).get(),
+      db.collection('station_feedback').where('stationId', '==', stationId).get(),
+      db.collection('inspections').where('stationId', '==', stationId).get(),
       db.collection('machines').where('stationId', '==', stationId).get(),
-      db.collection('machine_downtime').where('stationId', '==', stationId).where('startTime', '>=', startDate).where('startTime', '<=', endDate + 'T23:59:59').get(),
-      db.collection('stationRuns').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('stationCleaningForms').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
+      db.collection('machine_downtime').where('stationId', '==', stationId).get(),
+      db.collection('stationRuns').where('stationId', '==', stationId).get(),
+      db.collection('stationCleaningForms').where('stationId', '==', stationId).get(),
     ]);
 
-    const attendanceRecords = []; attendanceSnap.forEach(d => attendanceRecords.push(d.data()));
+    const allAttendance = []; attendanceSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) allAttendance.push(r); });
+    const cleaningAtt = []; cleaningAttSnap.forEach(d => { const r = d.data(); const d2 = r.date || (r.createdAt || '').substring(0, 10); if (d2 >= startDate && d2 <= endDate) cleaningAtt.push({ ...r, status: r.attendanceStatus === 'LATE' ? 'late' : 'present' }); });
+    const attendanceRecords = [...allAttendance, ...cleaningAtt];
     const presentCount = attendanceRecords.filter(r => ['present', 'late'].includes(r.status)).length;
     const uniqueDates = [...new Set(attendanceRecords.map(r => r.date))].length;
     const attendanceSummary = { totalDaysRecorded: uniqueDates, totalAttendanceEntries: attendanceRecords.length, totalPresent: presentCount, totalAbsent: attendanceRecords.filter(r => r.status === 'absent').length, averageDailyManpower: uniqueDates > 0 ? Math.round(presentCount / uniqueDates) : 0, attendancePercentage: attendanceRecords.length > 0 ? Math.round(presentCount / attendanceRecords.length * 100) : 0 };
 
-    const activities = []; activitySnap.forEach(d => activities.push(d.data()));
+    const activities = []; activitySnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) activities.push(r); });
     const actSummary = { total: activities.length, APPROVED: 0, COMPLETED: 0, REJECTED: 0, PENDING: 0, IN_PROGRESS: 0, PARTIALLY_COMPLETED: 0, RESUBMITTED: 0 };
     activities.forEach(a => { if (actSummary[a.status] !== undefined) actSummary[a.status]++; });
     const activityCompletionRate = actSummary.total > 0 ? Math.round((actSummary.APPROVED + actSummary.COMPLETED) / actSummary.total * 100) : 0;
 
-    const scorecards = []; scorecardSnap.forEach(d => scorecards.push(d.data()));
+    const scorecards = []; scorecardSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) scorecards.push(r); });
     const totalScore = scorecards.reduce((s, c) => s + (c.overallStationScore || 0), 0);
     const avgScore = scorecards.length > 0 ? Math.round(totalScore / scorecards.length * 10) / 10 : 0;
     const gradeMap = {}; scorecards.forEach(c => { const g = c.grade || 'N/A'; gradeMap[g] = (gradeMap[g] || 0) + 1; });
     const scorecardSummary = { daysWithScorecard: scorecards.length, averageScore: avgScore, gradeDistribution: gradeMap, certified: scorecards.every(c => c.certified) };
 
-    const complaints = []; complaintSnap.forEach(d => complaints.push(d.data()));
+    const complaints = []; complaintSnap.forEach(d => { const r = d.data(); const ts = r.createdAt || ''; if (ts >= startDate && ts <= endDate + 'T23:59:59') complaints.push(r); });
     const cmpSummary = { total: complaints.length, closed: complaints.filter(c => c.status === 'CLOSED').length, open: complaints.filter(c => ['REPORTED', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length, rejected: complaints.filter(c => c.status === 'REJECTED').length };
 
-    const feedbackRecords = []; feedbackSnap.forEach(d => feedbackRecords.push(d.data()));
+    const feedbackRecords = []; feedbackSnap.forEach(d => { const r = d.data(); const ts = r.createdAt || ''; if (ts >= startDate && ts <= endDate + 'T23:59:59') feedbackRecords.push(r); });
     const totalRating = feedbackRecords.reduce((s, f) => s + (f.rating || 0), 0);
     const feedbackSummary = { totalFeedbacks: feedbackRecords.length, averageRating: feedbackRecords.length > 0 ? Math.round(totalRating / feedbackRecords.length * 10) / 10 : 0, negativeFeedbacks: feedbackRecords.filter(f => f.isNegative).length };
 
-    const inspections = []; inspectionSnap.forEach(d => inspections.push(d.data()));
+    const inspections = []; inspectionSnap.forEach(d => { const r = d.data(); const ts = r.createdAt || ''; if (ts >= startDate && ts <= endDate + 'T23:59:59') inspections.push(r); });
     const totalDeficiencies = inspections.reduce((s, i) => s + (i.deficiencies || []).length, 0);
     const closedDeficiencies = inspections.reduce((s, i) => s + ((i.deficiencies || []).filter(d => d.status === 'CLOSED' || d.status === 'VERIFIED').length), 0);
-    const inspectionScoreSummary = inspections.map(i => ({ id: i.id, type: i.inspectionType, score: i.overallScore, status: i.status, date: i.inspectionDate || i.createdAt }));
+    const inspectionScoreSummary = inspections.map(i => ({ id: i.id || '', type: i.inspectionType || '', score: i.overallScore ?? null, status: i.status || '', date: i.inspectionDate || i.createdAt || '' }));
     const inspectionSummary = { totalInspections: inspections.length, totalDeficiencies, closedDeficiencies, openDeficiencies: totalDeficiencies - closedDeficiencies, inspectionTypes: [...new Set(inspections.map(i => i.inspectionType || 'standard'))].length, averageScore: inspections.length > 0 ? Math.round(inspections.reduce((s, i) => s + (i.overallScore || 0), 0) / inspections.length) : 0, scores: inspectionScoreSummary };
 
     // ── Petty issue summary (from complaints with petty_issue category) ──
@@ -75,7 +78,7 @@ class StationBillingService {
     const pettyIssueSummary = { total: pettyIssues.length, resolved: pettyIssues.filter(c => c.status === 'CLOSED' || c.status === 'RESOLVED').length, open: pettyIssues.filter(c => ['REPORTED', 'ASSIGNED', 'IN_PROGRESS'].includes(c.status)).length };
 
     // ── Photo evidence summary ──
-    const forms = []; formsSnap.forEach(d => forms.push(d.data()));
+    const forms = []; formsSnap.forEach(d => { const r = d.data(); const ts = r.createdAt || ''; if (ts >= startDate && ts <= endDate + 'T23:59:59') forms.push(r); });
     const formsWithPhotos = forms.filter(f => {
       const photos = f.photos || f.photoEvidence || f.beforePhotos || f.afterPhotos || [];
       return photos.length > 0;
@@ -86,7 +89,7 @@ class StationBillingService {
     }, 0);
     const evidenceSummary = { totalForms: forms.length, formsWithPhotos: formsWithPhotos.length, totalPhotos, evidenceComplianceRate: forms.length > 0 ? Math.round(formsWithPhotos.length / forms.length * 100) : 0 };
 
-    const downtimeRecords = []; downtimeSnap.forEach(d => downtimeRecords.push(d.data()));
+    const downtimeRecords = []; downtimeSnap.forEach(d => { const r = d.data(); const ts = r.startTime || ''; if (ts >= startDate && ts <= endDate + 'T23:59:59') downtimeRecords.push(r); });
     const totalDowntimeHours = downtimeRecords.reduce((s, d) => s + (d.totalDowntimeHours || 0), 0);
     const totalMachinePenalty = downtimeRecords.reduce((s, d) => s + (d.penaltyAmount || 0), 0);
     const machineDowntimeSummary = { incidents: downtimeRecords.length, totalHours: totalDowntimeHours, totalPenalty: totalMachinePenalty };
@@ -116,7 +119,7 @@ class StationBillingService {
     
     // 20% Supervisor Approval Deduction
     const stationRuns = []; 
-    if (stationRunSnap) stationRunSnap.forEach(d => stationRuns.push(d.data()));
+    if (stationRunSnap) stationRunSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) stationRuns.push(r); });
     
     const unapprovedRuns = stationRuns.filter(r => r.status !== 'approved');
     if (stationRuns.length > 0 && unapprovedRuns.length > 0) {
@@ -174,8 +177,9 @@ class StationBillingService {
     if (year) q = q.where('year', '==', parseInt(year));
     if (status) q = q.where('status', '==', status);
     if (paymentStatus) q = q.where('paymentStatus', '==', paymentStatus);
-    const snapshot = await q.orderBy('createdAt', 'desc').limit(parseInt(limit)).get();
+    const snapshot = await q.limit(parseInt(limit) * 2).get();
     const packs = []; snapshot.forEach(doc => packs.push({ id: doc.id, ...doc.data() }));
+    packs.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
     return { count: packs.length, packs };
   }
 
@@ -301,9 +305,9 @@ class StationBillingService {
         try {
           const existSnap = await db.collection('station_billing_packs')
             .where('contractId', '==', contractId).where('stationId', '==', stationId)
-            .where('month', '==', parseInt(month)).where('year', '==', parseInt(year))
-            .where('status', 'in', ['DRAFT', 'SUBMITTED', 'APPROVED']).limit(1).get();
-          if (!existSnap.empty) {
+            .where('month', '==', parseInt(month)).where('year', '==', parseInt(year)).limit(5).get();
+          const existingPacks = []; existSnap.forEach(d => existingPacks.push(d.data()));
+          if (existingPacks.some(p => ['DRAFT', 'SUBMITTED', 'APPROVED'].includes(p.status))) {
             errors.push({ contractId, stationId, error: 'Pack already exists for this period' });
             continue;
           }
