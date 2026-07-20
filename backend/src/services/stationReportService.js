@@ -1,13 +1,6 @@
 /*
- * Required Firestore composite indexes (create before deploying):
- *  1. `daily_scorecards` – `stationId` ASC, `date` ASC
- *  2. `station_attendance` – `stationId` ASC, `date` ASC
- *  3. `station_daily_activities` – `stationId` ASC, `date` ASC
- *  4. `machine_downtime` – `stationId` ASC, `startTime` ASC
- *  5. `station_billing_packs` – `stationId` ASC, `month` ASC, `year` ASC
- *  6. `station_reports` – `createdAt` DESC (with optional `stationId` / `reportType`)
- *  7. `audit_evidence` – `timestamp` DESC (with optional `userId` / `action`)
- *  8. `inspections` – `createdAt` DESC (with optional `stationId` / `inspectorId`)
+ * Report generation uses stationId-only Firestore queries + in-memory date filtering
+ * to avoid requiring composite indexes.
  */
 
 import { db, admin } from '../database/index.js';
@@ -76,28 +69,28 @@ class StationReportService {
     const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
 
     const [scorecardSnap, attendanceSnap, activitySnap, complaintSnap, inspectionSnap, formSnap] = await Promise.all([
-      db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
-      db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).get(),
+      db.collection('daily_scorecards').where('stationId', '==', stationId).get(),
+      db.collection('station_attendance').where('stationId', '==', stationId).get(),
+      db.collection('station_daily_activities').where('stationId', '==', stationId).get(),
       db.collection('complaints').where('stationId', '==', stationId).get(),
       db.collection('inspections').where('stationId', '==', stationId).get(),
-      db.collection('stationCleaningForms').where('stationId', '==', stationId).where('createdAt', '>=', startDate).where('createdAt', '<=', endDate + 'T23:59:59').get(),
+      db.collection('stationCleaningForms').where('stationId', '==', stationId).get(),
     ]);
 
-    const scorecards = []; scorecardSnap.forEach(d => scorecards.push(d.data()));
+    const scorecards = []; scorecardSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) scorecards.push(r); });
     const avgScore = scorecards.length > 0 ? Math.round(scorecards.reduce((s, c) => s + (c.overallStationScore || 0), 0) / scorecards.length) : 0;
-    const attendance = []; attendanceSnap.forEach(d => attendance.push(d.data()));
+    const attendance = []; attendanceSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) attendance.push(r); });
     const daysTracked = [...new Set(attendance.map(a => a.date))].length;
     const presentCount = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
     const attendancePct = attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 0;
-    const activities = []; activitySnap.forEach(d => activities.push(d.data()));
+    const activities = []; activitySnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) activities.push(r); });
     const completedActs = activities.filter(a => a.status === 'COMPLETED' || a.status === 'APPROVED').length;
     const completionRate = activities.length > 0 ? Math.round((completedActs / activities.length) * 100) : 0;
     const complaints = []; complaintSnap.forEach(d => complaints.push(d.data()));
     const complaintsInMonth = complaints.filter(c => { const d = c.createdAt || ''; return d >= startDate && d <= endDate + 'T23:59:59'; });
     const resolvedComplaints = complaintsInMonth.filter(c => c.status === 'CLOSED' || c.status === 'RAILWAY_VERIFIED').length;
     const inspections = []; inspectionSnap.forEach(d => inspections.push(d.data()));
-    const forms = []; formSnap.forEach(d => forms.push(d.data()));
+    const forms = []; formSnap.forEach(d => { const r = d.data(); const ts = r.createdAt || ''; if (ts >= startDate && ts <= endDate + 'T23:59:59') forms.push(r); });
     const submittedForms = forms.filter(f => ['SUBMITTED', 'APPROVED', 'SCORED', 'LOCKED'].includes(f.status)).length;
 
     const report = await this._storeReport({
@@ -139,10 +132,13 @@ class StationReportService {
     if (!stationId) throw new ValidationError('stationId is required');
     const endDate = new Date(); const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - months);
-    const snapshot = await db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate.toISOString().split('T')[0]).orderBy('date', 'asc').limit(200).get();
+    const startStr = startDate.toISOString().split('T')[0];
+    const snapshot = await db.collection('daily_scorecards').where('stationId', '==', stationId).get();
     const monthlyScores = {};
     snapshot.forEach(doc => {
-      const d = doc.data(); const monthKey = (d.date || '').substring(0, 7);
+      const d = doc.data();
+      if (d.date < startStr) return;
+      const monthKey = (d.date || '').substring(0, 7);
       if (!monthKey) return;
       if (!monthlyScores[monthKey]) monthlyScores[monthKey] = { total: 0, count: 0, grades: {} };
       monthlyScores[monthKey].total += d.overallStationScore || 0; monthlyScores[monthKey].count++;
@@ -160,10 +156,14 @@ class StationReportService {
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
     const comparisons = [];
     for (const station of stationIds) {
-      const scoreSnap = await db.collection('daily_scorecards').where('stationId', '==', station.id).where('date', '>=', startDate).where('date', '<=', endDate).get();
+      const scoreSnap = await db.collection('daily_scorecards').where('stationId', '==', station.id).get();
       if (!scoreSnap.empty) {
-        let total = 0, count = 0; scoreSnap.forEach(d => { total += d.data().overallStationScore || 0; count++; });
-        comparisons.push({ stationId: station.id, stationName: station.name, averageScore: count > 0 ? Math.round(total / count) : 0, daysScored: count });
+        let total = 0, count = 0;
+        scoreSnap.forEach(d => {
+          const r = d.data();
+          if (r.date >= startDate && r.date <= endDate) { total += r.overallStationScore || 0; count++; }
+        });
+        if (count > 0) comparisons.push({ stationId: station.id, stationName: station.name, averageScore: Math.round(total / count), daysScored: count });
       }
     }
     comparisons.sort((a, b) => b.averageScore - a.averageScore);
@@ -176,15 +176,23 @@ class StationReportService {
 
   async generateDailyAttendanceReport(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const snap = await db.collection('station_attendance').where('stationId', '==', stationId).where('date', '==', date).limit(500).get();
-    const records = []; snap.forEach(d => records.push(d.data()));
-    const present = records.filter(r => r.status === 'present').length;
-    const late = records.filter(r => r.status === 'late').length;
+    const [stationAttSnap, cleaningAttSnap] = await Promise.all([
+      db.collection('station_attendance').where('stationId', '==', stationId).get(),
+      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
+    ]);
+    const records = []; stationAttSnap.forEach(d => { const r = d.data(); if (r.date === date) records.push(r); });
+    const dayCleaning = []; cleaningAttSnap.forEach(d => { const r = d.data(); const d2 = r.date || (r.createdAt || '').substring(0, 10); if (d2 === date) dayCleaning.push(r); });
+    const combinedRecords = [
+      ...records.map(r => ({ ...r, source: 'station_attendance' })),
+      ...dayCleaning.map(r => ({ ...r, source: 'station_cleaning_attendance' })),
+    ];
+    const present = records.filter(r => r.status === 'present').length + dayCleaning.filter(r => r.isStartMarked).length;
+    const late = records.filter(r => r.status === 'late').length + dayCleaning.filter(r => r.attendanceStatus === 'LATE').length;
     const absent = records.filter(r => r.status === 'absent').length;
     const onLeave = records.filter(r => r.status === 'on_leave').length;
     const report = await this._storeReport({
       stationId, stationName, reportType: 'daily_attendance', date, month: parseInt(date.substring(5, 7)), year: parseInt(date.substring(0, 4)),
-      summary: { totalExpected: records.length, present, late, absent, onLeave, attendancePct: records.length > 0 ? Math.round((present + late) / records.length * 100) : 0, records },
+      summary: { totalExpected: combinedRecords.length, present, late, absent, onLeave, attendancePct: combinedRecords.length > 0 ? Math.round((present + late) / combinedRecords.length * 100) : 0, records: combinedRecords },
       generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
     });
     return report;
@@ -192,8 +200,8 @@ class StationReportService {
 
   async generateDailyActivityReport(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const snap = await db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '==', date).limit(500).get();
-    const records = []; snap.forEach(d => records.push(d.data()));
+    const snap = await db.collection('station_daily_activities').where('stationId', '==', stationId).get();
+    const records = []; snap.forEach(d => { const r = d.data(); if (r.date === date) records.push(r); });
     const now = new Date().toISOString();
     const completed = records.filter(r => r.status === 'COMPLETED' || r.status === 'APPROVED').length;
     const pending = records.filter(r => r.status === 'PENDING' || r.status === 'ASSIGNED').length;
@@ -211,8 +219,8 @@ class StationReportService {
 
   async generateDailyScorecardReport(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const snap = await db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '==', date).limit(100).get();
-    const records = []; snap.forEach(d => records.push(d.data()));
+    const snap = await db.collection('daily_scorecards').where('stationId', '==', stationId).get();
+    const records = []; snap.forEach(d => { const r = d.data(); if (r.date === date) records.push(r); });
     const avg = records.length > 0 ? Math.round(records.reduce((s, r) => s + (r.overallStationScore || 0), 0) / records.length) : 0;
     const grades = records.reduce((acc, r) => { const g = r.grade || 'N/A'; acc[g] = (acc[g] || 0) + 1; return acc; }, {});
     const report = await this._storeReport({
@@ -317,8 +325,8 @@ class StationReportService {
 
   async generateDailySupervisorLog(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const snap = await db.collection('supervisor_daily_logs').where('stationId', '==', stationId).where('date', '==', date).limit(100).get();
-    const logs = []; snap.forEach(d => logs.push(d.data()));
+    const snap = await db.collection('supervisor_daily_logs').where('stationId', '==', stationId).get();
+    const logs = []; snap.forEach(d => { const r = d.data(); if (r.date === date) logs.push(r); });
     const submitted = logs.filter(l => l.status === 'SUBMITTED' || l.status === 'ACCEPTED').length;
     const draft = logs.filter(l => l.status === 'DRAFT').length;
     const report = await this._storeReport({
@@ -331,8 +339,8 @@ class StationReportService {
 
   async generateMissedActivityReport(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const snap = await db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '==', date).limit(500).get();
-    const records = []; snap.forEach(d => records.push(d.data()));
+    const snap = await db.collection('station_daily_activities').where('stationId', '==', stationId).get();
+    const records = []; snap.forEach(d => { const r = d.data(); if (r.date === date) records.push(r); });
     const now = new Date().toISOString();
     const overdue = records.filter(r => r.status === 'PENDING' && r.scheduledEnd && r.scheduledEnd < now);
     const delayed = records.filter(r => r.status === 'IN_PROGRESS' && r.scheduledEnd && r.scheduledEnd < now);
@@ -361,17 +369,25 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const monthPad = String(month).padStart(2, '0');
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
-    const snap = await db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get();
-    const records = []; snap.forEach(d => records.push(d.data()));
-    const daysPresent = new Set(records.filter(r => r.status === 'present').map(r => r.date)).size;
-    const totalDays = new Set(records.map(r => r.date)).size;
-    const workerMap = {}; records.forEach(r => { const w = r.workerId || r.userId; if (!w) return; if (!workerMap[w]) workerMap[w] = { present: 0, late: 0, absent: 0, leave: 0, total: 0 }; workerMap[w][r.status === 'present' ? 'present' : r.status === 'late' ? 'late' : r.status === 'absent' ? 'absent' : r.status === 'on_leave' ? 'leave' : 'total']++; workerMap[w].total++; });
-    const overtimeRecords = await db.collection('overtime_records').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get();
-    const overtime = []; overtimeRecords.forEach(d => overtime.push(d.data()));
+    const [snap, cleaningSnap, overtimeSnap] = await Promise.all([
+      db.collection('station_attendance').where('stationId', '==', stationId).get(),
+      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
+      db.collection('overtime_records').where('stationId', '==', stationId).get(),
+    ]);
+    const records = []; snap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) records.push(r); });
+    const dayCleaning = []; cleaningSnap.forEach(d => { const r = d.data(); if (r.date && r.date >= startDate && r.date <= endDate) dayCleaning.push(r); });
+    const overtime = []; overtimeSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) overtime.push(r); });
+    const combinedRecords = [
+      ...records.map(r => ({ ...r, source: 'station_attendance' })),
+      ...dayCleaning.map(r => ({ ...r, source: 'station_cleaning_attendance', status: r.attendanceStatus === 'LATE' ? 'late' : 'present' })),
+    ];
+    const daysPresent = new Set(combinedRecords.filter(r => r.status === 'present').map(r => r.date)).size;
+    const totalDays = new Set(combinedRecords.map(r => r.date)).size;
+    const workerMap = {}; combinedRecords.forEach(r => { const w = r.workerId || r.userId; if (!w) return; if (!workerMap[w]) workerMap[w] = { present: 0, late: 0, absent: 0, leave: 0, total: 0 }; workerMap[w][r.status === 'present' ? 'present' : r.status === 'late' ? 'late' : r.status === 'absent' ? 'absent' : r.status === 'on_leave' ? 'leave' : 'total']++; workerMap[w].total++; });
     const totalOvertimeHours = overtime.reduce((s, o) => s + (o.hours || o.overtimeHours || 0), 0);
     const report = await this._storeReport({
       stationId, stationName, reportType: 'monthly_attendance', month, year, date: startDate,
-      summary: { totalEntries: records.length, totalWorkers: Object.keys(workerMap).length, daysPresent, totalDays, attendancePct: totalDays > 0 ? Math.round(daysPresent / totalDays * 100) : 0, overtimeEntries: overtime.length, totalOvertimeHours, workerSummary: Object.entries(workerMap).map(([wid, stats]) => ({ workerId: wid, ...stats })) },
+      summary: { totalEntries: combinedRecords.length, totalWorkers: Object.keys(workerMap).length, daysPresent, totalDays, attendancePct: totalDays > 0 ? Math.round(daysPresent / totalDays * 100) : 0, overtimeEntries: overtime.length, totalOvertimeHours, workerSummary: Object.entries(workerMap).map(([wid, stats]) => ({ workerId: wid, ...stats })) },
       generatedBy: user.uid, generatedByName: user.fullName || '', generatedAt: new Date().toISOString(),
     });
     return report;
@@ -382,12 +398,12 @@ class StationReportService {
     const monthPad = String(month).padStart(2, '0');
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
     const [activitySnap, garbageSnap, pestSnap] = await Promise.all([
-      db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get(),
-      db.collection('garbage_collections').where('stationId', '==', stationId).where('collectionDate', '>=', startDate).where('collectionDate', '<=', endDate).limit(500).get(),
-      db.collection('pest_treatment_plans').where('stationId', '==', stationId).limit(500).get(),
+      db.collection('station_daily_activities').where('stationId', '==', stationId).get(),
+      db.collection('garbage_collections').where('stationId', '==', stationId).get(),
+      db.collection('pest_treatment_plans').where('stationId', '==', stationId).get(),
     ]);
-    const activities = []; activitySnap.forEach(d => activities.push(d.data()));
-    const garbageRecords = []; garbageSnap.forEach(d => garbageRecords.push(d.data()));
+    const activities = []; activitySnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) activities.push(r); });
+    const garbageRecords = []; garbageSnap.forEach(d => { const r = d.data(); const d2 = r.collectionDate || ''; if (d2 >= startDate && d2 <= endDate) garbageRecords.push(r); });
     const pestRecords = []; pestSnap.forEach(d => pestRecords.push(d.data()));
     const inMonthPest = pestRecords.filter(p => { const d = p.scheduledDate || ''; return d >= startDate && d <= endDate; });
     const totalWet = garbageRecords.reduce((s, g) => s + (g.wetKg || 0), 0);
@@ -408,8 +424,8 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const monthPad = String(month).padStart(2, '0');
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
-    const snap = await db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(200).get();
-    const records = []; snap.forEach(d => records.push(d.data()));
+    const snap = await db.collection('daily_scorecards').where('stationId', '==', stationId).get();
+    const records = []; snap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) records.push(r); });
     const scores = records.map(r => r.overallStationScore || 0);
     const avg = scores.length > 0 ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
     const max = scores.length > 0 ? Math.max(...scores) : 0;
@@ -487,18 +503,18 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const monthPad = String(month).padStart(2, '0');
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
-    const [downtimeSnap, complaintSnap] = await Promise.all([
-      db.collection('machine_downtime').where('stationId', '==', stationId).where('startTime', '>=', startDate).where('startTime', '<=', endDate).limit(500).get(),
+    const [downtimeSnap, complaintSnap, scorecardSnap] = await Promise.all([
+      db.collection('machine_downtime').where('stationId', '==', stationId).get(),
       db.collection('complaints').where('stationId', '==', stationId).get(),
+      db.collection('daily_scorecards').where('stationId', '==', stationId).get(),
     ]);
-    const downtimeRecords = []; downtimeSnap.forEach(d => downtimeRecords.push(d.data()));
+    const downtimeRecords = []; downtimeSnap.forEach(d => { const r = d.data(); const ts = r.startTime || ''; if (ts >= startDate && ts <= endDate) downtimeRecords.push(r); });
     const complaints = []; complaintSnap.forEach(d => complaints.push(d.data()));
     const inMonthComplaints = complaints.filter(r => { const c = r.createdAt || ''; return c >= startDate && c <= endDate + 'T23:59:59'; });
     const slaBreaches = inMonthComplaints.filter(r => r.slaDeadline && r.slaDeadline < new Date().toISOString() && !['CLOSED', 'RESOLVED', 'RAILWAY_VERIFIED'].includes(r.status));
     const totalDowntimeHours = downtimeRecords.reduce((s, d) => s + (d.totalDowntimeHours || 0), 0);
     const totalDowntimePenalty = downtimeRecords.reduce((s, d) => s + (d.penaltyAmount || 0), 0);
-    const scorecardSnap = await db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(200).get();
-    const scorecards = []; scorecardSnap.forEach(d => scorecards.push(d.data()));
+    const scorecards = []; scorecardSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) scorecards.push(r); });
     const lowScoreDays = scorecards.filter(s => (s.overallStationScore || 0) < 70).length;
     const penaltyDueFromScorecards = lowScoreDays > 5 ? lowScoreDays * 100 : 0;
     const report = await this._storeReport({
@@ -515,15 +531,15 @@ class StationReportService {
     const startDate = `${year}-${monthPad}-01`;
     const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
     const [attSnap, actSnap, scoreSnap, compSnap, feedSnap] = await Promise.all([
-      db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get(),
-      db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(500).get(),
-      db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', startDate).where('date', '<=', endDate).limit(200).get(),
+      db.collection('station_attendance').where('stationId', '==', stationId).get(),
+      db.collection('station_daily_activities').where('stationId', '==', stationId).get(),
+      db.collection('daily_scorecards').where('stationId', '==', stationId).get(),
       db.collection('complaints').where('stationId', '==', stationId).get(),
       db.collection('station_feedback').where('stationId', '==', stationId).get(),
     ]);
-    const attRecords = []; attSnap.forEach(d => attRecords.push(d.data()));
-    const actRecords = []; actSnap.forEach(d => actRecords.push(d.data()));
-    const scoreRecords = []; scoreSnap.forEach(d => scoreRecords.push(d.data()));
+    const attRecords = []; attSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) attRecords.push(r); });
+    const actRecords = []; actSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) actRecords.push(r); });
+    const scoreRecords = []; scoreSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) scoreRecords.push(r); });
     const compRecords = []; compSnap.forEach(d => compRecords.push(d.data()));
     const feedRecords = []; feedSnap.forEach(d => feedRecords.push(d.data()));
     const inMonthComps = compRecords.filter(r => { const c = r.createdAt || ''; return c >= startDate && c <= endDate + 'T23:59:59'; });

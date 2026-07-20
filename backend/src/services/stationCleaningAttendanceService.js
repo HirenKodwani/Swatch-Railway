@@ -89,6 +89,7 @@ class StationCleaningAttendanceService {
       if (attendanceType !== 'start') throw new ValidationError("You must submit 'start' attendance first.");
       await attendanceRef.set({
         uid: attendanceDocId, runInstanceId, stationId: stationId || null, workerId, workerName: finalWorkerName,
+        date: dateField,
         mobileNumber: mobileNumber || null, deviceId: deviceId || null,
         isStartMarked: true, isMidMarked: false, isEndMarked: false,
         attendanceStatus: isLateAttendance ? 'LATE' : 'PRESENT',
