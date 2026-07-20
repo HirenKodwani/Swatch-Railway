@@ -768,12 +768,20 @@ class StationCleaningService {
     const ref = db.collection('pestControlRecords').doc();
     const data = {
       uid: ref.id, stationId,
+      stationName: body.stationName || '',
       pestType: pestType || 'General',
       entityId: body.entityId || null,
       frequency: body.frequency || 'monthly',
       conductedDate: body.conductedDate || new Date().toISOString().split('T')[0],
+      area: body.area || '',
+      zone: body.zone || '',
+      severity: body.severity || 'LOW',
+      treatmentMethod: body.treatmentMethod || '',
+      chemicalsUsed: body.chemicalsUsed || [],
       status: 'pending',
       evidence: body.evidence || [],
+      beforePhoto: body.beforePhoto || '',
+      afterPhoto: body.afterPhoto || '',
       remarks: body.remarks || '',
       recordedBy: user && user.uid,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
@@ -896,12 +904,21 @@ class StationCleaningService {
     const ref = db.collection('garbageDisposalRecords').doc();
     const data = {
       uid: ref.id, stationId,
+      stationName: body.stationName || '',
       entityId: body.entityId || null,
       disposalDate: body.disposalDate || new Date().toISOString().split('T')[0],
-      garbageType: body.garbageType || 'General',
+      garbageType: body.garbageType || body.wasteType || 'General',
+      wasteType: body.wasteType || '',
       quantityKg: body.quantityKg || 0,
+      area: body.area || '',
+      disposalMethod: body.disposalMethod || '',
+      disposalAgency: body.disposalAgency || '',
+      vehicleNumber: body.vehicleNumber || '',
+      notes: body.notes || '',
       status: 'recorded',
       evidence: body.evidence || [],
+      beforePhoto: body.beforePhoto || '',
+      afterPhoto: body.afterPhoto || '',
       remarks: body.remarks || '',
       recordedBy: user && user.uid,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()

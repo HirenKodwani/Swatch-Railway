@@ -669,6 +669,60 @@ class StationCleaningRepository {
     );
   }
 
+  // ─── ATTENDANCE EXCEPTIONS ──────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> reportAttendanceIssue({
+    required String issueType,
+    required String remark,
+    String? attendanceType,
+    String? runInstanceId,
+    String? stationId,
+    String? photoUrl,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final body = <String, dynamic>{
+      'issueType': issueType,
+      'remark': remark,
+      'attendanceType': attendanceType ?? '',
+      'runInstanceId': runInstanceId ?? '',
+      'stationId': stationId ?? '',
+      if (photoUrl != null) 'photoUrl': photoUrl,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+    };
+    return await _apiCall(
+      method: 'POST',
+      path: '/api/station-cleaning/attendance/report-issue',
+      body: body,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> getAttendanceExceptions({String? status}) async {
+    final params = <String, String>{};
+    if (status != null) params['status'] = status;
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-cleaning/attendance/exceptions',
+      queryParams: params.isNotEmpty ? params : null,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> takeExceptionAction({
+    required String exceptionId,
+    required String action,
+    String? adminRemark,
+  }) async {
+    return await _apiCall(
+      method: 'POST',
+      path: '/api/station-cleaning/attendance/exceptions/action',
+      body: {'exceptionId': exceptionId, 'action': action, if (adminRemark != null) 'adminRemark': adminRemark},
+      parser: (d) => d,
+    );
+  }
+
   // ─── DASHBOARD ──────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getDashboard() async {

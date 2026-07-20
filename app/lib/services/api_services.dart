@@ -1262,9 +1262,13 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getSupervisors() async {
     try {
+      final token = await getToken();
       final response = await http.get(
         Uri.parse('$baseUrl/api/users/railway-supervisors'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
       );
 
       if (response.statusCode == 200) {

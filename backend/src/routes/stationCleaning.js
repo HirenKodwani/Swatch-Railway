@@ -75,7 +75,7 @@ router.get('/api/station-pest-control/records', verifyToken, requirePermission(P
   const records = await stationCleaningService.listAllPestControl(req.query);
   res.json({ data: records || [] });
 }));
-router.put('/api/station-pest-control/:uid/review', verifyToken, requirePermission(PERMISSIONS.MANAGE_PEST_CONTROL), requireStationAccess, requirePlatformAccess, stationCleaning.reviewPestControl);
+router.post('/api/station-pest-control/:uid/review', verifyToken, requirePermission(PERMISSIONS.MANAGE_PEST_CONTROL), requireStationAccess, requirePlatformAccess, stationCleaning.reviewPestControl);
 router.get('/api/station-pest-control/report', verifyToken, requirePermission(PERMISSIONS.VIEW_PEST_CONTROL), requireStationAccess, requirePlatformAccess, stationCleaning.pestControlReport);
 
 // ─── Machine / Material Deployment ──────────────────────────────────────────

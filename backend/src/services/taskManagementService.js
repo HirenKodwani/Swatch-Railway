@@ -166,7 +166,23 @@ class TaskManagementService {
 
   async getTasks(query = {}, user) {
     const { stationId, platformId, areaId, workerId, status, date, startDate, endDate, supervisorId, includeOverdue } = query;
-    const snapshot = await db.collection('cleaningTasks').limit(300).get();
+    let q = db.collection('cleaningTasks');
+    const filters = [];
+    if (stationId) { q = q.where('stationId', '==', stationId); filters.push('stationId'); }
+    if (workerId) { q = q.where('workerId', '==', workerId); filters.push('workerId'); }
+    if (areaId) { q = q.where('areaId', '==', areaId); filters.push('areaId'); }
+    if (platformId) { q = q.where('platformId', '==', platformId); filters.push('platformId'); }
+    if (supervisorId) { q = q.where('supervisorId', '==', supervisorId); filters.push('supervisorId'); }
+    if (status) { q = q.where('status', '==', status); filters.push('status'); }
+    if (date) { q = q.where('date', '==', date); filters.push('date'); }
+    if (startDate && endDate) {
+      q = q.where('date', '>=', startDate).where('date', '<=', endDate);
+    } else if (startDate) {
+      q = q.where('date', '>=', startDate);
+    } else if (endDate) {
+      q = q.where('date', '<=', endDate);
+    }
+    const snapshot = await q.limit(300).get();
     const tasks = [];
     const now = new Date();
     snapshot.forEach(doc => {
@@ -180,31 +196,17 @@ class TaskManagementService {
       tasks.push(t);
     });
 
-    let filtered = tasks;
-    if (stationId) filtered = filtered.filter(t => t.stationId === stationId);
-    if (platformId) filtered = filtered.filter(t => t.platformId === platformId);
-    if (areaId) filtered = filtered.filter(t => t.areaId === areaId);
-    if (workerId) filtered = filtered.filter(t => t.workerId === workerId);
-    if (status) filtered = filtered.filter(t => t.status === status);
-    if (supervisorId) filtered = filtered.filter(t => t.supervisorId === supervisorId);
-    if (includeOverdue === 'true') filtered = filtered.filter(t => t.isOverdue);
-    if (date) {
-      filtered = filtered.filter(t => t.date === date || t.scheduledDate === date);
-    }
-    if (startDate) {
-      filtered = filtered.filter(t => (t.date || t.scheduledDate || '') >= startDate);
-    }
-    if (endDate) {
-      filtered = filtered.filter(t => (t.date || t.scheduledDate || '') <= endDate);
+    if (includeOverdue === 'true') {
+      tasks = tasks.filter(t => t.isOverdue);
     }
 
-    filtered.sort((a, b) => {
+    tasks.sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
     });
 
-    return { count: filtered.length, tasks: filtered };
+    return { count: tasks.length, tasks };
   }
 
   async getTaskById(taskId) {

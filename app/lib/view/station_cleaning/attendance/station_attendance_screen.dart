@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/repositories/station_attendance_repository.dart';
+import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
@@ -33,7 +34,7 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
     _loadWorkers();
   }
 
@@ -147,6 +148,7 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
           tabs: const [
             Tab(text: 'Mark Attendance'),
             Tab(text: 'Planned vs Actual'),
+            Tab(text: 'Exceptions'),
           ],
         ),
       ),
@@ -157,6 +159,7 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
               children: [
                 _buildMarkAttendanceTab(),
                 _buildPlannedVsActualTab(),
+                _buildExceptionsTab(),
               ],
             ),
     );
@@ -322,6 +325,10 @@ class _StationAttendanceScreenState extends State<StationAttendanceScreen> with 
   Widget _buildPlannedVsActualTab() {
     return PlannedVsActualView(stationId: widget.stationId);
   }
+
+  Widget _buildExceptionsTab() {
+    return _AttendanceExceptionsView(stationId: widget.stationId);
+  }
 }
 
 class PlannedVsActualView extends StatefulWidget {
@@ -472,3 +479,219 @@ class _PlannedVsActualViewState extends State<PlannedVsActualView> {
     );
   }
 }
+
+// ─── Attendance Exceptions Tab ─────────────────────────────────────────────────────
+
+class _AttendanceExceptionsView extends StatefulWidget {
+  final String stationId;
+  const _AttendanceExceptionsView({required this.stationId});
+
+  @override
+  State<_AttendanceExceptionsView> createState() => _AttendanceExceptionsViewState();
+}
+
+class _AttendanceExceptionsViewState extends State<_AttendanceExceptionsView> {
+  List<Map<String, dynamic>> _exceptions = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final result = await StationCleaningRepository.getAttendanceExceptions(status: 'PENDING');
+      final raw = result['exceptions'] as List? ?? result['data'] as List? ?? [];
+      _exceptions = List<Map<String, dynamic>>.from(raw);
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _takeAction(String exceptionId, String action) async {
+    final remarkCtrl = TextEditingController();
+    if (action == 'REJECTED') {
+      final remark = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Rejection Reason'),
+          content: TextField(
+            controller: remarkCtrl,
+            decoration: const InputDecoration(labelText: 'Reason *', border: OutlineInputBorder()),
+            maxLines: 2,
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                if (remarkCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx, remarkCtrl.text.trim());
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: kErrorRed),
+              child: const Text('Reject', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (remark == null) return;
+      remarkCtrl.text = remark;
+    }
+    try {
+      await StationCleaningRepository.takeExceptionAction(
+        exceptionId: exceptionId,
+        action: action,
+        adminRemark: remarkCtrl.text.isNotEmpty ? remarkCtrl.text : null,
+      );
+      _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exception ${action == 'APPROVED' ? 'approved' : 'rejected'}'),
+            backgroundColor: action == 'APPROVED' ? kSuccessGreen : kWarningOrange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: kErrorRed),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: kErrorRed),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _load, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+    if (_exceptions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            const Text('No pending exceptions', style: TextStyle(color: Colors.grey, fontSize: 16)),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _exceptions.length,
+        itemBuilder: (_, i) => _buildExceptionCard(_exceptions[i]),
+      ),
+    );
+  }
+
+  Widget _buildExceptionCard(Map<String, dynamic> ex) {
+    final issueType = ex['issueType']?.toString() ?? 'Unknown';
+    final remark = ex['remark']?.toString() ?? '';
+    final workerName = ex['workerName']?.toString() ?? 'Unknown Worker';
+    final attendanceType = ex['attendanceType']?.toString() ?? '';
+    final createdAt = ex['createdAt']?.toString() ?? '';
+    final id = ex['exceptionId']?.toString() ?? ex['uid']?.toString() ?? '';
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: kWarningOrange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.warning_amber, color: kWarningOrange, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(workerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      if (createdAt.isNotEmpty)
+                        Text(createdAt, style: const TextStyle(fontSize: 11, color: kTextSecondary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _detailRow('Issue', issueType),
+            if (attendanceType.isNotEmpty) _detailRow('Attendance', attendanceType),
+            if (remark.isNotEmpty) _detailRow('Remark', remark),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: id.isNotEmpty ? () => _takeAction(id, 'REJECTED') : null,
+                  icon: const Icon(Icons.close, color: kErrorRed, size: 18),
+                  label: const Text('Reject', style: TextStyle(color: kErrorRed)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: id.isNotEmpty ? () => _takeAction(id, 'APPROVED') : null,
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Approve'),
+                  style: ElevatedButton.styleFrom(backgroundColor: kSuccessGreen, foregroundColor: Colors.white),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text('$label:', style: const TextStyle(fontSize: 12, color: kTextSecondary, fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+

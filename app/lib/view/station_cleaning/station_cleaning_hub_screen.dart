@@ -63,19 +63,19 @@ class StationCleaningHubScreen extends StatelessWidget {
   Set<int> _visibleCards(String role) {
     final r = role.toUpperCase().replaceAll(' ', '_');
     if (['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(r)) {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37};
     }
     if (r == 'RAILWAY_SUPERVISOR') {
-      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 24, 25, 26, 28, 29, 30, 31, 35, 36};
+      return {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 16, 17, 19, 20, 24, 25, 26, 28, 29, 30, 31, 35, 36, 37};
     }
     if (r == 'CONTRACTOR_ADMIN') {
-      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 20, 24, 25, 28, 30, 35, 36};
+      return {0, 1, 2, 3, 5, 6, 10, 11, 12, 16, 18, 19, 24, 25, 28, 30, 35, 36, 37};
     }
     if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37};
     }
     if (r == 'PLATFORM_MASTER') {
-      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+      return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37};
     }
     if (r == 'CONTRACTOR_SUPERVISOR') {
       return {0, 1, 2, 3, 5, 6, 10, 11, 12, 19, 20, 24, 25, 28, 30, 35};
@@ -129,6 +129,7 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 34
       _moduleCard(context, Icons.groups, 'Workforce', Colors.indigo.shade700, () => _openWorkforce(context)),       // 35
       _moduleCard(context, Icons.repeat, 'Frequency', Colors.cyan.shade700, () => _openFrequency(context)),         // 36
+      _moduleCard(context, Icons.warning_amber_rounded, 'Att.\nExceptions', Colors.deepOrange, () => _openExceptionAction(context)), // 37
     ];
 
     final cards = <Widget>[];
@@ -483,5 +484,9 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openFrequency(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => const FrequencyListScreen()));
+  }
+
+  void _openExceptionAction(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: stationId, stationName: stationName)));
   }
 }
