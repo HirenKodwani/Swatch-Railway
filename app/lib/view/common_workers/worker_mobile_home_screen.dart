@@ -840,21 +840,23 @@ class WorkerMobileHomeScreen extends StatelessWidget {
                   childAspectRatio: aspectRatio,
                 ),
                 itemBuilder: (context, index) {
-                  final action = actions[index];
+                    final action = actions[index];
                     return GestureDetector(
                     onTap: () {
                       final title = action['title'] as String;
+                      final sid = controller.currentUser.value?.stationId;
+                      final sname = controller.currentUser.value?.stationName;
                       Widget page;
                       if (title == 'Complaints') {
                         page = const WorkerComplaintsScreen();
                       } else if (title == 'Station Cleaning') {
                         page = const WorkerStationCleaningScreen();
                       } else if (title == 'Pest Control') {
-                        page = const WorkerPestControlScreen();
+                        page = WorkerPestControlScreen(stationId: sid, stationName: sname);
                       } else if (title == 'Machines') {
                         page = const WorkerMachineScreen();
                       } else if (title == 'Garbage') {
-                        page = const WorkerGarbageScreen();
+                        page = WorkerGarbageScreen(stationId: sid, stationName: sname);
                       } else if (title == 'Audit Trail') {
                         page = const WorkerAuditScreen();
                       } else {

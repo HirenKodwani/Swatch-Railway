@@ -241,8 +241,8 @@ class _WorkerPestControlScreenState extends State<WorkerPestControlScreen> {
                           final beforeUrl = await WorkerRepository.uploadMedia(bf.path);
                           final afterUrl = await WorkerRepository.uploadMedia(af.path);
                           final body = {
-                            'stationId': widget.stationId ?? 'current_station_id',
-                            'stationName': widget.stationName ?? 'Current Station',
+                            'stationId': widget.stationId ?? '',
+                            'stationName': widget.stationName ?? '',
                             'area': _areaCtrl.text,
                             'zone': _zoneCtrl.text,
                             'pestType': _pestType,

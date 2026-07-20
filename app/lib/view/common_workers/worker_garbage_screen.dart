@@ -95,8 +95,8 @@ class _WorkerGarbageScreenState extends State<WorkerGarbageScreen> {
       final afterUrl = await WorkerRepository.uploadMedia(_afterPhoto!.path);
 
       final body = {
-        'stationId': widget.stationId ?? 'current_station_id',
-        'stationName': widget.stationName ?? 'Current Station',
+        'stationId': widget.stationId ?? '',
+        'stationName': widget.stationName ?? '',
         'wasteType': _wasteType,
         'quantityKg': double.tryParse(_qtyCtrl.text) ?? 0,
         'area': _areaCtrl.text,
