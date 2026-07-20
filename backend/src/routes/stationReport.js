@@ -9,7 +9,6 @@ router.post('/api/station-reports/generate', verifyToken, ctrl.generateReport);
 router.get('/api/station-reports', verifyToken, ctrl.listReports);
 router.get('/api/station-reports/score-trend', verifyToken, ctrl.getScoreTrend);
 router.get('/api/station-reports/comparison', verifyToken, ctrl.getStationComparison);
-router.get('/api/station-reports/:uid', verifyToken, ctrl.getReportById);
 
 // 10.1 Daily Reports
 router.post('/api/station-reports/daily/attendance', verifyToken, ctrl.generateDailyAttendanceReport);
@@ -58,5 +57,8 @@ router.post('/api/station-reports/auto-email/monthly', verifyToken, ctrl.dispatc
 router.post('/api/station-reports/auto-email/missed-activity', verifyToken, ctrl.dispatchMissedActivityAlert);
 router.post('/api/station-reports/auto-email/rejected-form', verifyToken, ctrl.dispatchRejectedFormNotification);
 router.post('/api/station-reports/auto-email/complaint-escalation', verifyToken, ctrl.dispatchComplaintEscalation);
+
+// Param route must be last
+router.get('/api/station-reports/:uid', verifyToken, ctrl.getReportById);
 
 export default router;

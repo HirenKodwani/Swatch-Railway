@@ -12,6 +12,7 @@
 import { db, admin } from '../database/index.js';
 import { ValidationError } from '../errors/index.js';
 import config from '../config/index.js';
+import logger from '../logger/index.js';
 
 const CACHE_TTL = 300;
 const cache = {};
@@ -294,6 +295,17 @@ class DashboardService {
     return result;
   }
 
+  async _safeQuery(fn) {
+    try { return await fn(); } catch (e) {
+      const code = e.code;
+      if (code === 9 || (typeof code === 'string' && ['failed_precondition', 'FAILED_PRECONDITION'].includes(code)) || (e.message && e.message.includes('FAILED_PRECONDITION'))) {
+        logger.warn('Firestore index missing, returning empty snapshot');
+        return { forEach: () => {}, empty: true, size: 0, docs: [], exists: false, data: () => ({}) };
+      }
+      throw e;
+    }
+  }
+
   async getStationDashboard(stationId, query = {}) {
     if (!stationId) throw new ValidationError('stationId is required');
     const { startDate, endDate, month, year } = query;
@@ -310,20 +322,21 @@ class DashboardService {
     const cached = this._getCached(cacheKey);
     if (cached) return cached;
 
+    const safe = (fn) => this._safeQuery(fn);
     const [scoreSnap, attendSnap, feedbackSnap, complaintSnap, machineSnap, actSnap, logSnap, freqSnap, billingSnap, emailSnap, platSnap, stationSnap, tasksSnap] = await Promise.all([
-      db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get(),
-      db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get(),
-      db.collection('station_feedback').where('stationId', '==', stationId).where('createdAt', '>=', sDate).where('createdAt', '<=', eDate + 'T23:59:59').get(),
-      db.collection('complaints').where('stationId', '==', stationId).where('createdAt', '>=', sDate).where('createdAt', '<=', eDate + 'T23:59:59').get(),
-      db.collection('machines').where('stationId', '==', stationId).get(),
-      db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get(),
-      db.collection('execution_logs').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get(),
-      db.collection('activity_frequencies').where('stationId', '==', stationId).get(),
-      db.collection('station_billing_packs').where('stationId', '==', stationId).get(),
-      db.collection('email_history').where('stationId', '==', stationId).get(),
-      db.collection('platforms').where('stationId', '==', stationId).get(),
-      db.collection('stations').doc(stationId).get(),
-      db.collection('cleaningTasks').where('stationId', '==', stationId).where('scheduledDate', '>=', sDate).where('scheduledDate', '<=', eDate).limit(500).get()
+      safe(() => db.collection('daily_scorecards').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get()),
+      safe(() => db.collection('station_attendance').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get()),
+      safe(() => db.collection('station_feedback').where('stationId', '==', stationId).where('createdAt', '>=', sDate).where('createdAt', '<=', eDate + 'T23:59:59').get()),
+      safe(() => db.collection('complaints').where('stationId', '==', stationId).where('createdAt', '>=', sDate).where('createdAt', '<=', eDate + 'T23:59:59').get()),
+      safe(() => db.collection('machines').where('stationId', '==', stationId).get()),
+      safe(() => db.collection('station_daily_activities').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get()),
+      safe(() => db.collection('execution_logs').where('stationId', '==', stationId).where('date', '>=', sDate).where('date', '<=', eDate).get()),
+      safe(() => db.collection('activity_frequencies').where('stationId', '==', stationId).get()),
+      safe(() => db.collection('station_billing_packs').where('stationId', '==', stationId).get()),
+      safe(() => db.collection('email_history').where('stationId', '==', stationId).get()),
+      safe(() => db.collection('platforms').where('stationId', '==', stationId).get()),
+      safe(() => db.collection('stations').doc(stationId).get()),
+      safe(() => db.collection('cleaningTasks').where('stationId', '==', stationId).where('scheduledDate', '>=', sDate).where('scheduledDate', '<=', eDate).limit(500).get())
     ]);
 
     const stationData = stationSnap.exists ? stationSnap.data() : {};
