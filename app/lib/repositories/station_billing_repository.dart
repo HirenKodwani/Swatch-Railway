@@ -38,7 +38,7 @@ class StationBillingRepository {
     if (response.statusCode == 200) {
       final body = jsonDecode(response.body);
       final List list = body['packs'] ?? [];
-      return list.map((e) => StationBillingPack.fromJson(e)).toList();
+      return list.map<StationBillingPack>((e) => StationBillingPack.fromJson(e)).toList();
     }
     throw Exception('Failed to load billing packs');
   }

@@ -15,7 +15,7 @@ class StationReportRepository {
     final res = await http.get(uri, headers: await _headers());
     if (res.statusCode == 200) {
       final list = jsonDecode(res.body)['reports'] ?? [];
-      return list.map((e) => StationReport.fromJson(e)).toList();
+      return list.map<StationReport>((e) => StationReport.fromJson(e)).toList();
     }
     throw Exception('Failed to load reports');
   }

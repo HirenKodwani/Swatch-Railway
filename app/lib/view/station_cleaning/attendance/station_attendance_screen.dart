@@ -349,8 +349,13 @@ class _PlannedVsActualViewState extends State<PlannedVsActualView> {
     try {
       final formattedDate = "${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}";
       _data = await StationAttendanceRepository.getPlannedVsActual(widget.stationId, formattedDate, _shift);
-    } catch (_) {
+    } catch (e) {
       _data = null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Planned vs Actual: $e'), backgroundColor: kErrorRed, duration: const Duration(seconds: 4)),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

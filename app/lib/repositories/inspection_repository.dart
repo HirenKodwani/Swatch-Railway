@@ -14,8 +14,8 @@ class InspectionRepository {
     final uri = Uri.parse('$baseUrl/api/inspections').replace(queryParameters: query);
     final res = await http.get(uri, headers: await _headers());
     if (res.statusCode == 200) {
-      final list = jsonDecode(res.body)['inspections'] ?? [];
-      return list.map((e) => StationInspection.fromJson(e)).toList();
+      final raw = jsonDecode(res.body)['inspections'] as List? ?? [];
+      return raw.map<StationInspection>((e) => StationInspection.fromJson(e)).toList();
     }
     throw Exception('Failed to load inspections');
   }

@@ -86,7 +86,7 @@ class AreaCleaningRepository {
       queryParams: queryParams.isNotEmpty ? queryParams : null,
       parser: (data) {
         final list = data['data'] as List<dynamic>? ?? data['areas'] as List<dynamic>? ?? [];
-        return list.map((e) => AreaConfig.fromJson(e as Map<String, dynamic>)).toList();
+        return list.map<AreaConfig>((e) => AreaConfig.fromJson(e as Map<String, dynamic>)).toList();
       },
     );
     return result;
@@ -128,7 +128,7 @@ class AreaCleaningRepository {
       queryParams: {'areaId': areaId},
       parser: (data) {
         final list = data['data'] as List<dynamic>? ?? [];
-        return list.map((e) => AreaWorkerAssignment.fromJson(e as Map<String, dynamic>)).toList();
+        return list.map<AreaWorkerAssignment>((e) => AreaWorkerAssignment.fromJson(e as Map<String, dynamic>)).toList();
       },
     );
     return result;
@@ -181,7 +181,7 @@ class AreaCleaningRepository {
       queryParams: queryParams.isNotEmpty ? queryParams : null,
       parser: (data) {
         final list = data['tasks'] as List<dynamic>? ?? data['data'] as List<dynamic>? ?? [];
-        return list.map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
+        return list.map<CleaningTask>((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
       },
     );
     return result;
@@ -256,7 +256,7 @@ class AreaCleaningRepository {
       queryParams: queryParams,
       parser: (data) {
         final list = data['tasks'] as List<dynamic>? ?? [];
-        return list.map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
+        return list.map<CleaningTask>((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
       },
     );
     return result;
@@ -272,7 +272,7 @@ class AreaCleaningRepository {
       queryParams: queryParams,
       parser: (data) {
         final list = data['tasks'] as List<dynamic>? ?? [];
-        return list.map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
+        return list.map<CleaningTask>((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
       },
     );
     return result;

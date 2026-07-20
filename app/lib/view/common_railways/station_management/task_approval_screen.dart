@@ -92,11 +92,11 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
       }
       final result = await BaseRepository.apiCall(
         method: 'GET',
-        path: '/api/station-garbage/records',
+        path: '/api/garbage/collections',
         queryParams: queryParams,
         parser: (d) => d,
       );
-      final raw = result['data'] as List? ?? [];
+      final raw = result['collections'] as List? ?? [];
       _garbageRecords = List<Map<String, dynamic>>.from(raw);
       _garbageError = null;
     } catch (e) {
@@ -115,11 +115,11 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
       }
       final result = await BaseRepository.apiCall(
         method: 'GET',
-        path: '/api/station-pest-control/all',
+        path: '/api/pest-control/plans',
         queryParams: queryParams,
         parser: (d) => d,
       );
-      final raw = result['data'] as List? ?? [];
+      final raw = result['plans'] as List? ?? [];
       _pestRecords = List<Map<String, dynamic>>.from(raw);
       _pestError = null;
     } catch (e) {
@@ -275,7 +275,7 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
     try {
       await BaseRepository.apiCall(
         method: 'POST',
-        path: '/api/station-garbage/${record['uid'] ?? record['id']}/approve',
+        path: '/api/garbage/collections/${record['uid'] ?? record['id']}/approve',
         parser: (d) => d,
       );
       _loadGarbageRecords();
@@ -324,7 +324,7 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
     try {
       await BaseRepository.apiCall(
         method: 'POST',
-        path: '/api/station-garbage/${record['uid'] ?? record['id']}/reject',
+        path: '/api/garbage/collections/${record['uid'] ?? record['id']}/reject',
         body: {'reason': reason},
         parser: (d) => d,
       );
@@ -377,8 +377,8 @@ class _TaskApprovalScreenState extends State<TaskApprovalScreen>
     if (notes == null) return;
     try {
       await BaseRepository.apiCall(
-        method: 'PUT',
-        path: '/api/station-pest-control/${record['uid'] ?? record['id']}/review',
+        method: 'POST',
+        path: '/api/pest-control/plans/${record['uid'] ?? record['id']}/review',
         body: {'status': decision, 'notes': notes},
         parser: (d) => d,
       );
