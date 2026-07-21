@@ -78,6 +78,13 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         _safety = r.ratings['safety'] ?? 3;
       }
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      if (r == null && user?.fullName != null && _inspectorNameCtrl.text.isEmpty) {
+        _inspectorNameCtrl.text = user!.fullName!;
+      }
+    });
     _loadAreas();
     _loadPlatforms();
   }
@@ -571,6 +578,10 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       'CONTRACTOR_MASTER': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
       'CONTRACTOR_ADMIN': {'VIEW'},
       'CONTRACTOR_SUPERVISOR': {'VIEW'},
+      'RAILWAY_WORKER': {'VIEW', 'SCORE'},
+      'WORKER': {'VIEW', 'SCORE'},
+      'JANITOR': {'VIEW', 'SCORE'},
+      'ATTENDANT': {'VIEW', 'SCORE'},
     };
     return (rolePerms[role] ?? <String>{}).contains(permission);
   }
