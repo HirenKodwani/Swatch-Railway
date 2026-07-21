@@ -134,11 +134,13 @@ class InspectionService {
 
   async getScoreSummary(stationId) {
     if (!stationId) throw new ValidationError('stationId is required');
-    const snapshot = await db.collection('inspection_scores').where('stationId', '==', stationId).orderBy('scoredAt', 'desc').limit(30).get();
+    const snapshot = await db.collection('inspection_scores').where('stationId', '==', stationId).get();
     let total = 0, count = 0;
     const grades = { Excellent: 0, Good: 0, Average: 0, Poor: 0, Dirty: 0 };
-    snapshot.forEach(doc => { const d = doc.data(); total += d.overallScore || 0; count++; if (grades[d.grade] !== undefined) grades[d.grade]++; });
-    return { stationId, averageScore: count > 0 ? Math.round(total / count) : 0, totalInspections: count, gradeDistribution: grades, recentScores: [] };
+    const scores = [];
+    snapshot.forEach(doc => { const d = doc.data(); total += d.overallScore || 0; count++; if (grades[d.grade] !== undefined) grades[d.grade]++; scores.push({ score: d.overallScore, grade: d.grade, date: d.scoredAt }); });
+    scores.sort((a, b) => ((b.date || '') > (a.date || '') ? 1 : -1));
+    return { stationId, averageScore: count > 0 ? Math.round(total / count) : 0, totalInspections: count, gradeDistribution: grades, recentScores: scores.slice(0, 30) };
   }
 
   async addDeficiency(uid, deficiency, user) {

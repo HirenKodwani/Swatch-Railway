@@ -39,6 +39,7 @@ import '../../repositories/station_run_repository.dart';
 import '../../repositories/station_cleaning_repository.dart';
 import '../../model/station_run_model.dart';
 import 'attendance/worker_attendance_screen.dart';
+import 'inspection/inspection_list_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
   final String stationId;
@@ -54,7 +55,7 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
-    return {0, 1, 5, 8, 9, 21, 22, 29};
+    return {0, 1, 5, 8, 9, 15, 21, 22, 29};
   }
 
   @override
@@ -78,7 +79,7 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.schedule, 'Schedule', Colors.teal, () => _openSchedule(context)),                  // 12
       _moduleCard(context, Icons.map, 'Area\nConfig', Colors.lightGreen, () => _openAreaConfig(context)),            // 13
       _moduleCard(context, Icons.assignment_turned_in, 'My\nTasks', Colors.deepOrange, () => _openWorkerTasks(context)), // 14
-      _moduleCard(context, Icons.rate_review, 'Super.\nReview', Colors.purple, () => _openSupervisorReview(context)), // 15
+      _moduleCard(context, Icons.search, 'Inspection', Colors.deepPurple, () => _openInspection(context)), // 15
       _moduleCard(context, Icons.dashboard_customize, 'Hier.\nDashboard', Colors.indigo.shade400, () => _openHierDashboard(context)), // 16
       _moduleCard(context, Icons.layers, 'Zones', Colors.teal.shade700, () => _openZones(context)),                 // 17
       _moduleCard(context, Icons.business, 'Contractors', Colors.brown, () => _openContractors(context)),           // 18
@@ -355,6 +356,10 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openSupervisorReview(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorReviewScreen(stationId: stationId)));
+  }
+
+  void _openInspection(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => InspectionListScreen(stationId: stationId, stationName: stationName)));
   }
 
   void _openHierDashboard(BuildContext context) {
