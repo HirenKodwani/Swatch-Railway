@@ -160,24 +160,26 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       if (visible.contains(i)) cards.add(allCards[i]);
     }
 
+    final titleWidget = _loadingStations
+        ? Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+        : _canSwitchStation(role)
+            ? DropdownButton<String>(
+                value: _availableStations.any((s) => s.uid == _selectedStationId) ? _selectedStationId : null,
+                dropdownColor: kRailwayBlue,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                underline: const SizedBox(),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                items: _availableStations.map((s) => DropdownMenuItem(
+                  value: s.uid,
+                  child: Text(s.stationName, style: const TextStyle(color: Colors.white)),
+                )).toList(),
+                onChanged: _onStationChanged,
+              )
+            : Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold));
+
     return Scaffold(
       appBar: AppBar(
-        title: _loadingStations
-            ? Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-            : _canSwitchStation(role)
-                ? DropdownButton<String>(
-                    value: _availableStations.any((s) => s.uid == _selectedStationId) ? _selectedStationId : null,
-                    dropdownColor: kRailwayBlue,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                    underline: const SizedBox(),
-                    icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                    items: _availableStations.map((s) => DropdownMenuItem(
-                      value: s.uid,
-                      child: Text(s.stationName, style: const TextStyle(color: Colors.white)),
-                    )).toList(),
-                    onChanged: _onStationChanged,
-                  )
-                : Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+        title: titleWidget,
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
