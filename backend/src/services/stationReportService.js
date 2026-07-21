@@ -109,23 +109,16 @@ class StationReportService {
 
   async listReports(query = {}) {
     const { stationId, reportType, month, year, limit = 50 } = query;
-    try {
-      let q = db.collection('station_reports').orderBy('createdAt', 'desc');
-      if (stationId) q = q.where('stationId', '==', stationId);
-      if (reportType) q = q.where('reportType', '==', reportType);
-      if (month) q = q.where('month', '==', parseInt(month));
-      if (year) q = q.where('year', '==', parseInt(year));
-      const snapshot = await q.limit(parseInt(limit)).get();
-      const reports = []; snapshot.forEach(doc => reports.push(doc.data()));
-      return { count: reports.length, reports };
-    } catch (e) {
-      const code = e.code;
-      if (code === 9 || (typeof code === 'string' && ['failed_precondition', 'FAILED_PRECONDITION'].includes(code)) || (e.message && e.message.includes('FAILED_PRECONDITION'))) {
-        logger.warn('listReports: Firestore index missing, returning empty');
-        return { count: 0, reports: [] };
-      }
-      throw e;
-    }
+    let q = db.collection('station_reports');
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (reportType) q = q.where('reportType', '==', reportType);
+    if (month) q = q.where('month', '==', parseInt(month));
+    if (year) q = q.where('year', '==', parseInt(year));
+    const snapshot = await q.get();
+    const reports = []; snapshot.forEach(doc => reports.push(doc.data()));
+    reports.sort((a, b) => ((b.createdAt || '') > (a.createdAt || '') ? 1 : -1));
+    const sliced = reports.slice(0, parseInt(limit));
+    return { count: sliced.length, reports: sliced };
   }
 
   async getStationScoreTrend(stationId, months = 6) {

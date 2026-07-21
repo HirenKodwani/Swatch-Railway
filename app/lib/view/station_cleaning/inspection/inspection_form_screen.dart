@@ -95,7 +95,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       if (_selectedArea != null && _areas.indexWhere((a) => a.name == _selectedArea) == -1) {
         _selectedArea = null;
       }
-      final area = _areaByName(_selectedArea);
+      final area = _areaByName(_selectedArea ?? '');
       if (area?.platformId != null && area!.platformId != _selectedPlatformId) {
         _selectedPlatformId = area.platformId;
       }
@@ -109,7 +109,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 
   List<Platform> get _filteredPlatforms {
-    final area = _areaByName(_selectedArea);
+    final area = _areaByName(_selectedArea ?? '');
     if (area == null || area.platformId == null) return _platforms;
     return _platforms.where((p) => p.uid == area.platformId).toList();
   }
@@ -629,7 +629,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                           onChanged: isEdit ? null : (v) {
                             setState(() {
                               _selectedArea = v;
-                              final area = _areaByName(v);
+                              final area = _areaByName(v ?? '');
                               _selectedPlatformId = area?.platformId;
                             });
                           },
