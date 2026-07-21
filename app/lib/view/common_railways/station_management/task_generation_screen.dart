@@ -336,9 +336,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
 
       // Trigger task generation via repository
       final areaIds = platformAssignments.map((pa) => pa.areaId).whereType<String>().toSet().toList();
+      final workerIds = platformAssignments.map((pa) => pa.janitorId).whereType<String>().toSet().toList();
       await AreaCleaningRepository.generateTasks(
         areaIds: areaIds,
         date: todayStr,
+        workerIds: workerIds,
       );
 
       if (mounted) {
