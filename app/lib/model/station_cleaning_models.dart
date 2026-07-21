@@ -951,6 +951,87 @@ class WorkforceDeployment {
   );
 }
 
+class PettyIssue {
+  final String uid;
+  final String stationId;
+  final String stationName;
+  final String category;
+  final String description;
+  final String? areaId;
+  final String? platformId;
+  final String severity;
+  final String status;
+  final String? photo;
+  final double? gpsLatitude;
+  final double? gpsLongitude;
+  final String remarks;
+  final String? assignedTo;
+  final String? assignedToName;
+  final String reportedBy;
+  final String reportedByName;
+  final String reportedAt;
+  final String? resolvedAt;
+  final String? resolvedBy;
+  final String? resolvedByName;
+  final List<Map<String, dynamic>> closureHistory;
+  final String createdAt;
+  final String updatedAt;
+
+  PettyIssue({
+    required this.uid,
+    required this.stationId,
+    required this.stationName,
+    required this.category,
+    required this.description,
+    this.areaId,
+    this.platformId,
+    this.severity = 'medium',
+    this.status = 'REPORTED',
+    this.photo,
+    this.gpsLatitude,
+    this.gpsLongitude,
+    this.remarks = '',
+    this.assignedTo,
+    this.assignedToName,
+    required this.reportedBy,
+    required this.reportedByName,
+    required this.reportedAt,
+    this.resolvedAt,
+    this.resolvedBy,
+    this.resolvedByName,
+    this.closureHistory = const [],
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory PettyIssue.fromJson(Map<String, dynamic> json) => PettyIssue(
+    uid: json['uid'] ?? '',
+    stationId: json['stationId'] ?? '',
+    stationName: json['stationName'] ?? '',
+    category: json['category'] ?? '',
+    description: json['description'] ?? '',
+    areaId: json['areaId'],
+    platformId: json['platformId'],
+    severity: json['severity'] ?? 'medium',
+    status: json['status'] ?? 'REPORTED',
+    photo: json['photo'],
+    gpsLatitude: (json['gpsLatitude'] as num?)?.toDouble(),
+    gpsLongitude: (json['gpsLongitude'] as num?)?.toDouble(),
+    remarks: json['remarks'] ?? '',
+    assignedTo: json['assignedTo'],
+    assignedToName: json['assignedToName'],
+    reportedBy: json['reportedBy'] ?? '',
+    reportedByName: json['reportedByName'] ?? '',
+    reportedAt: json['reportedAt'] ?? '',
+    resolvedAt: json['resolvedAt'],
+    resolvedBy: json['resolvedBy'],
+    resolvedByName: json['resolvedByName'],
+    closureHistory: (json['closureHistory'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+    createdAt: json['createdAt'] ?? '',
+    updatedAt: json['updatedAt'] ?? '',
+  );
+}
+
 String _toCamelCase(String text) {
   final parts = text.split('_');
   if (parts.isEmpty) return '';

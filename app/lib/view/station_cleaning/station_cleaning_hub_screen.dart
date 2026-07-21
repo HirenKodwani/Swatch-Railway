@@ -40,6 +40,7 @@ import '../../repositories/station_cleaning_repository.dart';
 import '../../model/station_run_model.dart';
 import 'attendance/worker_attendance_screen.dart';
 import 'inspection/inspection_list_screen.dart';
+import 'petty_issue/petty_issue_list_screen.dart';
 
 class StationCleaningHubScreen extends StatelessWidget {
   final String stationId;
@@ -55,7 +56,7 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
-    return {0, 1, 5, 8, 9, 15, 21, 22, 29};
+    return {0, 1, 5, 8, 9, 15, 21, 22, 29, 30};
   }
 
   @override
@@ -94,6 +95,7 @@ class StationCleaningHubScreen extends StatelessWidget {
       _moduleCard(context, Icons.repeat, 'Frequency', Colors.cyan.shade700, () => _openFrequency(context)),         // 27
       _moduleCard(context, Icons.warning_amber_rounded, 'Att.\nExceptions', Colors.deepOrange, () => _openExceptionAction(context)), // 28
       _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 29
+      _moduleCard(context, Icons.report_problem_outlined, 'Petty\nIssues', kWarningOrange, () => _openPettyIssues(context)), // 30
     ];
 
     final cards = <Widget>[];
@@ -428,5 +430,9 @@ class StationCleaningHubScreen extends StatelessWidget {
 
   void _openPlatforms(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformListScreen(stationId: stationId, stationName: stationName)));
+  }
+
+  void _openPettyIssues(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PettyIssueListScreen(stationId: stationId, stationName: stationName)));
   }
 }

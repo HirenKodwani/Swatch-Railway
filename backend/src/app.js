@@ -58,6 +58,7 @@ import zoneRoutes from './routes/zone.js';
 import taskTypeRoutes from './routes/taskType.js';
 import geofenceRoutes from './routes/geofence.js';
 import idleAlertRoutes from './routes/idleAlert.js';
+import pettyIssueRoutes from './routes/pettyIssue.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { metricsMiddleware, metricsHandler } from './middleware/metrics.js';
@@ -147,6 +148,7 @@ app.use(zoneRoutes);                                // /api/zones/*
 app.use(taskTypeRoutes);                            // /api/task-types/*
 app.use(geofenceRoutes);                            // /api/geofences/* /api/geofence-alerts/*
 app.use(idleAlertRoutes);                           // /api/idle-alerts/*
+app.use(pettyIssueRoutes);                          // /api/petty-issues/*
 
 // Relative-path routes mounted with base prefixes
 app.use('/api/passenger', passengerRoutes);       // /api/passenger/*
