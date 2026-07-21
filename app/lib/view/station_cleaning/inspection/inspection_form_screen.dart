@@ -95,8 +95,23 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       if (_selectedArea != null && _areas.indexWhere((a) => a.name == _selectedArea) == -1) {
         _selectedArea = null;
       }
+      final area = _areaByName(_selectedArea);
+      if (area?.platformId != null && area!.platformId != _selectedPlatformId) {
+        _selectedPlatformId = area.platformId;
+      }
     } catch (_) {}
     if (mounted) setState(() => _areasLoading = false);
+  }
+
+  StationArea? _areaByName(String name) {
+    final idx = _areas.indexWhere((a) => a.name == name);
+    return idx >= 0 ? _areas[idx] : null;
+  }
+
+  List<Platform> get _filteredPlatforms {
+    final area = _areaByName(_selectedArea);
+    if (area == null || area.platformId == null) return _platforms;
+    return _platforms.where((p) => p.uid == area.platformId).toList();
   }
 
   Future<void> _loadPlatforms() async {
@@ -611,7 +626,13 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                             const DropdownMenuItem<String>(value: null, child: Text('Select Area')),
                             ..._areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))),
                           ],
-                          onChanged: isEdit ? null : (v) => setState(() => _selectedArea = v),
+                          onChanged: isEdit ? null : (v) {
+                            setState(() {
+                              _selectedArea = v;
+                              final area = _areaByName(v);
+                              _selectedPlatformId = area?.platformId;
+                            });
+                          },
                           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                         ),
                       const SizedBox(height: 12),
@@ -619,11 +640,11 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                       else
                         DropdownButtonFormField<String>(
-                          value: _selectedPlatformId == null || _platforms.where((p) => p.uid == _selectedPlatformId).length == 1 ? _selectedPlatformId : null,
+                          value: _selectedPlatformId == null || _filteredPlatforms.where((p) => p.uid == _selectedPlatformId).length == 1 ? _selectedPlatformId : null,
                           decoration: const InputDecoration(labelText: 'Platform (optional)', border: OutlineInputBorder()),
                           items: [
                             const DropdownMenuItem<String>(value: null, child: Text('None')),
-                            ..._platforms.map<DropdownMenuItem<String>>((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
+                            ..._filteredPlatforms.map<DropdownMenuItem<String>>((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
                           ],
                           onChanged: isEdit ? null : (v) => setState(() => _selectedPlatformId = v),
                         ),
