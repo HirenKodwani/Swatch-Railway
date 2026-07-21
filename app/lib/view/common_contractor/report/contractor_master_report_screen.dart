@@ -1948,7 +1948,7 @@ class _ContractorReportScreenState extends State<ContractorReportScreen>
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: value,
+              value: value != null && items.contains(value) ? value : null,
               items: items
                   .map((uid) {
                     String displayText = uid;

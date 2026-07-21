@@ -980,7 +980,7 @@ class _RaiseComplaintScreenState extends State<RaiseComplaintScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value,
+          value: value != null && items.contains(value) ? value : null,
           hint: Text(hint),
           items: items
               .map((item) =>

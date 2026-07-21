@@ -385,9 +385,12 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
             children: [
               if (_areas.isNotEmpty)
                 DropdownButtonFormField<String>(
-                  value: _selectedDefArea,
+                  value: _selectedDefArea != null && _areas.any((a) => a.name == _selectedDefArea) ? _selectedDefArea : null,
                   decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder()),
-                  items: _areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))).toList(),
+                  items: [
+                    const DropdownMenuItem<String>(value: null, child: Text('Select Area')),
+                    ..._areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))),
+                  ],
                   onChanged: (v) => _selectedDefArea = v,
                 )
               else

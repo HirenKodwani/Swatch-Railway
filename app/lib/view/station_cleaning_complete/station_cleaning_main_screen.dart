@@ -26,7 +26,13 @@ class _StationCleaningMainScreenState extends State<StationCleaningMainScreen> {
   Future<void> _loadStations() async {
     setState(() => _stationsLoading = true);
     try {
-      _stations = await ApiService.getStations();
+      final rawStations = await ApiService.getStations();
+      // Deduplicate by uid to prevent Flutter dropdown assertion error
+      final seenIds = <String>{};
+      _stations = rawStations.where((s) {
+        if (s.uid == null || s.uid!.isEmpty) return false;
+        return seenIds.add(s.uid!);
+      }).toList();
     } catch (_) {}
     if (mounted) setState(() => _stationsLoading = false);
   }
@@ -76,20 +82,20 @@ class _StationCleaningMainScreenState extends State<StationCleaningMainScreen> {
                   _stationsLoading
                       ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                       : DropdownButtonFormField<String>(
-                          value: _selectedStationId,
+                          value: (_selectedStationId != null && _stations.any((s) => s.uid == _selectedStationId)) ? _selectedStationId : null,
                           decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Choose a station...'),
                           items: _stations.map<DropdownMenuItem<String>>((s) => DropdownMenuItem(
                             value: s.uid,
-                            child: Text(s.stationName ?? s.uid ?? ''),
+                            child: Text(s.stationName),
                           )).toList(),
                           onChanged: (v) {
                             setState(() {
                               _selectedStationId = v;
-                              _selectedStationName = _stations.firstWhere((s) => s.uid == v, orElse: () => Station(stationCode: v ?? '', stationName: v ?? '', zone: '', division: '')).stationName ?? '';
+                              _selectedStationName = _stations.firstWhere((s) => s.uid == v, orElse: () => Station(stationCode: v ?? '', stationName: v ?? '', zone: '', division: '')).stationName;
                             });
                             if (v != null && v.isNotEmpty) {
                               Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => StationCleaningHubScreen(stationId: v!, stationName: _selectedStationName),
+                                builder: (_) => StationCleaningHubScreen(stationId: v, stationName: _selectedStationName),
                               ));
                             }
                           },

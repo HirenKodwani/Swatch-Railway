@@ -3710,7 +3710,13 @@ class ApiService {
       final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return (data['stations'] as List).map((s) => Station.fromJson(s)).toList();
+        final all = (data['stations'] as List).map((s) => Station.fromJson(s)).toList();
+        // Deduplicate by uid to prevent Flutter dropdown assertion errors
+        final seenIds = <String>{};
+        return all.where((s) {
+          if (s.uid == null || s.uid!.isEmpty) return false;
+          return seenIds.add(s.uid!);
+        }).toList();
       }
       throw Exception('Failed to fetch stations');
     } catch (e) {
@@ -3742,7 +3748,13 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return (data['areas'] as List).map((a) => StationArea.fromJson(a)).toList();
+        final all = (data['areas'] as List).map((a) => StationArea.fromJson(a)).toList();
+        // Deduplicate by uid to prevent Flutter dropdown assertion errors
+        final seenIds = <String>{};
+        return all.where((a) {
+          if (a.uid == null || a.uid!.isEmpty) return false;
+          return seenIds.add(a.uid!);
+        }).toList();
       }
       throw Exception('Failed to fetch station areas');
     } catch (e) {

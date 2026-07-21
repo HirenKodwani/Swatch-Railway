@@ -163,7 +163,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
 
               DropdownButtonFormField<String>(
-                value: _selectedRole,
+                value: (_selectedRole != null && _getRolesForUserType(_selectedUserType).contains(_selectedRole)) ? _selectedRole : null,
                 decoration: const InputDecoration(
                   labelText: 'Role *',
                   border: OutlineInputBorder(),
@@ -209,11 +209,17 @@ class _UserEditScreenState extends State<UserEditScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text('Error loading stations', style: TextStyle(color: Colors.red)),
                     );
-                    final stations = snap.data ?? [];
+                    final rawStations = snap.data ?? [];
+                    // Deduplicate by uid to prevent Flutter dropdown assertion error
+                    final seenStationIds = <String>{};
+                    final stations = rawStations.where((s) {
+                      if (s.uid == null || s.uid!.isEmpty) return false;
+                      return seenStationIds.add(s.uid!);
+                    }).toList();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: DropdownButtonFormField<String>(
-                        value: _selectedStationId,
+                        value: (_selectedStationId != null && stations.any((s) => s.uid == _selectedStationId)) ? _selectedStationId : null,
                         decoration: InputDecoration(
                           labelText: _selectedRole?.toLowerCase().contains('worker') == true
                               ? 'Station (Required for Station Worker)'
@@ -290,11 +296,17 @@ class _UserEditScreenState extends State<UserEditScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text('Error loading areas', style: TextStyle(color: Colors.red)),
                     );
-                    final areas = snap.data ?? [];
+                    final rawAreas = snap.data ?? [];
+                    // Deduplicate by uid to prevent Flutter dropdown assertion error
+                    final seenAreaIds = <String>{};
+                    final areas = rawAreas.where((a) {
+                      if (a.uid == null || a.uid!.isEmpty) return false;
+                      return seenAreaIds.add(a.uid!);
+                    }).toList();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: DropdownButtonFormField<String>(
-                        value: _selectedAreaId,
+                        value: (_selectedAreaId != null && areas.any((a) => a.uid == _selectedAreaId)) ? _selectedAreaId : null,
                         decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
                         items: areas.map((a) => DropdownMenuItem(value: a.uid, child: Text(a.name))).toList(),
                         validator: (v) => v == null ? 'Select area' : null,
@@ -319,11 +331,18 @@ class _UserEditScreenState extends State<UserEditScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text('Error loading platforms', style: TextStyle(color: Colors.red)),
                     );
-                    final platforms = snap.data ?? [];
+                    final rawPlatforms = snap.data ?? [];
+                    // Deduplicate by uid to prevent Flutter dropdown assertion error
+                    final seenPlatformIds = <String>{};
+                    final platforms = rawPlatforms.where((p) {
+                      final id = p.uid ?? p.platformNumber;
+                      if (id == null || id.isEmpty) return false;
+                      return seenPlatformIds.add(id);
+                    }).toList();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: DropdownButtonFormField<String>(
-                        value: _selectedPlatformId,
+                        value: (_selectedPlatformId != null && platforms.any((p) => (p.uid ?? p.platformNumber) == _selectedPlatformId)) ? _selectedPlatformId : null,
                         decoration: const InputDecoration(labelText: 'Platform *', border: OutlineInputBorder()),
                         items: platforms.map((p) => DropdownMenuItem(value: p.uid ?? p.platformNumber, child: Text(p.displayName))).toList(),
                         validator: (v) => v == null ? 'Select platform' : null,
@@ -402,7 +421,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _zone,
+                      value: (_zone != null && zones.contains(_zone)) ? _zone : null,
                       decoration: InputDecoration(
                         labelText: 'Zone *',
                         border: const OutlineInputBorder(),
@@ -437,7 +456,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _division,
+                      value: (_division != null && divisions.contains(_division)) ? _division : null,
                       decoration: InputDecoration(
                         labelText: 'Division *',
                         border: const OutlineInputBorder(),
@@ -467,7 +486,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _depot,
+                      value: (_depot != null && depots.contains(_depot)) ? _depot : null,
                       decoration: const InputDecoration(
                         labelText: 'Depot',
                         border: OutlineInputBorder(),

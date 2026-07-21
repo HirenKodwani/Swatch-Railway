@@ -613,7 +613,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: value,
+            value: value != null && items.contains(value) ? value : null,
             decoration: InputDecoration(
               hintText: hint,
               filled: !enabled,

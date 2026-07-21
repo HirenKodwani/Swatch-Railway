@@ -245,7 +245,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
 
               DropdownButtonFormField<String>(
-                value: _selectedRole,
+                value: (_selectedRole != null && _getRolesForUserType(_selectedUserType).contains(_selectedRole)) ? _selectedRole : null,
                 decoration: const InputDecoration(
                   labelText: 'Role *',
                   border: OutlineInputBorder(),
@@ -341,11 +341,17 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text('Error loading stations', style: TextStyle(color: Colors.red)),
                     );
-                    final stations = snap.data ?? [];
+                    final rawStations = snap.data ?? [];
+                    // Deduplicate by uid to prevent Flutter dropdown assertion error
+                    final seenStationIds = <String>{};
+                    final stations = rawStations.where((s) {
+                      if (s.uid == null || s.uid!.isEmpty) return false;
+                      return seenStationIds.add(s.uid!);
+                    }).toList();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: DropdownButtonFormField<String>(
-                        value: _selectedStationId,
+                        value: (_selectedStationId != null && stations.any((s) => s.uid == _selectedStationId)) ? _selectedStationId : null,
                         decoration: InputDecoration(
                           labelText: _selectedRole?.toLowerCase().contains('worker') == true
                               ? 'Station (Required for Station Worker)'
@@ -422,13 +428,20 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text('Error loading platforms', style: TextStyle(color: Colors.red)),
                     );
-                    final platforms = snap.data ?? [];
+                    final rawPlatforms = snap.data ?? [];
+                    // Deduplicate by uid to prevent Flutter dropdown assertion error
+                    final seenPlatformIds = <String>{};
+                    final platforms = rawPlatforms.where((p) {
+                      final id = p.uid ?? p.platformNumber;
+                      if (id == null || id.isEmpty) return false;
+                      return seenPlatformIds.add(id);
+                    }).toList();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: DropdownButtonFormField<String>(
-                        value: _selectedPlatformId,
+                        value: (_selectedPlatformId != null && platforms.any((p) => (p.uid ?? p.platformNumber) == _selectedPlatformId)) ? _selectedPlatformId : null,
                         decoration: const InputDecoration(labelText: 'Platform *', border: OutlineInputBorder()),
-                        items: platforms.map((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))).toList(),
+                        items: platforms.map((p) => DropdownMenuItem(value: p.uid ?? p.platformNumber, child: Text(p.displayName))).toList(),
                         validator: (v) => v == null ? 'Select platform' : null,
                         onChanged: (v) => setState(() {
                           _selectedPlatformId = v;
@@ -594,7 +607,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _zone,
+                      value: (_zone != null && zones.contains(_zone)) ? _zone : null,
                       decoration: InputDecoration(
                         labelText: 'Zone *',
                         border: const OutlineInputBorder(),
@@ -628,7 +641,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _division,
+                      value: (_division != null && divisions.contains(_division)) ? _division : null,
                       decoration: InputDecoration(
                         labelText: 'Division *',
                         border: const OutlineInputBorder(),
@@ -657,7 +670,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _depot,
+                      value: (_depot != null && depots.contains(_depot)) ? _depot : null,
                       decoration: const InputDecoration(
                         labelText: 'Depot',
                         border: OutlineInputBorder(),
@@ -676,7 +689,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _workerType,
+                      value: (_workerType != null && ['Janitor', 'Attendant'].contains(_workerType)) ? _workerType : null,
                       decoration: const InputDecoration(
                         labelText: 'Worker Type *',
                         border: OutlineInputBorder(),
@@ -698,7 +711,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                   children: [
                     if (!_isMultiTrainExport())
                       DropdownButtonFormField<String>(
-                        value: _trainId,
+                        value: (_trainId != null && allTrains.any((t) => t.uid == _trainId)) ? _trainId : null,
                         decoration: const InputDecoration(
                           labelText: 'Assigned Train *',
                           border: OutlineInputBorder(),

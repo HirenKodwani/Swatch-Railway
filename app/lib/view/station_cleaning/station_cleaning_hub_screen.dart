@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
+import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
+import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/view/common_railways/station_management/station_feedback_list_screen.dart';
 import 'dashboard/station_dashboard_kpi_screen.dart';
 import 'dashboard/supervisor_dashboard_screen.dart';
@@ -42,7 +44,7 @@ import 'attendance/worker_attendance_screen.dart';
 import 'inspection/inspection_list_screen.dart';
 import 'petty_issue/petty_issue_list_screen.dart';
 
-class StationCleaningHubScreen extends StatelessWidget {
+class StationCleaningHubScreen extends StatefulWidget {
   final String stationId;
   final String stationName;
   final String? contractId;
@@ -53,6 +55,55 @@ class StationCleaningHubScreen extends StatelessWidget {
     required this.stationName,
     this.contractId,
   });
+
+  @override
+  State<StationCleaningHubScreen> createState() => _StationCleaningHubScreenState();
+}
+
+class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
+  String _selectedStationId = '';
+  String _selectedStationName = '';
+  List<Station> _availableStations = [];
+  bool _loadingStations = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedStationId = widget.stationId;
+    _selectedStationName = widget.stationName;
+    _loadStations();
+  }
+
+  Future<void> _loadStations() async {
+    setState(() => _loadingStations = true);
+    try {
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      final role = user?.role ?? '';
+      final all = await ApiService.getStations();
+      List<Station> filtered = all;
+      if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
+        filtered = all.where((s) => s.uid == user?.stationId).toList();
+        if (filtered.isEmpty && user?.stationId != null) {
+          filtered = all.where((s) => s.uid == user?.stationId).toList();
+        }
+      }
+      setState(() {
+        _availableStations = filtered;
+        _loadingStations = false;
+      });
+    } catch (e) {
+      setState(() => _loadingStations = false);
+    }
+  }
+
+  void _onStationChanged(String? uid) {
+    if (uid == null) return;
+    final station = _availableStations.firstWhere((s) => s.uid == uid, orElse: () => Station(stationCode: '', stationName: '', zone: '', division: ''));
+    setState(() {
+      _selectedStationId = uid;
+      _selectedStationName = station.stationName;
+    });
+  }
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
@@ -105,7 +156,22 @@ class StationCleaningHubScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(stationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: _loadingStations
+            ? Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+            : (_availableStations.length > 1
+                ? DropdownButton<String>(
+                    value: _availableStations.any((s) => s.uid == _selectedStationId) ? _selectedStationId : null,
+                    dropdownColor: kRailwayBlue,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    underline: const SizedBox(),
+                    icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                    items: _availableStations.map((s) => DropdownMenuItem(
+                      value: s.uid,
+                      child: Text(s.stationName, style: const TextStyle(color: Colors.white)),
+                    )).toList(),
+                    onChanged: _onStationChanged,
+                  )
+                : Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -146,19 +212,19 @@ class StationCleaningHubScreen extends StatelessWidget {
     final role = user?.role ?? '';
     final r = role.toUpperCase().replaceAll(' ', '_');
     if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => StationMasterDashboardScreen(stationId: stationId, stationName: stationName)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => StationMasterDashboardScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
     } else if (r == 'PLATFORM_MASTER') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformMasterDashboardScreen(
-        stationId: stationId, stationName: stationName,
+        stationId: _selectedStationId, stationName: _selectedStationName,
         platformId: user?.platformId ?? '',
       )));
     } else if (r == 'RAILWAY_SUPERVISOR' || r == 'CONTRACTOR_SUPERVISOR') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorDashboardScreen(
-        stationId: stationId, stationName: stationName,
+        stationId: _selectedStationId, stationName: _selectedStationName,
         platformId: user?.platformId,
       )));
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => StationDashboardKpiScreen(stationId: stationId, stationName: stationName)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => StationDashboardKpiScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
     }
   }
 
@@ -169,7 +235,7 @@ class StationCleaningHubScreen extends StatelessWidget {
     if (isWorker) {
       _openWorkerAttendance(context, user!.uid, user.fullName ?? '');
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: stationId, stationName: stationName)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
     }
   }
 
@@ -196,11 +262,11 @@ class StationCleaningHubScreen extends StatelessWidget {
             } catch (_) {
               todayRun = runs.isNotEmpty ? runs.first : null;
             }
-            resolvedRunId = todayRun?.runInstanceId ?? '${stationId}_$today';
-            resolvedStationId = todayRun?.stationId ?? stationId;
+            resolvedRunId = todayRun?.runInstanceId ?? '${_selectedStationId}_$today';
+            resolvedStationId = todayRun?.stationId ?? _selectedStationId;
           } else {
-            resolvedRunId = '${stationId}_$today';
-            resolvedStationId = stationId;
+            resolvedRunId = '${_selectedStationId}_$today';
+            resolvedStationId = _selectedStationId;
           }
           return FutureBuilder<Map<String, dynamic>>(
             future: StationCleaningRepository.getStationAttendanceStatus(workerId: workerId),
@@ -258,39 +324,39 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openActivities(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => DailyActivityListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DailyActivityListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openPestControl(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => PestControlListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PestControlListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openComplaint(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openMachine(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => MachineTrackingScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => MachineTrackingScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openGarbage(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => GarbageManagementScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => GarbageManagementScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openBilling(BuildContext context) {
-    if (contractId != null) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => BillingSupportPackScreen(contractId: contractId!, stationId: stationId, stationName: stationName)));
+    if (widget.contractId != null) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => BillingSupportPackScreen(contractId: widget.contractId!, stationId: _selectedStationId, stationName: _selectedStationName)));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No contract linked to this station')));
     }
   }
 
   void _openReports(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => ReportListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ReportListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openAuditReports(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AuditReportListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AuditReportListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openFeedback(BuildContext context) {
@@ -308,7 +374,7 @@ class StationCleaningHubScreen extends StatelessWidget {
               subtitle: const Text('Print & display for passenger feedback'),
               onTap: () {
                 Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => FeedbackQrScreen(stationId: stationId, stationName: stationName)));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => FeedbackQrScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
               },
             ),
             ListTile(
@@ -317,7 +383,7 @@ class StationCleaningHubScreen extends StatelessWidget {
               subtitle: const Text('Browse submitted passenger feedback'),
               onTap: () {
                 Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => StationFeedbackListScreen(stationId: stationId)));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => StationFeedbackListScreen(stationId: _selectedStationId)));
               },
             ),
             const SizedBox(height: 8),
@@ -328,11 +394,11 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openCleaningForm(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StationCleaningFormListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationCleaningFormListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openSchedule(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StationScheduleScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationScheduleScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openAreaConfig(BuildContext context) {
@@ -340,7 +406,7 @@ class StationCleaningHubScreen extends StatelessWidget {
     final role = user?.role ?? '';
     final r = role.toUpperCase().replaceAll(' ', '_');
     final platformId = r == 'PLATFORM_MASTER' ? user?.platformId : null;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaConfigScreen(stationId: stationId, stationName: stationName, platformId: platformId)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaConfigScreen(stationId: _selectedStationId, stationName: _selectedStationName, platformId: platformId)));
   }
 
   void _openWorkerTasks(BuildContext context) {
@@ -357,11 +423,11 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openSupervisorReview(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorReviewScreen(stationId: stationId)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorReviewScreen(stationId: _selectedStationId)));
   }
 
   void _openInspection(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => InspectionListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => InspectionListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openHierDashboard(BuildContext context) {
@@ -375,49 +441,49 @@ class StationCleaningHubScreen extends StatelessWidget {
       levelId = user?.platformId;
     } else if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
       level = 'station';
-      levelId = stationId;
+      levelId = _selectedStationId;
     }
     Navigator.push(context, MaterialPageRoute(builder: (_) => HierarchicalDashboardScreen(initialLevel: level, levelId: levelId)));
   }
 
   void _openZones(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StationZonesScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationZonesScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openContractors(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => ContractorMappingScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ContractorMappingScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openQRGenerator(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => QRCodeScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => QRCodeScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openCheckin(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerCheckinScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerCheckinScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openTaskGen(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskGenerationScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskGenerationScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openTaskApproval(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskApprovalScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskApprovalScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openAreaPerformance(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaPerformanceDashboard(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaPerformanceDashboard(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openAreaComparison(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaComparisonScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaComparisonScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openAreaAssignment(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaAssignmentScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaAssignmentScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openWorkforce(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkforceDeploymentScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkforceDeploymentScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openFrequency(BuildContext context) {
@@ -425,14 +491,14 @@ class StationCleaningHubScreen extends StatelessWidget {
   }
 
   void _openExceptionAction(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => StationAttendanceScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openPlatforms(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openPettyIssues(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => PettyIssueListScreen(stationId: stationId, stationName: stationName)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PettyIssueListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 }

@@ -1418,7 +1418,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
               _inputContainer(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedRaterType,
+                    value: _selectedRaterType != null && ['Official', 'TTE', 'PSME', 'Supervisor/Admin'].contains(_selectedRaterType) ? _selectedRaterType : null,
                     isExpanded: true,
                     items: ['Official', 'TTE', 'PSME', 'Supervisor/Admin']
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
@@ -1464,7 +1464,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                   : DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     isExpanded: true,
-                    value: _selectedWorkerId,
+                    value: _selectedWorkerId != null && _workers.any((w) => w.uid == _selectedWorkerId) ? _selectedWorkerId : null,
                     hint: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 12),
                       child: Text('Choose worker'),
@@ -1541,7 +1541,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
               _inputContainer(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedCoach,
+                    value: _selectedCoach != null && _availableCoaches.contains(_selectedCoach) ? _selectedCoach : null,
                     hint: Text(
                       _trainNoController.text.trim().isEmpty
                           ? 'Enter train number first'
@@ -1579,7 +1579,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                       )
                     : DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: _selectedCoach,
+                          value: _selectedCoach != null && _officialCoaches.contains(_selectedCoach) ? _selectedCoach : null,
                           hint: const Text('Choose a coach'),
                           isExpanded: true,
                           items: _officialCoaches
