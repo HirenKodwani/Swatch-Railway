@@ -391,6 +391,21 @@ class TaskManagementService {
       assignedWorker = { uid: workerDoc.id, ...workerDoc.data() };
     }
 
+    const existingTaskKeys = new Set();
+    const chunkSize = 10;
+    for (let i = 0; i < areaIds.length; i += chunkSize) {
+      const chunk = areaIds.slice(i, i + chunkSize);
+      const existingTasksSnap = await db.collection('cleaningTasks')
+        .where('date', '==', targetDate)
+        .where('areaId', 'in', chunk)
+        .select('workerId', 'areaId', 'scheduledTime')
+        .get();
+      existingTasksSnap.forEach(doc => {
+        const d = doc.data();
+        existingTaskKeys.add(`${d.areaId}|${d.workerId}|${d.scheduledTime}`);
+      });
+    }
+
     for (const areaId of areaIds) {
       const [workersSnap, areaSnap] = await Promise.all([
         assignedWorker || assignedWorkers.length > 0 ? null : db.collection('areaWorkerAssignments').where('areaId', '==', areaId).where('isActive', '==', true).limit(200).get(),
@@ -427,6 +442,8 @@ class TaskManagementService {
           for (const zoneInfo of targetZones) {
             const w = assignedWorkers[workerIdx % assignedWorkers.length];
             workerIdx++;
+            const dupKey = `${areaId}|${w.uid}|${scheduledTime}`;
+            if (existingTaskKeys.has(dupKey)) continue;
             const taskRef = db.collection('cleaningTasks').doc();
             const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
             const task = {
@@ -466,6 +483,8 @@ class TaskManagementService {
       } else if (assignedWorker) {
         for (const scheduledTime of frequencyTimes) {
           for (const zoneInfo of targetZones) {
+            const dupKey = `${areaId}|${assignedWorker.uid}|${scheduledTime}`;
+            if (existingTaskKeys.has(dupKey)) continue;
             const taskRef = db.collection('cleaningTasks').doc();
             const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
             const task = {
@@ -507,6 +526,8 @@ class TaskManagementService {
           const assignment = workerDoc.data();
           for (const scheduledTime of frequencyTimes) {
             for (const zoneInfo of targetZones) {
+              const dupKey = `${areaId}|${assignment.workerId}|${scheduledTime}`;
+              if (existingTaskKeys.has(dupKey)) continue;
               const taskRef = db.collection('cleaningTasks').doc();
               const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
               const task = {
