@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/repositories/station_report_repository.dart';
 import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/services/pdf_report_service.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ReportListScreen extends StatefulWidget {
@@ -277,6 +280,24 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
     }
   }
 
+  Future<void> _downloadReport(StationReport report) async {
+    try {
+      final pdfBytes = await PDFReportService.generateStationReportPdf(report);
+      final slug = report.reportType.replaceAll('_', '-');
+      final dateStr = report.date.replaceAll('-', '');
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'StationReport_${report.stationId}_${slug}_$dateStr.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -381,11 +402,21 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                               title: Text(report.reportType.replaceAll('_', ' ').toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               subtitle: Text('${report.date} | ${report.generatedAt.toString().split('.').first}\n$previewKeys'),
                               isThreeLine: true,
-                              trailing: IconButton(
-                                icon: const Icon(Icons.email, color: kRailwayBlue),
-                                onPressed: () => _sendEmail(report),
-                                tooltip: 'Send Email',
-                              ),
+                              trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.download, color: kSuccessGreen),
+                                  onPressed: () => _downloadReport(report),
+                                  tooltip: 'Download PDF',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.email, color: kRailwayBlue),
+                                  onPressed: () => _sendEmail(report),
+                                  tooltip: 'Send Email',
+                                ),
+                              ],
+                            ),
                             ),
                           );
                         },
