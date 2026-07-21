@@ -1334,6 +1334,195 @@ class PDFReportService {
     return pdf.save();
   }
 
+  static Future<Uint8List> generateStationBillingPdf(StationBillingPack pack) async {
+    final pdf = pw.Document();
+    final railway = await _getRailwayLogo();
+    final mirtha = await _getMirthaLogo();
+    final timestamp = DateFormat('dd-MMM-yyyy | hh:mm a').format(DateTime.now());
+
+    final a = pack.attendanceSummary;
+    final act = pack.activitySummary;
+    final sc = pack.scorecardSummary;
+    final insp = pack.inspectionSummary;
+    final fb = pack.feedbackSummary;
+    final pi = pack.pettyIssueSummary;
+    final ev = pack.evidenceSummary;
+    final mach = pack.machineSummary;
+    final pen = pack.penalties;
+    final deductions = (pen['deductions'] as List?) ?? [];
+
+    pw.Widget _section(pw.Context ctx, String title, List<List<String>> rows, {PdfColor? headerColor}) {
+      final hasData = rows.isNotEmpty && rows.any((r) => r.any((c) => c != 'N/A' && c != '0'));
+      if (!hasData) return pw.SizedBox.shrink();
+      final colCount = rows.first.length;
+      final colWidths = <int, pw.TableColumnWidth>{};
+      for (var i = 0; i < colCount; i++) {
+        colWidths[i] = pw.FlexColumnWidth(1);
+      }
+      return pw.Column(children: [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          margin: const pw.EdgeInsets.only(top: 12, bottom: 4),
+          decoration: pw.BoxDecoration(color: headerColor ?? primaryColor, borderRadius: pw.BorderRadius.circular(4)),
+          child: pw.Text(title, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 11)),
+        ),
+        pw.TableHelper.fromTextArray(
+          context: ctx,
+          headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+          headerDecoration: pw.BoxDecoration(color: PdfColors.grey700),
+          cellStyle: pw.TextStyle(fontSize: 8),
+          cellAlignment: pw.Alignment.center,
+          data: rows,
+          columnWidths: colWidths,
+        ),
+      ]);
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(25),
+        build: (pw.Context ctx) {
+          return [
+            _buildHeader(railway, mirtha, 'Billing Support Pack', '${pack.month}/${pack.year}'),
+            pw.Divider(thickness: 1, color: borderColor),
+            _buildInfoRow('Contractor', pack.contractorName, 'Contract', pack.contractNumber),
+            _buildInfoRow('Station', pack.stationName, 'Period', '${pack.month}/${pack.year}'),
+            _buildInfoRow('Status', pack.status, 'Generated', timestamp),
+            pw.SizedBox(height: 8),
+
+            _section(ctx, 'Attendance Summary', [
+              ['Days Recorded', 'Total Entries', 'Present', 'Absent', 'Avg/Day', 'Attendance %'],
+              [
+                '${a['totalDaysRecorded'] ?? 0}',
+                '${a['totalAttendanceEntries'] ?? 0}',
+                '${a['totalPresent'] ?? 0}',
+                '${a['totalAbsent'] ?? 0}',
+                '${a['averageDailyManpower'] ?? 0}',
+                '${a['attendancePercentage'] ?? 0}%',
+              ],
+            ]),
+
+            _section(ctx, 'Task Completion', [
+              ['Total', 'Approved', 'Completed', 'In Progress', 'Pending', 'Rejected', 'Completion %'],
+              [
+                '${act['total'] ?? 0}',
+                '${act['APPROVED'] ?? 0}',
+                '${act['COMPLETED'] ?? 0}',
+                '${act['IN_PROGRESS'] ?? 0}',
+                '${act['PENDING'] ?? 0}',
+                '${act['REJECTED'] ?? 0}',
+                '${act['completionRate'] ?? 0}%',
+              ],
+            ]),
+
+            _section(ctx, 'Scorecard Summary', [
+              ['Days Scored', 'Avg Score', 'Grade A', 'Grade B', 'Grade C', 'Grade D'],
+              [
+                '${sc['daysWithScorecard'] ?? 0}',
+                '${sc['averageScore'] ?? 0}',
+                '${(sc['gradeDistribution'] as Map?)?['A'] ?? 0}',
+                '${(sc['gradeDistribution'] as Map?)?['B'] ?? 0}',
+                '${(sc['gradeDistribution'] as Map?)?['C'] ?? 0}',
+                '${(sc['gradeDistribution'] as Map?)?['D'] ?? 0}',
+              ],
+            ]),
+
+            _section(ctx, 'Inspection Summary', [
+              ['Total', 'Avg Score', 'Deficiencies', 'Closed', 'Open'],
+              [
+                '${insp['totalInspections'] ?? 0}',
+                '${insp['averageScore'] ?? 0}',
+                '${insp['totalDeficiencies'] ?? 0}',
+                '${insp['closedDeficiencies'] ?? 0}',
+                '${insp['openDeficiencies'] ?? 0}',
+              ],
+            ]),
+
+            _section(ctx, 'Feedback Summary', [
+              ['Total Feedbacks', 'Avg Rating', '% Negative'],
+              [
+                '${fb['totalFeedbacks'] ?? 0}',
+                '${fb['averageRating'] ?? 'N/A'}',
+                '${fb['negativeFeedbacks'] ?? 0}',
+              ],
+            ]),
+
+            _section(ctx, 'Petty Issues', [
+              ['Total', 'Resolved', 'Open'],
+              ['${pi['total'] ?? 0}', '${pi['resolved'] ?? 0}', '${pi['open'] ?? 0}'],
+            ]),
+
+            _section(ctx, 'Photo Evidence', [
+              ['Total Forms', 'With Photos', 'Photos Uploaded', 'Compliance %'],
+              [
+                '${ev['totalForms'] ?? 0}',
+                '${ev['formsWithPhotos'] ?? 0}',
+                '${ev['totalPhotos'] ?? 0}',
+                '${ev['evidenceComplianceRate'] ?? 0}%',
+              ],
+            ]),
+
+            _section(ctx, 'Machine Summary', [
+              ['Total', 'Deployed', 'In Maintenance', 'Downtime Incidents', 'Downtime Hours', 'Penalty'],
+              [
+                '${mach['total'] ?? 0}',
+                '${mach['deployed'] ?? 0}',
+                '${mach['inMaintenance'] ?? 0}',
+                '${mach['downtime']?['incidents'] ?? 0}',
+                '${mach['downtime']?['totalHours'] ?? 0}',
+                '₹${mach['downtime']?['totalPenalty'] ?? 0}',
+              ],
+            ]),
+
+            if (deductions.isNotEmpty)
+              _section(ctx, 'Penalties & Deductions', [
+                ['Reason', 'Amount'],
+                ...deductions.map((d) => [
+                  '${d['reason'] ?? ''}${d['percentage'] != null ? ' (${d['percentage']}%)' : ''}',
+                  '₹${d['amount'] ?? 0}',
+                ] as List<String>),
+              ]),
+
+            pw.SizedBox(height: 12),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                border: pw.Border.all(color: primaryColor, width: 1.5),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(children: [
+                pw.Text('FINANCIAL SUMMARY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: primaryColor)),
+                pw.SizedBox(height: 8),
+                _buildInfoRow('Monthly Contract Value', '₹${pack.monthlyContractValue}', '', ''),
+                _buildInfoRow('Total Deductions', '₹${pen['totalPenaltyAmount'] ?? 0}', '', ''),
+                pw.Divider(thickness: 1, color: borderColor),
+                _buildInfoRow('Net Billable', '₹${pack.billableAmount}', '', ''),
+                _buildInfoRow('GST (${pack.gstRate}%)', '₹${pack.gstAmount}', '', ''),
+                pw.Divider(thickness: 1.5, color: primaryColor),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                  child: pw.Row(children: [
+                    pw.Expanded(child: pw.Text('TOTAL PAYABLE (incl. GST)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: primaryColor))),
+                    pw.Text('₹${pack.totalPayableWithGst}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: primaryColor)),
+                  ]),
+                ),
+              ]),
+            ),
+
+            pw.SizedBox(height: 20),
+            _buildSignatures(),
+            _buildDigitalFooter(timestamp),
+          ];
+        },
+      ),
+    );
+    return pdf.save();
+  }
+
   static Future<Uint8List> generateStationReportPdf(StationReport report) async {
     final pdf = pw.Document();
     final railway = await _getRailwayLogo();

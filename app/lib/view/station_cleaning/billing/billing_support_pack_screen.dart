@@ -2,8 +2,10 @@ import 'package:crm_train/model/station_cleaning_models.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/station_billing_repository.dart';
 import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/services/pdf_report_service.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 class BillingSupportPackScreen extends StatefulWidget {
@@ -164,6 +166,23 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
     return (perms[r] ?? <String>{}).contains(permission);
   }
 
+  Future<void> _downloadPdf() async {
+    if (_billingPack == null) return;
+    try {
+      final pdfBytes = await PDFReportService.generateStationBillingPdf(_billingPack!);
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'BillingPack_${_billingPack!.contractNumber}_${_billingPack!.month}_${_billingPack!.year}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    }
+  }
+
   Future<void> _recordPayment() async {
     final amountCtrl = TextEditingController();
     final refCtrl = TextEditingController();
@@ -286,6 +305,14 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
         title: const Text('Billing Support Pack', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (_billingPack != null)
+            IconButton(
+              icon: const Icon(Icons.download, color: Colors.white),
+              tooltip: 'Download PDF',
+              onPressed: _downloadPdf,
+            ),
+        ],
       ),
       body: Column(
         children: [
