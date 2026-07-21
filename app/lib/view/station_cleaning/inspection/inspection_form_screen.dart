@@ -86,6 +86,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     setState(() => _areasLoading = true);
     try {
       _areas = await ApiService.getStationAreas(widget.stationId);
+      if (_selectedArea != null && _areas.every((a) => a.name != _selectedArea)) {
+        _selectedArea = null;
+      }
     } catch (_) {}
     if (mounted) setState(() => _areasLoading = false);
   }
@@ -596,9 +599,12 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                       else
                         DropdownButtonFormField<String>(
-                          value: _selectedArea,
+                          value: _areas.any((a) => a.name == _selectedArea) ? _selectedArea : null,
                           decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
-                          items: _areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))).toList(),
+                          items: [
+                            const DropdownMenuItem<String>(value: null, child: Text('Select Area')),
+                            ..._areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))),
+                          ],
                           onChanged: isEdit ? null : (v) => setState(() => _selectedArea = v),
                           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                         ),
@@ -607,10 +613,10 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                       else
                         DropdownButtonFormField<String>(
-                          value: _selectedPlatformId,
+                          value: _selectedPlatformId == null || _platforms.any((p) => p.uid == _selectedPlatformId) ? _selectedPlatformId : null,
                           decoration: const InputDecoration(labelText: 'Platform (optional)', border: OutlineInputBorder()),
                           items: [
-                            const DropdownMenuItem(value: null, child: Text('None')),
+                            const DropdownMenuItem<String>(value: null, child: Text('None')),
                             ..._platforms.map<DropdownMenuItem<String>>((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
                           ],
                           onChanged: isEdit ? null : (v) => setState(() => _selectedPlatformId = v),
