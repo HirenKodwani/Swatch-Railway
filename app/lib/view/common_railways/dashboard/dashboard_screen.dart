@@ -481,6 +481,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "children": [
           {"title": "Module Hub", "route": "sc_main"},
           {"title": "Inspection", "route": "sc_inspection"},
+          {"title": "Petty Issues", "route": "sc_petty_issues"},
           {"title": "Dashboard", "route": "sc_dashboard"},
           {"title": "Area Management", "route": "sc_areas"},
           {"title": "Generate Tasks", "route": "sc_generate_tasks"},
@@ -638,6 +639,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
         break;
       case "sc_main":
       case "sc_inspection":
+      case "sc_petty_issues":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const StationCleaningMainScreen()));
         break;
       case "sc_dashboard":
