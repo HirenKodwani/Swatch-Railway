@@ -85,8 +85,14 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   Future<void> _loadAreas() async {
     setState(() => _areasLoading = true);
     try {
-      _areas = await ApiService.getStationAreas(widget.stationId);
-      if (_selectedArea != null && _areas.every((a) => a.name != _selectedArea)) {
+      final raw = await ApiService.getStationAreas(widget.stationId);
+      final seen = <String>{};
+      _areas = [];
+      for (final a in raw) {
+        final key = a.name.trim();
+        if (key.isNotEmpty && seen.add(key)) _areas.add(StationArea(uid: a.uid, stationId: a.stationId, name: a.name, order: a.order, description: a.description, active: a.active, platformId: a.platformId));
+      }
+      if (_selectedArea != null && _areas.indexWhere((a) => a.name == _selectedArea) == -1) {
         _selectedArea = null;
       }
     } catch (_) {}
@@ -599,7 +605,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                       else
                         DropdownButtonFormField<String>(
-                          value: _areas.any((a) => a.name == _selectedArea) ? _selectedArea : null,
+                          value: _areas.where((a) => a.name == _selectedArea).length == 1 ? _selectedArea : null,
                           decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
                           items: [
                             const DropdownMenuItem<String>(value: null, child: Text('Select Area')),
@@ -613,7 +619,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                         const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                       else
                         DropdownButtonFormField<String>(
-                          value: _selectedPlatformId == null || _platforms.any((p) => p.uid == _selectedPlatformId) ? _selectedPlatformId : null,
+                          value: _selectedPlatformId == null || _platforms.where((p) => p.uid == _selectedPlatformId).length == 1 ? _selectedPlatformId : null,
                           decoration: const InputDecoration(labelText: 'Platform (optional)', border: OutlineInputBorder()),
                           items: [
                             const DropdownMenuItem<String>(value: null, child: Text('None')),
