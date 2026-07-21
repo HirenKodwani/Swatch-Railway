@@ -105,6 +105,12 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
     });
   }
 
+  bool _canSwitchStation(String role) {
+    final r = role.toUpperCase().replaceAll(' ', '_');
+    const switchable = {'SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'CONTRACTOR_MASTER', 'CONTRACTOR_ADMIN'};
+    return switchable.contains(r);
+  }
+
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
     return {0, 1, 5, 8, 9, 15, 21, 22, 29, 30};
@@ -158,7 +164,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       appBar: AppBar(
         title: _loadingStations
             ? Text(_selectedStationName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-            : (_availableStations.length > 1
+            : _canSwitchStation(role)
                 ? DropdownButton<String>(
                     value: _availableStations.any((s) => s.uid == _selectedStationId) ? _selectedStationId : null,
                     dropdownColor: kRailwayBlue,
