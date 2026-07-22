@@ -104,7 +104,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
       }
       setState(() {
         _entityStations = stations;
-        zones = uniqueZones.isNotEmpty ? uniqueZones.toList()..sort() : DepotDatabase.zoneData.keys.toList()..sort();
+        final sortedUnique = uniqueZones.toList()..sort();
+        zones = uniqueZones.isNotEmpty ? sortedUnique : (DepotDatabase.zoneData.keys.toList()..sort());
         _zone = null;
         _division = null;
         _depot = null;
@@ -178,7 +179,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
             }
           }
         }
-        filtered = matched.isNotEmpty ? matched.toList()..sort() : allDivs;
+        final sortedMatched = matched.toList()..sort();
+        filtered = matched.isNotEmpty ? sortedMatched : allDivs;
       }
     }
     setState(() {
