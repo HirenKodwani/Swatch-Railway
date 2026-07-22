@@ -79,6 +79,9 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
       }
       _loadStations();
       _loadTrains();
+      if (selectedDivision != null) {
+        _loadStations(division: selectedDivision);
+      }
     });
   }
 
@@ -217,6 +220,9 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                               selectedDivision = division;
                               selectedDepot = depot;
                             });
+                            if (selectedContractType == 'Station Cleaning') {
+                              _loadStations(division: division);
+                            }
                           },
                         ),
                       ),
@@ -253,13 +259,18 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                                 'Select type',
                                 ['Station Cleaning', 'OBHS'],
                                 selectedContractType,
-                                (v) => setState(() {
-                                  selectedContractType = v;
-                                  selectedStationIds = [];
-                                  selectedStationNames = [];
-                                  selectedTrainIds = [];
-                                  selectedTrainNames = [];
-                                }),
+                                (v) {
+                                  setState(() {
+                                    selectedContractType = v;
+                                    selectedStationIds = [];
+                                    selectedStationNames = [];
+                                    selectedTrainIds = [];
+                                    selectedTrainNames = [];
+                                  });
+                                  if (v == 'Station Cleaning' && selectedDivision != null) {
+                                    _loadStations(division: selectedDivision);
+                                  }
+                                },
                                 enabled: !isEditMode,
                               ),
                             ),
@@ -330,8 +341,35 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                             enabled: !isEditMode,
                           ),
                         ],
-                        // Station Cleaning → no picker (auto-populated from division)
-                        // Other / unselected → station picker
+                        // Station Cleaning → show read-only station list from division
+                        if (selectedContractType == 'Station Cleaning') ...[
+                          const SizedBox(height: 12),
+                          const Text('Stations in Division (auto-assigned)', style: TextStyle(fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
+                          _stationsLoading
+                              ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+                              : Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: Colors.grey.shade50,
+                                  ),
+                                  child: _availableStations.isEmpty
+                                      ? const Text('No stations found in this division', style: TextStyle(color: Colors.grey))
+                                      : Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: _availableStations.map((s) => Chip(
+                                            label: Text('${s.stationCode ?? ""} - ${s.stationName ?? ""}',
+                                                style: const TextStyle(fontSize: 12)),
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            visualDensity: VisualDensity.compact,
+                                          )).toList(),
+                                        ),
+                                ),
+                        ],
                         if (selectedContractType != 'Station Cleaning' && selectedContractType != 'OBHS') ...[
                           const SizedBox(height: 12),
                           const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
