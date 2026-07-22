@@ -104,7 +104,27 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
-    return {0, 1, 5, 8, 9, 15, 21, 22, 29, 30, 31};
+    final r = role.toUpperCase().replaceAll(' ', '_');
+    switch (r) {
+      case 'RAILWAY_MASTER':
+        return {0, 1, 8, 9, 15, 16, 23, 24, 29, 30, 31};
+      case 'RAILWAY_ADMIN':
+        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+      case 'RAILWAY_SUPERVISOR':
+        return {0, 1, 14, 15, 22, 28, 30, 31};
+      case 'CONTRACTOR_MASTER':
+        return {0, 1, 8, 9, 15, 18, 30, 31};
+      case 'CONTRACTOR_ADMIN':
+        return {0, 1, 2, 5, 8, 9, 13, 15, 16, 18, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+      case 'CONTRACTOR_SUPERVISOR':
+      case 'WORKER':
+      case 'RAILWAY_WORKER':
+      case 'JANITOR':
+      case 'ATTENDANT':
+        return {0, 1, 14, 20, 30};
+      default:
+        return {0, 1, 5, 8, 9, 15, 21, 22, 29, 30, 31};
+    }
   }
 
   @override
