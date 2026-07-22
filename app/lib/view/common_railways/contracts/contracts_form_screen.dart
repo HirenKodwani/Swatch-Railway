@@ -78,10 +78,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
     });
   }
 
-  Future<void> _loadStations() async {
+  Future<void> _loadStations({String? division}) async {
     setState(() => _stationsLoading = true);
     try {
-      _availableStations = await ApiService.getStations(active: true);
+      _availableStations = await ApiService.getStations(active: true, division: division);
     } catch (_) {}
     if (mounted) setState(() => _stationsLoading = false);
   }
@@ -206,7 +206,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                               selectedZone = zone;
                               selectedDivision = division;
                               selectedDepot = depot;
+                              selectedStationIds = [];
+                              selectedStationNames = [];
                             });
+                            _loadStations(division: division);
                           },
                         ),
                       ),
