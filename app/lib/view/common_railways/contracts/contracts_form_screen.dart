@@ -927,12 +927,13 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         );
 
         if (mounted) {
-        _showSuccessSnackBar(
-            response['message'] ??
-                (isEditMode
-                    ? "Contract updated successfully!"
-                    : "Contract created successfully!"));
-        Navigator.pop(context, true);
+          _showSuccessSnackBar(
+              response['message'] ??
+                  (isEditMode
+                      ? "Contract updated successfully!"
+                      : "Contract created successfully!"));
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (mounted) {

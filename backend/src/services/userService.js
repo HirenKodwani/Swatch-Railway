@@ -690,7 +690,7 @@ class UserService {
     };
   }
 
-  async getWorkers() {
+  async getWorkers(module = null) {
     const snapshot = await db.collection('users').get();
 
     const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
@@ -699,6 +699,10 @@ class UserService {
       const data = doc.data();
       const role = (data.role || '').toLowerCase();
       if (!validRoles.includes(role)) return;
+      if (module) {
+        const userDomain = data.domain || null;
+        if (userDomain && userDomain !== module) return;
+      }
       workersList.push({
         uid: data.uid || doc.id,
         fullName: data.fullName || '',
