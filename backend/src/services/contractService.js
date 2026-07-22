@@ -3,15 +3,15 @@ import { NotFoundError, ConflictError, ValidationError } from '../errors/index.j
 
 class ContractService {
   async createContract(creatorData, body) {
-    const { contractNumber, contractName, entityId, stationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
+    const { contractNumber, contractName, entityId, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
     const { uid, name, fullName, email, role } = creatorData;
     const creatorName = fullName || name || email || role || 'Unknown';
 
     if (!entityId) {
       throw new ValidationError("Please select a Contractor (Entity) to create a contract.");
     }
-    if (!contractNumber || !contractName || !stationIds || !stationIds.length || !startDate || !endDate || !workCategories || !repName || !repMobile || !repEmail) {
-      throw new ValidationError("Please fill all mandatory fields: Contract No, Name, Stations, Dates, Work Categories, Representative.");
+    if (!contractNumber || !contractName || !startDate || !endDate || !workCategories || !repName || !repMobile || !repEmail) {
+      throw new ValidationError("Please fill all mandatory fields: Contract No, Name, Dates, Work Categories, Representative.");
     }
 
     if (new Date(endDate) <= new Date(startDate)) {
@@ -29,17 +29,17 @@ class ContractService {
     const entityName = entityData.companyName;
 
     const stationNames = [];
-    let inferredZone, inferredDivision;
-    if (stationIds && stationIds.length) {
-      for (const sid of stationIds) {
-        const snap = await db.collection('stations').doc(sid).get();
-        if (snap.exists) {
-          const sData = snap.data();
-          stationNames.push(sData.stationName || sid);
-          if (!inferredZone) inferredZone = sData.zone;
-          if (!inferredDivision) inferredDivision = sData.division;
-        } else throw new NotFoundError(`Station ${sid} not found.`);
-      }
+    const stationsSnap = await db.collection('stations')
+      .where('division', '==', division || inferredDivision)
+      .limit(500)
+      .get();
+    const stationIds = [];
+    stationsSnap.forEach(doc => {
+      stationIds.push(doc.id);
+      stationNames.push(doc.data().stationName || doc.id);
+    });
+    if (stationIds.length === 0) {
+      throw new ValidationError("No stations found in the selected division. Add stations first.");
     }
 
     const duplicateSnap = await db.collection('contracts')
@@ -60,6 +60,9 @@ class ContractService {
     const startMs = new Date(startDate).getTime();
     const endMs = new Date(endDate).getTime();
     const durationDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
+
+    const inferredZone = stationsSnap.docs[0]?.data().zone || '';
+    const effectiveZone = zone || inferredZone;
 
     const docRef = db.collection('contracts').doc();
     await docRef.set({
@@ -83,8 +86,8 @@ class ContractService {
       scoringApplicability: scoringApplicability || false,
       billingCycle: billingCycle || 'monthly',
       contractType: contractType || null,
-      zone: zone || inferredZone || '',
-      division: division || inferredDivision || '',
+      zone: effectiveZone,
+      division: division || '',
       createdAt: db.Timestamp(),
       createdBy: uid,
       createdByName: creatorName
