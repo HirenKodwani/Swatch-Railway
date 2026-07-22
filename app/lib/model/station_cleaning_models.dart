@@ -303,33 +303,41 @@ const gradeDisplayNames = {
   'poor': 'Poor',
 };
 const gradeScores = {
-  'excellent': 5,
-  'very_good': 4,
-  'good': 3,
-  'average': 2,
-  'poor': 1,
+  'excellent': 10,
+  'very_good': 8,
+  'good': 6,
+  'average': 5,
+  'poor': 3,
 };
 
 const sectionConfig = {
   'floor': {
     'displayName': 'Floor',
-    'icon': 'floor',
     'parameters': ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'],
   },
   'stairs': {
     'displayName': 'Stairs',
-    'icon': 'stairs',
     'parameters': ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'],
   },
   'wallCladdings': {
     'displayName': 'Wall & Claddings',
-    'icon': 'wall',
     'parameters': ['shineLevel', 'dustLevel', 'panGhutkaStains', 'birdDroppings'],
   },
   'steelWorks': {
     'displayName': 'Steel Works',
-    'icon': 'steel',
     'parameters': ['shineLevel', 'birdDroppings', 'fingerPalmMarks', 'dustLevel', 'waterHardnessMarks'],
+  },
+  'glassWorks': {
+    'displayName': 'Glass Works',
+    'parameters': ['birdDroppings', 'fingerPalmMarks', 'dustLevel'],
+  },
+  'escalators': {
+    'displayName': 'Escalators',
+    'parameters': ['birdDroppings', 'fingerPalmMarks', 'dustLevel'],
+  },
+  'toilets': {
+    'displayName': 'Toilets',
+    'parameters': ['mirrors', 'washBasins', 'wcSeats', 'floor', 'odour'],
   },
 };
 
@@ -341,6 +349,11 @@ const paramDisplayNames = {
   'birdDroppings': 'Bird Droppings',
   'fingerPalmMarks': 'Finger/Palm Marks',
   'waterHardnessMarks': 'Water Hardness Marks',
+  'mirrors': 'Mirrors',
+  'washBasins': 'Wash Basins',
+  'wcSeats': 'W.C. Seats',
+  'floor': 'Floor',
+  'odour': 'Odour',
 };
 
 const paramHints = {
@@ -351,13 +364,18 @@ const paramHints = {
   'birdDroppings': 'Visual inspection',
   'fingerPalmMarks': 'Visual inspection',
   'waterHardnessMarks': 'Visual inspection',
+  'mirrors': 'All mirrors to be inspected',
+  'washBasins': 'All wash basins to be inspected',
+  'wcSeats': 'All WCs to be inspected',
+  'floor': 'All toilets to be inspected',
+  'odour': 'All toilets to be inspected',
 };
 
 String numericToGrade(double avg) {
-  if (avg >= 4.5) return 'excellent';
-  if (avg >= 3.5) return 'very_good';
-  if (avg >= 2.5) return 'good';
-  if (avg >= 1.5) return 'average';
+  if (avg >= 9) return 'excellent';
+  if (avg >= 7) return 'very_good';
+  if (avg >= 5.5) return 'good';
+  if (avg >= 4) return 'average';
   return 'poor';
 }
 

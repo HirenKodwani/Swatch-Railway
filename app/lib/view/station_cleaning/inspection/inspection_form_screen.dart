@@ -129,7 +129,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
   int? get _overallScore {
     final avg = _overallAverage;
-    return avg != null ? (avg * 20).round() : null;
+    return avg != null ? (avg * 10).round() : null;
   }
 
   String? get _overallGrade {
@@ -595,6 +595,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       case 'stairs': return Icons.stairs;
       case 'wallCladdings': return Icons.wallpaper;
       case 'steelWorks': return Icons.handyman;
+      case 'glassWorks': return Icons.window;
+      case 'escalators': return Icons.upgrade;
+      case 'toilets': return Icons.wc;
       default: return Icons.checklist;
     }
   }
@@ -624,7 +627,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           ],
         ),
         subtitle: avg != null
-            ? Text('Avg: ${(avg * 20).round()} / 100', style: TextStyle(fontSize: 11, color: Colors.grey[600]))
+            ? Text('Score: ${(avg * 10).round()} / 100', style: TextStyle(fontSize: 11, color: Colors.grey[600]))
             : Text('Not graded', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
         children: [
           Padding(

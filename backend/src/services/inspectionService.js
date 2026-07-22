@@ -5,20 +5,23 @@ import { auditService } from './auditService.js';
 
 const INSPECTION_TYPES = ['schedule', 'surprise'];
 const GRADE_LABELS = ['excellent', 'very_good', 'good', 'average', 'poor'];
-const GRADE_ORDER = { excellent: 5, very_good: 4, good: 3, average: 2, poor: 1 };
+const GRADE_ORDER = { excellent: 10, very_good: 8, good: 6, average: 5, poor: 3 };
 
 const SECTIONS_CONFIG = {
   floor: { displayName: 'Floor', parameters: ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'] },
   stairs: { displayName: 'Stairs', parameters: ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'] },
   wallCladdings: { displayName: 'Wall & Claddings', parameters: ['shineLevel', 'dustLevel', 'panGhutkaStains', 'birdDroppings'] },
   steelWorks: { displayName: 'Steel Works', parameters: ['shineLevel', 'birdDroppings', 'fingerPalmMarks', 'dustLevel', 'waterHardnessMarks'] },
+  glassWorks: { displayName: 'Glass Works', parameters: ['birdDroppings', 'fingerPalmMarks', 'dustLevel'] },
+  escalators: { displayName: 'Escalators', parameters: ['birdDroppings', 'fingerPalmMarks', 'dustLevel'] },
+  toilets: { displayName: 'Toilets', parameters: ['mirrors', 'washBasins', 'wcSeats', 'floor', 'odour'] },
 };
 
 function _numericToGrade(avg) {
-  if (avg >= 4.5) return 'excellent';
-  if (avg >= 3.5) return 'very_good';
-  if (avg >= 2.5) return 'good';
-  if (avg >= 1.5) return 'average';
+  if (avg >= 9) return 'excellent';
+  if (avg >= 7) return 'very_good';
+  if (avg >= 5.5) return 'good';
+  if (avg >= 4) return 'average';
   return 'poor';
 }
 
@@ -141,7 +144,7 @@ class InspectionService {
       }
 
       const sectionAvg = sectionCount > 0 ? sectionTotal / sectionCount : 0;
-      const sectionScore = sectionCount > 0 ? Math.round((sectionTotal / sectionCount) * 20) : null;
+      const sectionScore = sectionCount > 0 ? Math.round((sectionTotal / sectionCount) * 10) : null;
       const sectionGrade = _numericToGrade(sectionAvg);
 
       processedSections[sectionKey] = {
@@ -151,7 +154,7 @@ class InspectionService {
       };
     }
 
-    const overallScore = allParamCount > 0 ? Math.round((allParamTotal / allParamCount) * 20) : 0;
+    const overallScore = allParamCount > 0 ? Math.round((allParamTotal / allParamCount) * 10) : 0;
     const overallGrade = _numericToGrade(allParamCount > 0 ? allParamTotal / allParamCount : 0);
 
     const updates = {
