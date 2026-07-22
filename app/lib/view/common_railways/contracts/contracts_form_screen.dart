@@ -47,6 +47,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
   List<Station> _availableStations = [];
   bool _stationsLoading = false;
   String? selectedBillingCycle;
+  String? selectedContractType;
   double contractValue = 0;
   bool scoringApplicability = true;
 
@@ -262,6 +263,17 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                                 "Contract Value (₹)",
                                 "Enter value",
                                 contractValueController,
+                                enabled: !isEditMode,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildDropdown(
+                                'Contract Type',
+                                'Select type',
+                                ['Station Cleaning', 'OBHS'],
+                                selectedContractType,
+                                (v) => setState(() => selectedContractType = v),
                                 enabled: !isEditMode,
                               ),
                             ),
@@ -911,10 +923,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           repEmail: repEmailController.text,
           repIdProofType: selectedIDType!,
           repIdProofNumber: repIdNumberController.text,
+          contractType: selectedContractType != null ? selectedContractType!.toLowerCase().replaceAll(' ', '_') : null,
         );
-      }
 
-      if (mounted) {
+        if (mounted) {
         _showSuccessSnackBar(
             response['message'] ??
                 (isEditMode

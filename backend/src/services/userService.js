@@ -89,6 +89,19 @@ class UserService {
           }
         }
       }
+
+      if (!domain) {
+        const contractSnapshot2 = await db.collection('contracts')
+          .where('entityId', '==', entityId)
+          .where('status', '==', 'Active')
+          .limit(1).get();
+        if (!contractSnapshot2.empty) {
+          const firstContract = contractSnapshot2.docs[0].data();
+          if (firstContract.contractType === 'station_cleaning' || firstContract.contractType === 'obhs') {
+            domain = firstContract.contractType;
+          }
+        }
+      }
     }
 
     let userRecord;

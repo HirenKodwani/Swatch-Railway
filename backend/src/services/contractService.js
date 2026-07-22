@@ -3,7 +3,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../errors/index.j
 
 class ContractService {
   async createContract(creatorData, body) {
-    const { contractNumber, contractName, entityId, stationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division } = body;
+    const { contractNumber, contractName, entityId, stationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
     const { uid, name, fullName, email, role } = creatorData;
     const creatorName = fullName || name || email || role || 'Unknown';
 
@@ -82,6 +82,7 @@ class ContractService {
       assignedContractorUsers: assignedContractorUsers || [],
       scoringApplicability: scoringApplicability || false,
       billingCycle: billingCycle || 'monthly',
+      contractType: contractType || null,
       zone: zone || inferredZone || '',
       division: division || inferredDivision || '',
       createdAt: db.Timestamp(),

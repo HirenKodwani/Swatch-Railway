@@ -616,6 +616,7 @@ class ApiService {
     required String repEmail,
     required String repIdProofType,
     required String repIdProofNumber,
+    String? contractType,
   }) async {
     try {
       final token = await getToken();
@@ -647,6 +648,7 @@ class ApiService {
           'repEmail': repEmail,
           'repIdProofType': repIdProofType,
           'repIdProofNumber': repIdProofNumber,
+          if (contractType != null) 'contractType': contractType,
         }),
       );
 
