@@ -531,7 +531,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
   List<String> _getRolesForUserType(String userType) {
     if (userType == 'railway') {
-      return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker', 'Station Master', 'Area Master', 'Platform Master'];
+      return ['Railway Master', 'Railway Admin', 'Railway Supervisor', 'Railway Worker'];
     } else {
       return ['Contractor Master', 'Contractor Admin', 'Contractor Supervisor', 'Contractor Worker'];
     }

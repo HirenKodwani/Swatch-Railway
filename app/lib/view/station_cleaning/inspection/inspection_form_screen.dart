@@ -1,11 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/model/station_cleaning_models.dart';
-import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/inspection_repository.dart';
-import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -34,22 +31,12 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   late TextEditingController _defAssignedToCtrl;
   late TextEditingController _closeProofCtrl;
 
-  String _inspectionType = 'ad_hoc';
+  String _inspectionType = 'schedule';
   DateTime _scheduledDate = DateTime.now();
-  String? _selectedArea;
-  String? _selectedPlatformId;
   String? _selectedDefArea;
-  List<StationArea> _areas = [];
-  List<Platform> _platforms = [];
-  bool _areasLoading = false;
-  bool _platformsLoading = false;
 
-  int _cleanliness = 3;
-  int _hygiene = 3;
-  int _infrastructure = 3;
-  int _safety = 3;
-
-  String _defSeverity = 'medium';
+  final Map<String, Map<String, String?>> _sectionGrades = {};
+  final Map<String, Map<String, TextEditingController>> _sectionRemarks = {};
 
   List<File> _photos = [];
   bool _uploadingPhoto = false;
@@ -66,18 +53,25 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     _defDescCtrl = TextEditingController();
     _defAssignedToCtrl = TextEditingController();
     _closeProofCtrl = TextEditingController();
-    _selectedArea = r?.areaId;
     _scheduledDate = DateTime.tryParse(r?.scheduledDate ?? '') ?? DateTime.now();
 
     if (r != null) {
       _inspectionType = r.inspectionType;
-      if (r.ratings.isNotEmpty) {
-        _cleanliness = r.ratings['cleanliness'] ?? 3;
-        _hygiene = r.ratings['hygiene'] ?? 3;
-        _infrastructure = r.ratings['infrastructure'] ?? 3;
-        _safety = r.ratings['safety'] ?? 3;
+    }
+
+    for (final entry in sectionConfig.entries) {
+      final sectionKey = entry.key;
+      final paramKeys = (entry.value['parameters'] as List).cast<String>();
+      _sectionGrades[sectionKey] = {};
+      _sectionRemarks[sectionKey] = {};
+      for (final pk in paramKeys) {
+        final savedGrade = r?.sections[sectionKey]?['parameters']?[pk]?['grade'] as String?;
+        final savedRemark = r?.sections[sectionKey]?['parameters']?[pk]?['remark'] as String? ?? '';
+        _sectionGrades[sectionKey]![pk] = savedGrade;
+        _sectionRemarks[sectionKey]![pk] = TextEditingController(text: savedRemark);
       }
     }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
@@ -85,48 +79,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         _inspectorNameCtrl.text = user!.fullName!;
       }
     });
-    _loadAreas();
-    _loadPlatforms();
-  }
-
-  Future<void> _loadAreas() async {
-    setState(() => _areasLoading = true);
-    try {
-      final raw = await ApiService.getStationAreas(widget.stationId);
-      final seen = <String>{};
-      _areas = [];
-      for (final a in raw) {
-        final key = a.name.trim();
-        if (key.isNotEmpty && seen.add(key)) _areas.add(StationArea(uid: a.uid, stationId: a.stationId, name: a.name, order: a.order, description: a.description, active: a.active, platformId: a.platformId));
-      }
-      if (_selectedArea != null && _areas.indexWhere((a) => a.name == _selectedArea) == -1) {
-        _selectedArea = null;
-      }
-      final area = _areaByName(_selectedArea ?? '');
-      if (area?.platformId != null && area!.platformId != _selectedPlatformId) {
-        _selectedPlatformId = area.platformId;
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _areasLoading = false);
-  }
-
-  StationArea? _areaByName(String name) {
-    final idx = _areas.indexWhere((a) => a.name == name);
-    return idx >= 0 ? _areas[idx] : null;
-  }
-
-  List<Platform> get _filteredPlatforms {
-    final area = _areaByName(_selectedArea ?? '');
-    if (area == null || area.platformId == null) return _platforms;
-    return _platforms.where((p) => p.uid == area.platformId).toList();
-  }
-
-  Future<void> _loadPlatforms() async {
-    setState(() => _platformsLoading = true);
-    try {
-      _platforms = await PlatformRepository.getByStation(widget.stationId);
-    } catch (_) {}
-    if (mounted) setState(() => _platformsLoading = false);
   }
 
   @override
@@ -136,7 +88,53 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     _defDescCtrl.dispose();
     _defAssignedToCtrl.dispose();
     _closeProofCtrl.dispose();
+    for (final map in _sectionRemarks.values) {
+      for (final ctrl in map.values) {
+        ctrl.dispose();
+      }
+    }
     super.dispose();
+  }
+
+  Map<String, double?> get _sectionAverages {
+    final result = <String, double?>{};
+    for (final entry in sectionConfig.entries) {
+      final sectionKey = entry.key;
+      double total = 0;
+      int count = 0;
+      final grades = _sectionGrades[sectionKey] ?? {};
+      for (final grade in grades.values) {
+        final score = gradeScores[grade];
+        if (score != null) { total += score; count++; }
+      }
+      result[sectionKey] = count > 0 ? total / count : null;
+    }
+    return result;
+  }
+
+  double? get _overallAverage {
+    double total = 0;
+    int count = 0;
+    for (final entry in sectionConfig.entries) {
+      final sectionKey = entry.key;
+      final paramKeys = (entry.value['parameters'] as List).cast<String>();
+      for (final pk in paramKeys) {
+        final grade = _sectionGrades[sectionKey]?[pk];
+        final score = gradeScores[grade];
+        if (score != null) { total += score; count++; }
+      }
+    }
+    return count > 0 ? total / count : null;
+  }
+
+  int? get _overallScore {
+    final avg = _overallAverage;
+    return avg != null ? (avg * 20).round() : null;
+  }
+
+  String? get _overallGrade {
+    final avg = _overallAverage;
+    return avg != null ? numericToGrade(avg) : null;
   }
 
   Future<String?> _pickAndUploadPhoto() async {
@@ -170,6 +168,23 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     return prefs.getString('auth_token');
   }
 
+  Map<String, dynamic> _buildSectionsPayload() {
+    final sections = <String, dynamic>{};
+    for (final entry in sectionConfig.entries) {
+      final sectionKey = entry.key;
+      final paramKeys = (entry.value['parameters'] as List).cast<String>();
+      final params = <String, dynamic>{};
+      for (final pk in paramKeys) {
+        params[pk] = {
+          'grade': _sectionGrades[sectionKey]?[pk],
+          'remark': _sectionRemarks[sectionKey]?[pk]?.text ?? '',
+        };
+      }
+      sections[sectionKey] = {'parameters': params};
+    }
+    return sections;
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -177,8 +192,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       final formattedDate = "${_scheduledDate.year}-${_scheduledDate.month.toString().padLeft(2, '0')}-${_scheduledDate.day.toString().padLeft(2, '0')}";
       final payload = {
         'stationId': widget.stationId,
-        'areaId': _selectedArea,
-        'platformId': _selectedPlatformId,
         'inspectionType': _inspectionType,
         'scheduledDate': formattedDate,
         'inspectorName': _inspectorNameCtrl.text.trim(),
@@ -226,12 +239,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   Future<void> _submitRatings() async {
     setState(() => _isLoading = true);
     try {
-      final ratings = {
-        'cleanliness': _cleanliness,
-        'hygiene': _hygiene,
-        'infrastructure': _infrastructure,
-        'safety': _safety,
-      };
+      final sections = _buildSectionsPayload();
       List<String> photoUrls = [];
       final token = await _getToken();
       for (final photo in _photos) {
@@ -248,7 +256,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         }
       }
       await InspectionRepository.submitRatings(widget.inspection!.uid, {
-        'ratings': ratings,
+        'sections': sections,
         'photos': photoUrls.isNotEmpty ? photoUrls : (widget.inspection?.photos ?? []),
         'remarks': _remarksCtrl.text.trim(),
       });
@@ -390,40 +398,15 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_areas.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  value: _selectedDefArea != null && _areas.any((a) => a.name == _selectedDefArea) ? _selectedDefArea : null,
-                  decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder()),
-                  items: [
-                    const DropdownMenuItem<String>(value: null, child: Text('Select Area')),
-                    ..._areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))),
-                  ],
-                  onChanged: (v) => _selectedDefArea = v,
-                )
-              else
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder()),
-                  onChanged: (v) => _selectedDefArea = v,
-                ),
+              TextField(
+                decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder()),
+                onChanged: (v) => _selectedDefArea = v,
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: _defDescCtrl,
                 decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
                 maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _defSeverity,
-                decoration: const InputDecoration(labelText: 'Severity', border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: 'low', child: Text('Low')),
-                  DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                  DropdownMenuItem(value: 'high', child: Text('High')),
-                  DropdownMenuItem(value: 'critical', child: Text('Critical')),
-                ],
-                onChanged: (v) {
-                  if (v != null) _defSeverity = v;
-                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -442,7 +425,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                 await InspectionRepository.addDeficiency(widget.inspection!.uid, {
                   'area': _selectedDefArea,
                   'description': _defDescCtrl.text.trim(),
-                  'severity': _defSeverity,
+                  'severity': 'medium',
                   'assignedTo': _defAssignedToCtrl.text.trim(),
                 });
                 _defDescCtrl.clear();
@@ -520,47 +503,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     );
   }
 
-  Widget _buildRatingSelector(String label, int value, ValueChanged<int> onChanged) {
-    final labels = ['Poor', 'Below Avg', 'Average', 'Good', 'Excellent'];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          const SizedBox(height: 4),
-          Row(
-            children: List.generate(5, (i) {
-              final idx = i + 1;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onChanged(idx),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: idx <= value ? kRailwayBlue : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      labels[i],
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: idx <= value ? Colors.white : Colors.black54,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
   bool _hasPermission(String permission) {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null) return false;
@@ -576,11 +518,155 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       'CONTRACTOR_ADMIN': {'VIEW'},
       'CONTRACTOR_SUPERVISOR': {'VIEW'},
       'RAILWAY_WORKER': {'VIEW', 'SCORE'},
-      'WORKER': {'VIEW', 'SCORE'},
-      'JANITOR': {'VIEW', 'SCORE'},
-      'ATTENDANT': {'VIEW', 'SCORE'},
+      'WORKER': {'VIEW'},
+      'JANITOR': {'VIEW'},
+      'ATTENDANT': {'VIEW'},
     };
     return (rolePerms[role] ?? <String>{}).contains(permission);
+  }
+
+  Widget _buildGradeChip(String? grade) {
+    if (grade == null) return Container();
+    final display = gradeDisplayNames[grade] ?? grade;
+    Color color;
+    switch (grade) {
+      case 'excellent': color = kSuccessGreen; break;
+      case 'very_good': color = Colors.teal; break;
+      case 'good': color = Colors.blue; break;
+      case 'average': color = kWarningOrange; break;
+      case 'poor': color = kErrorRed; break;
+      default: color = Colors.grey;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color),
+      ),
+      child: Text(display, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildGradeSelector(String? value, ValueChanged<String?> onChanged) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: gradeLabels.contains(value) ? value : null,
+          hint: const Text('Grade', style: TextStyle(fontSize: 12)),
+          isExpanded: false,
+          style: const TextStyle(fontSize: 12, color: Colors.black87),
+          items: gradeLabels.map((g) => DropdownMenuItem(
+            value: g,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle, size: 8, color: _gradeColor(g)),
+                const SizedBox(width: 4),
+                Text(gradeDisplayNames[g] ?? g, style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          )).toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Color _gradeColor(String grade) {
+    switch (grade) {
+      case 'excellent': return kSuccessGreen;
+      case 'very_good': return Colors.teal;
+      case 'good': return Colors.blue;
+      case 'average': return kWarningOrange;
+      case 'poor': return kErrorRed;
+      default: return Colors.grey;
+    }
+  }
+
+  IconData _sectionIcon(String sectionKey) {
+    switch (sectionKey) {
+      case 'floor': return Icons.view_in_ar;
+      case 'stairs': return Icons.stairs;
+      case 'wallCladdings': return Icons.wallpaper;
+      case 'steelWorks': return Icons.handyman;
+      default: return Icons.checklist;
+    }
+  }
+
+  Widget _buildSectionCard(String sectionKey, bool canScore) {
+    final config = sectionConfig[sectionKey]!;
+    final displayName = config['displayName'] as String;
+    final paramKeys = (config['parameters'] as List).cast<String>();
+    final avg = _sectionAverages[sectionKey];
+    final sectionGrade = avg != null ? numericToGrade(avg) : null;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: _gradeColor(sectionGrade ?? 'none').withValues(alpha: 0.15),
+          child: Icon(_sectionIcon(sectionKey), size: 20, color: _gradeColor(sectionGrade ?? 'none')),
+        ),
+        title: Row(
+          children: [
+            Expanded(child: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+            _buildGradeChip(sectionGrade),
+          ],
+        ),
+        subtitle: avg != null
+            ? Text('Avg: ${(avg * 20).round()} / 100', style: TextStyle(fontSize: 11, color: Colors.grey[600]))
+            : Text('Not graded', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: paramKeys.map((pk) {
+                final grade = _sectionGrades[sectionKey]?[pk];
+                final hint = paramHints[pk] as String? ?? '';
+                final paramDisplay = paramDisplayNames[pk] as String? ?? pk;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(paramDisplay, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                            if (hint.isNotEmpty) Text(hint, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: canScore
+                            ? _buildGradeSelector(grade, (v) {
+                                setState(() => _sectionGrades[sectionKey]![pk] = v);
+                              })
+                            : _buildGradeChip(grade),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -589,6 +675,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     final canManage = _hasPermission('MANAGE');
     final canApprove = _hasPermission('APPROVE');
     final canScore = _hasPermission('SCORE');
+
     return Scaffold(
       appBar: AppBar(
         title: Text(isEdit ? 'Inspection Detail' : 'New Inspection', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -609,56 +696,17 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     children: [
                       DropdownButtonFormField<String>(
                         value: _inspectionType,
-                        decoration: const InputDecoration(labelText: 'Inspection Type *', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'Inspection Type *', border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.category),
+                        ),
                         items: const [
-                          DropdownMenuItem(value: 'ad_hoc', child: Text('Ad Hoc')),
-                          DropdownMenuItem(value: 'routine', child: Text('Routine')),
-                          DropdownMenuItem(value: 'surprise', child: Text('Surprise')),
-                          DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                          DropdownMenuItem(value: 'monthly_review', child: Text('Monthly Review')),
-                          DropdownMenuItem(value: 'petty_issue_linked', child: Text('Petty Issue Linked')),
-                          DropdownMenuItem(value: 'cleanliness_scorecard', child: Text('Cleanliness Scorecard')),
-                          DropdownMenuItem(value: 'complaint_based', child: Text('Complaint Based')),
-                          DropdownMenuItem(value: 'random', child: Text('Random')),
-                          DropdownMenuItem(value: 'emergency', child: Text('Emergency')),
+                          DropdownMenuItem(value: 'schedule', child: Text('Schedule', style: TextStyle(fontWeight: FontWeight.w500))),
+                          DropdownMenuItem(value: 'surprise', child: Text('Surprise', style: TextStyle(fontWeight: FontWeight.w500))),
                         ],
                         onChanged: isEdit ? null : (v) {
                           if (v != null) setState(() => _inspectionType = v);
                         },
                       ),
-                      const SizedBox(height: 12),
-                      if (_areasLoading)
-                        const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                      else
-                        DropdownButtonFormField<String>(
-                          value: _areas.where((a) => a.name == _selectedArea).length == 1 ? _selectedArea : null,
-                          decoration: const InputDecoration(labelText: 'Area *', border: OutlineInputBorder()),
-                          items: [
-                            const DropdownMenuItem<String>(value: null, child: Text('Select Area')),
-                            ..._areas.map<DropdownMenuItem<String>>((a) => DropdownMenuItem(value: a.name, child: Text(a.name))),
-                          ],
-                          onChanged: isEdit ? null : (v) {
-                            setState(() {
-                              _selectedArea = v;
-                              final area = _areaByName(v ?? '');
-                              _selectedPlatformId = area?.platformId;
-                            });
-                          },
-                          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                        ),
-                      const SizedBox(height: 12),
-                      if (_platformsLoading)
-                        const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                      else
-                        DropdownButtonFormField<String>(
-                          value: _selectedPlatformId == null || _filteredPlatforms.where((p) => p.uid == _selectedPlatformId).length == 1 ? _selectedPlatformId : null,
-                          decoration: const InputDecoration(labelText: 'Platform (optional)', border: OutlineInputBorder()),
-                          items: [
-                            const DropdownMenuItem<String>(value: null, child: Text('None')),
-                            ..._filteredPlatforms.map<DropdownMenuItem<String>>((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
-                          ],
-                          onChanged: isEdit ? null : (v) => setState(() => _selectedPlatformId = v),
-                        ),
                       const SizedBox(height: 12),
                       InkWell(
                         onTap: isEdit ? null : () async {
@@ -671,7 +719,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                           if (picked != null) setState(() => _scheduledDate = picked);
                         },
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'Scheduled Date *', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(labelText: 'Scheduled Date *', border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.calendar_today),
+                          ),
                           child: Text(
                             "${_scheduledDate.year}-${_scheduledDate.month.toString().padLeft(2, '0')}-${_scheduledDate.day.toString().padLeft(2, '0')}",
                           ),
@@ -680,19 +730,84 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _inspectorNameCtrl,
-                        decoration: const InputDecoration(labelText: 'Inspector Name *', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'Inspector Name *', border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.person),
+                        ),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        readOnly: isEdit,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _remarksCtrl,
-                        decoration: const InputDecoration(labelText: 'Remarks', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'Remarks', border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.notes),
+                        ),
                         maxLines: 2,
                       ),
                     ],
                   ),
                 ),
               ),
+
+              if (_overallAverage != null) ...[
+                const SizedBox(height: 8),
+                Card(
+                  color: kRailwayBlue.withValues(alpha: 0.05),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Overall Grade', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              Text(gradeDisplayNames[_overallGrade] ?? '-', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Score', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            const SizedBox(height: 4),
+                            Text('${_overallScore ?? '-'} / 100', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kRailwayBlue)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              if (r != null && (_currentStatus == 'IN_PROGRESS' || _currentStatus == 'COMPLETED')) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('Section-wise Grading', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Text('${sectionConfig.length} sections', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...sectionConfig.keys.map((sk) => _buildSectionCard(sk, canScore && _currentStatus == 'IN_PROGRESS')),
+              ],
+
+              if (r != null && _currentStatus != 'IN_PROGRESS' && r.sections.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('Grading Results', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    _buildGradeChip(r.overallGrade ?? r.grade),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...sectionConfig.keys.map((sk) => _buildSectionCard(sk, false)),
+              ],
+
               if (r != null && _currentStatus == 'IN_PROGRESS' && canScore) ...[
                 const SizedBox(height: 16),
                 Card(
@@ -701,13 +816,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Submit Ratings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text('Evidence Photos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        _buildRatingSelector('Cleanliness', _cleanliness, (v) => setState(() => _cleanliness = v)),
-                        _buildRatingSelector('Hygiene', _hygiene, (v) => setState(() => _hygiene = v)),
-                        _buildRatingSelector('Infrastructure', _infrastructure, (v) => setState(() => _infrastructure = v)),
-                        _buildRatingSelector('Safety', _safety, (v) => setState(() => _safety = v)),
-                        const SizedBox(height: 12),
                         Row(
                           children: [
                             OutlinedButton.icon(
@@ -729,14 +839,18 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: _submitRatings,
-                            style: ElevatedButton.styleFrom(backgroundColor: kSuccessGreen, foregroundColor: Colors.white),
-                            child: const Text('Submit Ratings'),
+                            onPressed: (_overallAverage == null) ? null : _submitRatings,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kSuccessGreen,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey[300],
+                            ),
+                            child: Text(_overallAverage == null ? 'Grade all parameters first' : 'Submit Ratings'),
                           ),
                         ),
                       ],
@@ -744,44 +858,46 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                   ),
                 ),
               ],
+
               if (r != null && r.deficiencies.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 const Text('Deficiencies', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 ...r.deficiencies.map((def) => Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        title: Text(def.area, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${def.description}\nSeverity: ${def.severity.toUpperCase()}'),
-                        isThreeLine: true,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (def.closureStatus == DeficiencyStatus.open && canManage)
-                              TextButton(
-                                onPressed: () => _closeDeficiency(def),
-                                child: const Text('Close'),
-                              ),
-                            if (def.closureStatus == DeficiencyStatus.closed && canApprove)
-                              TextButton(
-                                onPressed: () => _verifyDeficiency(def),
-                                child: const Text('Verify', style: TextStyle(color: Colors.blue)),
-                              ),
-                            if (def.closureStatus == DeficiencyStatus.railwayVerified)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: kSuccessGreen.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: kSuccessGreen),
-                                ),
-                                child: const Text('VERIFIED', style: TextStyle(color: kSuccessGreen, fontSize: 10, fontWeight: FontWeight.bold)),
-                              ),
-                          ],
-                        ),
-                      ),
-                    )),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    title: Text(def.area, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('${def.description}\nSeverity: ${def.severity.toUpperCase()}'),
+                    isThreeLine: true,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (def.closureStatus == DeficiencyStatus.open && canManage)
+                          TextButton(
+                            onPressed: () => _closeDeficiency(def),
+                            child: const Text('Close'),
+                          ),
+                        if (def.closureStatus == DeficiencyStatus.closed && canApprove)
+                          TextButton(
+                            onPressed: () => _verifyDeficiency(def),
+                            child: const Text('Verify', style: TextStyle(color: Colors.blue)),
+                          ),
+                        if (def.closureStatus == DeficiencyStatus.railwayVerified)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: kSuccessGreen.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: kSuccessGreen),
+                            ),
+                            child: const Text('VERIFIED', style: TextStyle(color: kSuccessGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
+                  ),
+                )),
               ],
+
               if (r != null && (_currentStatus == 'IN_PROGRESS' || _currentStatus == 'COMPLETED') && canManage) ...[
                 const SizedBox(height: 12),
                 SizedBox(
@@ -794,6 +910,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                   ),
                 ),
               ],
+
               const SizedBox(height: 24),
               if (_isLoading)
                 const Center(child: CircularProgressIndicator())

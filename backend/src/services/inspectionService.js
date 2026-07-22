@@ -3,8 +3,24 @@ import { NotFoundError, ValidationError } from '../errors/index.js';
 import { paginate } from '../utils/paginate.js';
 import { auditService } from './auditService.js';
 
-const INSPECTION_TYPES = ['daily', 'surprise', 'ad_hoc', 'complaint_based', 'monthly_review', 'routine', 'random', 'emergency', 'petty_issue_linked', 'cleanliness_scorecard'];
-const RATING_LABELS = ['dirty', 'poor', 'average', 'good', 'excellent'];
+const INSPECTION_TYPES = ['schedule', 'surprise'];
+const GRADE_LABELS = ['excellent', 'very_good', 'good', 'average', 'poor'];
+const GRADE_ORDER = { excellent: 5, very_good: 4, good: 3, average: 2, poor: 1 };
+
+const SECTIONS_CONFIG = {
+  floor: { displayName: 'Floor', parameters: ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'] },
+  stairs: { displayName: 'Stairs', parameters: ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'] },
+  wallCladdings: { displayName: 'Wall & Claddings', parameters: ['shineLevel', 'dustLevel', 'panGhutkaStains', 'birdDroppings'] },
+  steelWorks: { displayName: 'Steel Works', parameters: ['shineLevel', 'birdDroppings', 'fingerPalmMarks', 'dustLevel', 'waterHardnessMarks'] },
+};
+
+function _numericToGrade(avg) {
+  if (avg >= 4.5) return 'excellent';
+  if (avg >= 3.5) return 'very_good';
+  if (avg >= 2.5) return 'good';
+  if (avg >= 1.5) return 'average';
+  return 'poor';
+}
 
 class InspectionService {
   async createInspection(userData, body) {
@@ -20,13 +36,21 @@ class InspectionService {
     const templateName = template?.exists ? template.data().templateName : null;
 
     const ref = db.collection('inspections').doc();
+    const initialSections = {};
+    for (const [sectionKey, sectionConfig] of Object.entries(SECTIONS_CONFIG)) {
+      const params = {};
+      for (const paramKey of sectionConfig.parameters) {
+        params[paramKey] = { grade: null, remark: '' };
+      }
+      initialSections[sectionKey] = { parameters: params, sectionScore: null, sectionGrade: null };
+    }
     const data = {
       uid: ref.id, stationId, stationName: stationDoc.data().stationName || '',
       platformId: body.platformId || null, areaId: body.areaId || null,
       inspectionType, templateId: templateId || null, templateName,
       scheduledDate: scheduledDate || new Date().toISOString().split('T')[0],
       inspectorId: inspectorId || userData.uid, inspectorName: userData.fullName || userData.name || '',
-      status: 'SCHEDULED', ratings: {}, overallScore: null, grade: null,
+      status: 'SCHEDULED', sections: initialSections, overallScore: null, overallGrade: null,
       checklist, checklistResults: [], remarks: remarks || '',
       photos: [], evidence: [], deficiencies: [],
       allDeficienciesClosed: true,
@@ -89,22 +113,63 @@ class InspectionService {
     const ref = db.collection('inspections').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Inspection not found');
-    const { ratings, photos, remarks, checklistResults } = body;
-    if (!ratings || typeof ratings !== 'object') throw new ValidationError('ratings object is required');
-    const scores = {};
-    let total = 0, count = 0;
-    for (const [key, val] of Object.entries(ratings)) {
-      const idx = RATING_LABELS.indexOf(String(val).toLowerCase());
-      if (idx >= 0) { scores[key] = { label: val.toLowerCase(), score: idx + 1 }; total += idx + 1; count++; }
-      else if (typeof val === 'number' && val >= 1 && val <= 5) { scores[key] = { label: RATING_LABELS[val - 1], score: val }; total += val; count++; }
+    const { sections, photos, remarks, checklistResults } = body;
+    if (!sections || typeof sections !== 'object') throw new ValidationError('sections object is required');
+
+    const processedSections = {};
+    let allParamCount = 0, allParamTotal = 0;
+
+    for (const [sectionKey, sectionConfig] of Object.entries(SECTIONS_CONFIG)) {
+      const userSection = sections[sectionKey];
+      const params = {};
+      let sectionTotal = 0, sectionCount = 0;
+
+      for (const paramKey of sectionConfig.parameters) {
+        const rawGrade = userSection?.parameters?.[paramKey]?.grade;
+        const gradeVal = rawGrade ? String(rawGrade).toLowerCase() : null;
+        const numericGrade = GRADE_ORDER[gradeVal];
+        if (numericGrade !== undefined) {
+          const remark = userSection?.parameters?.[paramKey]?.remark || '';
+          params[paramKey] = { grade: gradeVal, remark, score: numericGrade };
+          sectionTotal += numericGrade;
+          sectionCount++;
+          allParamTotal += numericGrade;
+          allParamCount++;
+        } else {
+          params[paramKey] = { grade: null, remark: '', score: null };
+        }
+      }
+
+      const sectionAvg = sectionCount > 0 ? sectionTotal / sectionCount : 0;
+      const sectionScore = sectionCount > 0 ? Math.round((sectionTotal / sectionCount) * 20) : null;
+      const sectionGrade = _numericToGrade(sectionAvg);
+
+      processedSections[sectionKey] = {
+        parameters: params,
+        sectionScore,
+        sectionGrade,
+      };
     }
-    const overallScore = count > 0 ? Math.round((total / count) * 20) : 0;
-    const grade = overallScore >= 80 ? 'Excellent' : overallScore >= 60 ? 'Good' : overallScore >= 40 ? 'Average' : overallScore >= 20 ? 'Poor' : 'Dirty';
-    const updates = { ratings: scores, overallScore, grade, photos: photos || [], checklistResults: checklistResults || [], remarks: remarks || '', status: 'COMPLETED', completedAt: new Date().toISOString(), completedBy: userData.uid, updatedAt: new Date().toISOString() };
+
+    const overallScore = allParamCount > 0 ? Math.round((allParamTotal / allParamCount) * 20) : 0;
+    const overallGrade = _numericToGrade(allParamCount > 0 ? allParamTotal / allParamCount : 0);
+
+    const updates = {
+      sections: processedSections,
+      overallScore,
+      overallGrade,
+      photos: photos || [],
+      checklistResults: checklistResults || [],
+      remarks: remarks || '',
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+      completedBy: userData.uid,
+      updatedAt: new Date().toISOString(),
+    };
     await ref.update(updates);
-    await db.collection('inspection_scores').add({ inspectionId: uid, stationId: doc.data().stationId, overallScore, grade, scoredAt: new Date().toISOString() });
-    await auditService.logAudit('INSPECTION_RATINGS_SUBMITTED', userData.uid, userData.fullName || userData.name || '', uid, 'inspections', `Ratings submitted. Score: ${overallScore} (${grade})`);
-    return { message: 'Ratings submitted', uid, overallScore, grade, ratings: scores };
+    await db.collection('inspection_scores').add({ inspectionId: uid, stationId: doc.data().stationId, overallScore, grade: overallGrade, scoredAt: new Date().toISOString() });
+    await auditService.logAudit('INSPECTION_RATINGS_SUBMITTED', userData.uid, userData.fullName || userData.name || '', uid, 'inspections', `Ratings submitted. Score: ${overallScore} (${overallGrade})`);
+    return { message: 'Ratings submitted', uid, overallScore, grade: overallGrade, sections: processedSections };
   }
 
   async approveInspection(uid, userData, body) {
@@ -136,7 +201,7 @@ class InspectionService {
     if (!stationId) throw new ValidationError('stationId is required');
     const snapshot = await db.collection('inspection_scores').where('stationId', '==', stationId).get();
     let total = 0, count = 0;
-    const grades = { Excellent: 0, Good: 0, Average: 0, Poor: 0, Dirty: 0 };
+    const grades = { excellent: 0, very_good: 0, good: 0, average: 0, poor: 0 };
     const scores = [];
     snapshot.forEach(doc => { const d = doc.data(); total += d.overallScore || 0; count++; if (grades[d.grade] !== undefined) grades[d.grade]++; scores.push({ score: d.overallScore, grade: d.grade, date: d.scoredAt }); });
     scores.sort((a, b) => ((b.date || '') > (a.date || '') ? 1 : -1));

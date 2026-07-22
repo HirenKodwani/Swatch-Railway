@@ -997,20 +997,17 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (userType == 'railway') {
       if (currentUser?.role == 'Railway Admin') {
-        return ['Railway Supervisor', 'Railway Worker', 'Station Master', 'Area Master', 'Platform Master'];
+        return ['Railway Supervisor', 'Railway Worker'];
       }
       else if (currentUser?.role == 'Railway Master') {
         return [
           'Railway Admin',
           'Railway Supervisor',
           'Railway Worker',
-          'Station Master',
-          'Area Master',
-          'Platform Master',
         ];
       }
       else {
-        return ['Railway Admin', 'Railway Supervisor', 'Railway Worker', 'Station Master', 'Area Master', 'Platform Master'];
+        return ['Railway Admin', 'Railway Supervisor', 'Railway Worker'];
       }
     } else {
       if (currentUser?.role == 'Contractor Admin') {

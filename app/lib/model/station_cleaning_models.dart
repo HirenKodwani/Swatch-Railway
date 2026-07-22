@@ -294,6 +294,86 @@ class StationBillingPack {
   );
 }
 
+const gradeLabels = ['excellent', 'very_good', 'good', 'average', 'poor'];
+const gradeDisplayNames = {
+  'excellent': 'Excellent',
+  'very_good': 'Very Good',
+  'good': 'Good',
+  'average': 'Average',
+  'poor': 'Poor',
+};
+const gradeScores = {
+  'excellent': 5,
+  'very_good': 4,
+  'good': 3,
+  'average': 2,
+  'poor': 1,
+};
+
+const sectionConfig = {
+  'floor': {
+    'displayName': 'Floor',
+    'icon': 'floor',
+    'parameters': ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'],
+  },
+  'stairs': {
+    'displayName': 'Stairs',
+    'icon': 'stairs',
+    'parameters': ['shineLevel', 'dustLevel', 'footMarks', 'panGhutkaStains', 'birdDroppings'],
+  },
+  'wallCladdings': {
+    'displayName': 'Wall & Claddings',
+    'icon': 'wall',
+    'parameters': ['shineLevel', 'dustLevel', 'panGhutkaStains', 'birdDroppings'],
+  },
+  'steelWorks': {
+    'displayName': 'Steel Works',
+    'icon': 'steel',
+    'parameters': ['shineLevel', 'birdDroppings', 'fingerPalmMarks', 'dustLevel', 'waterHardnessMarks'],
+  },
+};
+
+const paramDisplayNames = {
+  'shineLevel': 'Shine Level',
+  'dustLevel': 'Dust Level',
+  'footMarks': 'Foot Marks',
+  'panGhutkaStains': 'Pan & Ghutka Stains',
+  'birdDroppings': 'Bird Droppings',
+  'fingerPalmMarks': 'Finger/Palm Marks',
+  'waterHardnessMarks': 'Water Hardness Marks',
+};
+
+const paramHints = {
+  'shineLevel': 'Gloss meter at multiple locations',
+  'dustLevel': 'White blotting paper test',
+  'footMarks': 'Count per sqm',
+  'panGhutkaStains': 'Visual inspection',
+  'birdDroppings': 'Visual inspection',
+  'fingerPalmMarks': 'Visual inspection',
+  'waterHardnessMarks': 'Visual inspection',
+};
+
+String numericToGrade(double avg) {
+  if (avg >= 4.5) return 'excellent';
+  if (avg >= 3.5) return 'very_good';
+  if (avg >= 2.5) return 'good';
+  if (avg >= 1.5) return 'average';
+  return 'poor';
+}
+
+int? gradeToScore(String? grade) => gradeScores[grade];
+
+double? sectionAverage(Map<String, dynamic> parameters) {
+  double total = 0;
+  int count = 0;
+  for (final param in parameters.values) {
+    final grade = param['grade'] as String?;
+    final score = gradeScores[grade];
+    if (score != null) { total += score; count++; }
+  }
+  return count > 0 ? total / count : null;
+}
+
 class StationInspection {
   final String uid;
   final String stationId;
@@ -305,9 +385,10 @@ class StationInspection {
   final String inspectorId;
   final String inspectorName;
   final String status;
-  final Map<String, dynamic> ratings;
+  final Map<String, dynamic> sections;
   final int? overallScore;
   final String? grade;
+  final String? overallGrade;
   final String remarks;
   final List<String> photos;
   final List<Deficiency> deficiencies;
@@ -327,9 +408,10 @@ class StationInspection {
     required this.inspectorId,
     required this.inspectorName,
     required this.status,
-    required this.ratings,
+    required this.sections,
     this.overallScore,
     this.grade,
+    this.overallGrade,
     required this.remarks,
     required this.photos,
     required this.deficiencies,
@@ -345,14 +427,15 @@ class StationInspection {
     stationName: json['stationName'] ?? '',
     platformId: json['platformId'],
     areaId: json['areaId'],
-    inspectionType: json['inspectionType'] ?? 'daily',
+    inspectionType: json['inspectionType'] ?? 'schedule',
     scheduledDate: json['scheduledDate'] ?? '',
     inspectorId: json['inspectorId'] ?? '',
     inspectorName: json['inspectorName'] ?? '',
     status: json['status'] ?? '',
-    ratings: json['ratings'] ?? {},
+    sections: json['sections'] ?? {},
     overallScore: json['overallScore'],
-    grade: json['grade'],
+    grade: json['grade'] ?? json['overallGrade'],
+    overallGrade: json['overallGrade'] ?? json['grade'],
     remarks: json['remarks'] ?? '',
     photos: List<String>.from(json['photos'] ?? []),
     deficiencies: (json['deficiencies'] as List?)?.map((e) => Deficiency.fromJson(e)).toList() ?? [],
