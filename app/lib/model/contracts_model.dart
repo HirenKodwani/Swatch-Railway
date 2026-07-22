@@ -19,6 +19,7 @@ class ContractModel {
   String? remarks;
   String? status;
   String? billingCycle;
+  String? contractType;
   bool scoringApplicability;
 
   String? repName;
@@ -58,6 +59,7 @@ class ContractModel {
     this.remarks,
     this.status,
     this.billingCycle,
+    this.contractType,
     this.scoringApplicability = true,
     this.repName,
     this.repDesignation,
@@ -124,6 +126,7 @@ class ContractModel {
       remarks: json['remarks'],
       status: json['status'],
       billingCycle: json['billingCycle'],
+      contractType: json['contractType'],
       scoringApplicability: json['scoringApplicability'] ?? true,
 
       repName: json['repName'] ?? rep['name'],
@@ -166,6 +169,7 @@ class ContractModel {
       'remarks': remarks,
       'status': status,
       'billingCycle': billingCycle,
+      'contractType': contractType,
       'scoringApplicability': scoringApplicability,
 
       'repName': repName,

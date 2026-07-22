@@ -182,7 +182,7 @@ class ContractService {
   }
 
   async getContracts(requesterData, query) {
-    const { status, stationId, entityId } = query;
+    const { status, stationId, entityId, contractType } = query;
     const { userType, zone: userZone, division: userDivision, role } = requesterData;
     const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
@@ -198,6 +198,7 @@ class ContractService {
 
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
     if (entityId && userType !== 'contractor') firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
+    if (contractType) firestoreQuery = firestoreQuery.where('contractType', '==', contractType);
 
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };

@@ -29,6 +29,7 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
   String? selectedDepot;
   String? _selectedFilterDivision;
   String? _selectedFilterDepot;
+  String? _selectedContractType;
 
   @override
   void initState() {
@@ -43,13 +44,13 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
     super.dispose();
   }
 
-  Future<void> _loadContracts() async {
+  Future<void> _loadContracts({String? contractType}) async {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     setState(() => _isLoading = true);
 
     try {
-      final activeContractsResponse = await ApiService.getActiveContracts();
-      final inactiveContractsResponse = await ApiService.getInActiveContracts();
+      final activeContractsResponse = await ApiService.getActiveContracts(contractType: contractType);
+      final inactiveContractsResponse = await ApiService.getInActiveContracts(contractType: contractType);
 
       List<ContractModel> allContracts = [
         ...activeContractsResponse,
@@ -153,6 +154,18 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _buildFilterSection(user!),
             ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                _buildTypeChip('All', null),
+                const SizedBox(width: 8),
+                _buildTypeChip('Station Cleaning', 'station_cleaning'),
+                const SizedBox(width: 8),
+                _buildTypeChip('OBHS', 'obhs'),
+              ],
+            ),
+          ),
           const SizedBox(height: 10),
           Expanded(
             child: Column(
@@ -203,6 +216,31 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
         ),
       )
           : null,
+    );
+  }
+
+  Widget _buildTypeChip(String label, String? value) {
+    final selected = _selectedContractType == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedContractType = value);
+        _loadContracts(contractType: value);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF1565C0) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.black87,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 13,
+          ),
+        ),
+      ),
     );
   }
 
@@ -427,7 +465,16 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
                     ],
                   ),
                 ),
-                _statusPill(c),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _statusPill(c),
+                    if (c.contractType != null) ...[
+                      const SizedBox(height: 4),
+                      _typeBadge(c.contractType!),
+                    ],
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -498,6 +545,27 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _typeBadge(String type) {
+    final display = type == 'station_cleaning' ? 'Station Cleaning' : 'OBHS';
+    final color = type == 'station_cleaning' ? Colors.teal : Colors.indigo;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        display,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

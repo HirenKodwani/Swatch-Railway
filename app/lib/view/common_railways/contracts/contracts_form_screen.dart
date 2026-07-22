@@ -122,6 +122,9 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         : null;
 
     selectedStatus = c.status;
+    selectedContractType = c.contractType != null
+        ? (c.contractType == 'station_cleaning' ? 'Station Cleaning' : 'OBHS')
+        : null;
     repNameController.text = c.repName ?? '';
     repDesignationController.text = c.repDesignation ?? '';
     repMobileController.text = c.repMobile ?? '';

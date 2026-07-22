@@ -711,10 +711,12 @@ class ApiService {
     }
   }
 
-  static Future<List<ContractModel>> getActiveContracts() async {
+  static Future<List<ContractModel>> getActiveContracts({String? contractType}) async {
     final token = await getToken();
+    String url = '$baseUrl/api/contracts?status=Active';
+    if (contractType != null) url += '&contractType=$contractType';
     final response = await http.get(
-      Uri.parse('$baseUrl/api/contracts?status=Active'),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -729,10 +731,12 @@ class ApiService {
     }
   }
 
-  static Future<List<ContractModel>> getInActiveContracts() async {
+  static Future<List<ContractModel>> getInActiveContracts({String? contractType}) async {
     final token = await getToken();
+    String url = '$baseUrl/api/contracts?status=Inactive';
+    if (contractType != null) url += '&contractType=$contractType';
     final response = await http.get(
-      Uri.parse('$baseUrl/api/contracts?status=Inactive'),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
