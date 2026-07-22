@@ -65,23 +65,28 @@ class UserService {
       }
       entityData = entityDoc.data();
       const userRoleLower = role.toLowerCase().replace(/_/g, " ");
+      const creatorRoleUpper = (creatorRole || '').toUpperCase().replace(/\s+/g, '_');
+      const bypassRoles = ['SUPER_ADMIN', 'COMPANY_MASTER', 'ADMIN'];
+      const isCreatorSuperAdmin = bypassRoles.includes(creatorRoleUpper);
       if ((!userRoleLower.includes("super admin") && userRoleLower.includes("admin")) || userRoleLower.includes('supervisor')) {
-        if (!zone || !division) {
-          throw new ValidationError("Zone and Division are mandatory to check Active Contracts.");
-        }
-        console.log(`(CreateUser) Checking Active Contract for Entity: ${entityId}`);
-        const contractSnapshot = await db.collection('contracts')
-          .where('entityId', '==', entityId)
-          .get();
-          
-        const invalidStatuses = ['Expired', 'EXPIRED', 'REJECTED', 'rejected', 'SUSPENDED', 'suspended'];
-        const hasValidContract = contractSnapshot.docs.some(doc => {
-          const d = doc.data();
-          return !invalidStatuses.includes(d.status) && d.zone === zone && d.division === division;
-        });
+        if (!isCreatorSuperAdmin) {
+          if (!zone || !division) {
+            throw new ValidationError("Zone and Division are mandatory to check Active Contracts.");
+          }
+          console.log(`(CreateUser) Checking Active Contract for Entity: ${entityId}`);
+          const contractSnapshot = await db.collection('contracts')
+            .where('entityId', '==', entityId)
+            .get();
+            
+          const invalidStatuses = ['Expired', 'EXPIRED', 'REJECTED', 'rejected', 'SUSPENDED', 'suspended'];
+          const hasValidContract = contractSnapshot.docs.some(doc => {
+            const d = doc.data();
+            return !invalidStatuses.includes(d.status) && d.zone === zone && d.division === division;
+          });
 
-        if (!hasValidContract) {
-          throw new ForbiddenError(`Cannot create ${role}. No valid Contract found for this Company in Zone: ${zone}, Division: ${division}. Please ensure a contract exists and is not expired or rejected.`);
+          if (!hasValidContract) {
+            throw new ForbiddenError(`Cannot create ${role}. No valid Contract found for this Company in Zone: ${zone}, Division: ${division}. Please ensure a contract exists and is not expired or rejected.`);
+          }
         }
       }
     }
