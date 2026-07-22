@@ -3,7 +3,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../errors/index.j
 
 class ContractService {
   async createContract(creatorData, body) {
-    const { contractNumber, contractName, entityId, stationIds: reqStationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
+    const { contractNumber, contractName, entityId, stationIds: reqStationIds, trainIds: reqTrainIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
     const { uid, name, fullName, email, role } = creatorData;
     const creatorName = fullName || name || email || role || 'Unknown';
 
@@ -28,10 +28,13 @@ class ContractService {
     }
     const entityName = entityData.companyName;
 
-    // Determine stations: Station Cleaning = auto from division; OBHS = user-selected from request
+    // Determine assignment: Station Cleaning = stations from division; OBHS = trains from request
     const isStationCleaning = contractType === 'station_cleaning';
+    const isOBHS = contractType === 'obhs';
     const stationNames = [];
     let stationIds = [];
+    let trainIds = [];
+    let trainNames = [];
     let effectiveZone = zone || '';
 
     if (isStationCleaning) {
@@ -51,6 +54,19 @@ class ContractService {
         throw new ValidationError("No stations found in the selected division. Add stations first.");
       }
       effectiveZone = zone || stationsSnap.docs[0]?.data().zone || '';
+    } else if (isOBHS) {
+      trainIds = reqTrainIds || [];
+      if (trainIds.length === 0) {
+        throw new ValidationError("Please select at least one train for OBHS contract.");
+      }
+      for (const tid of trainIds) {
+        const snap = await db.collection('trains').doc(tid).get();
+        if (snap.exists) {
+          const tData = snap.data();
+          trainNames.push(tData.trainName || tData.trainNo || tid);
+          if (!effectiveZone) effectiveZone = tData.zone;
+        } else throw new NotFoundError(`Train ${tid} not found.`);
+      }
     } else {
       stationIds = reqStationIds || [];
       if (stationIds.length === 0) {
@@ -70,10 +86,20 @@ class ContractService {
       .where('status', '==', 'Active').get();
     if (!duplicateSnap.empty) {
       for (const doc of duplicateSnap.docs) {
-        const existingStations = doc.data().stationIds || [];
-        const overlap = existingStations.filter(s => stationIds.includes(s));
-        if (overlap.length > 0) {
-          throw new ValidationError(`This Contractor already has an active contract covering station(s): ${overlap.join(', ')}.`);
+        const d = doc.data();
+        if (isStationCleaning || (!isOBHS && !contractType)) {
+          const existingStations = d.stationIds || [];
+          const overlap = existingStations.filter(s => stationIds.includes(s));
+          if (overlap.length > 0) {
+            throw new ValidationError(`This Contractor already has an active contract covering station(s): ${overlap.join(', ')}.`);
+          }
+        }
+        if (isOBHS) {
+          const existingTrains = d.trainIds || [];
+          const overlap = existingTrains.filter(t => trainIds.includes(t));
+          if (overlap.length > 0) {
+            throw new ValidationError(`This Contractor already has an active contract covering train(s): ${overlap.join(', ')}.`);
+          }
         }
       }
     }
@@ -84,7 +110,7 @@ class ContractService {
     const endMs = new Date(endDate).getTime();
     const durationDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
 
-    const savedDivision = isStationCleaning ? division : (division || '');
+    const savedDivision = division || '';
 
     const docRef = db.collection('contracts').doc();
     await docRef.set({
@@ -95,6 +121,8 @@ class ContractService {
       entityName,
       stationIds,
       stationNames,
+      trainIds,
+      trainNames,
       startDate,
       endDate,
       contractDuration: `${durationDays} days`,

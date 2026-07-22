@@ -1,5 +1,6 @@
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/model/train_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -43,7 +44,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
   List<String> selectedWorkCategories = [];
   List<String> selectedStationIds = [];
   List<String> selectedStationNames = [];
+  List<String> selectedTrainIds = [];
+  List<String> selectedTrainNames = [];
   List<Station> _availableStations = [];
+  List<TrainModel> _availableTrains = [];
   bool _stationsLoading = false;
   String? selectedBillingCycle;
   String? selectedContractType;
@@ -74,6 +78,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         });
       }
       _loadStations();
+      _loadTrains();
     });
   }
 
@@ -83,6 +88,12 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
       _availableStations = await ApiService.getStations(active: true, division: division);
     } catch (_) {}
     if (mounted) setState(() => _stationsLoading = false);
+  }
+
+  Future<void> _loadTrains() async {
+    try {
+      _availableTrains = await ApiService.getActiveTrains();
+    } catch (_) {}
   }
 
   void _loadContractData() {
@@ -242,7 +253,13 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                                 'Select type',
                                 ['Station Cleaning', 'OBHS'],
                                 selectedContractType,
-                                (v) => setState(() => selectedContractType = v),
+                                (v) => setState(() {
+                                  selectedContractType = v;
+                                  selectedStationIds = [];
+                                  selectedStationNames = [];
+                                  selectedTrainIds = [];
+                                  selectedTrainNames = [];
+                                }),
                                 enabled: !isEditMode,
                               ),
                             ),
@@ -288,13 +305,37 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                               (v) => setState(() => selectedStatus = v),
                           enabled: true,
                         ),
-                        if (selectedContractType != 'Station Cleaning')
+                        // OBHS → train picker
+                        if (selectedContractType == 'OBHS') ...[
                           const SizedBox(height: 12),
-                        if (selectedContractType != 'Station Cleaning')
-                          const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
-                        if (selectedContractType != 'Station Cleaning')
+                          const Text('Assigned Trains *', style: TextStyle(fontWeight: FontWeight.w500)),
                           const SizedBox(height: 4),
-                        if (selectedContractType != 'Station Cleaning')
+                          _buildMultiSelectDropdown(
+                            "Trains",
+                            "Select trains",
+                            _availableTrains.map((t) => '${t.trainNo ?? ""} - ${t.trainName ?? ""}').toList(),
+                            selectedTrainNames,
+                            (values) {
+                              setState(() {
+                                selectedTrainNames = values;
+                                selectedTrainIds = values.map((v) {
+                                  final match = _availableTrains.firstWhere(
+                                    (t) => '${t.trainNo ?? ""} - ${t.trainName ?? ""}' == v,
+                                    orElse: () => _availableTrains.first,
+                                  );
+                                  return match.uid ?? '';
+                                }).toList();
+                              });
+                            },
+                            enabled: !isEditMode,
+                          ),
+                        ],
+                        // Station Cleaning → no picker (auto-populated from division)
+                        // Other / unselected → station picker
+                        if (selectedContractType != 'Station Cleaning' && selectedContractType != 'OBHS') ...[
+                          const SizedBox(height: 12),
+                          const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
                           _stationsLoading
                               ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
                               : AbsorbPointer(
@@ -322,6 +363,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                                     ),
                                   ),
                                 ),
+                        ],
                         _buildTextField(
                           "Remarks",
                           "Notes about scope or location",
@@ -874,7 +916,11 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         _showErrorSnackBar("Please select at least one work category");
         return;
       }
-      if (selectedContractType != 'Station Cleaning' && selectedStationIds.isEmpty) {
+      if (selectedContractType == 'OBHS' && selectedTrainIds.isEmpty) {
+        _showErrorSnackBar("Please select at least one train");
+        return;
+      }
+      if (selectedContractType != 'Station Cleaning' && selectedContractType != 'OBHS' && selectedStationIds.isEmpty) {
         _showErrorSnackBar("Please select at least one station");
         return;
       }
@@ -911,7 +957,8 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           zone: selectedZone!,
           division: selectedDivision,
           depot: selectedDepot,
-          stationIds: selectedContractType != 'Station Cleaning' && selectedStationIds.isNotEmpty ? selectedStationIds : null,
+          stationIds: selectedContractType == 'Station Cleaning' ? null : (selectedStationIds.isNotEmpty ? selectedStationIds : null),
+          trainIds: selectedContractType == 'OBHS' ? (selectedTrainIds.isNotEmpty ? selectedTrainIds : null) : null,
           startDate: formattedStartDate,
           endDate: formattedEndDate,
           contractValue: double.tryParse(contractValueController.text) ?? 0,
