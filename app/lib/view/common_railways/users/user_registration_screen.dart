@@ -337,43 +337,96 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   }
 
   Widget _buildContractStationDropdown() {
-    final stationIds = (_selectedContractData!['stationIds'] as List?)?.cast<String>() ?? [];
-    final stationNames = (_selectedContractData!['stationNames'] as List?)?.cast<String>() ?? [];
+    final contractStationIds = (_selectedContractData!['stationIds'] as List?)?.cast<String>() ?? [];
+    final contractStationNames = (_selectedContractData!['stationNames'] as List?)?.cast<String>() ?? [];
+    final division = _selectedContractData!['division'] as String?;
 
-    if (stationIds.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(bottom: 12),
-        child: Text('No stations assigned to this contract', style: TextStyle(color: Colors.grey)),
+    if (contractStationIds.isNotEmpty) {
+      final stationOptions = List.generate(contractStationIds.length, (i) {
+        return <String, String>{
+          'id': contractStationIds[i],
+          'name': i < contractStationNames.length ? contractStationNames[i] : contractStationIds[i],
+        };
+      });
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DropdownButtonFormField<String>(
+          value: _selectedStationId != null && contractStationIds.contains(_selectedStationId) ? _selectedStationId : null,
+          decoration: const InputDecoration(
+            labelText: 'Assigned Station *',
+            border: OutlineInputBorder(),
+          ),
+          items: stationOptions.map((opt) => DropdownMenuItem<String>(
+            value: opt['id'],
+            child: Text(opt['name'] as String),
+          )).toList(),
+          validator: (v) => v == null ? 'Select station' : null,
+          onChanged: (v) {
+            setState(() {
+              _selectedStationId = v;
+              _selectedContractStationIds = v != null ? [v] : [];
+            });
+          },
+        ),
       );
     }
 
-    final stationOptions = List.generate(stationIds.length, (i) {
-      return <String, String>{
-        'id': stationIds[i],
-        'name': i < stationNames.length ? stationNames[i] : stationIds[i],
-      };
-    });
+    return _buildDivisionStationDropdown(division);
+  }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        value: _selectedStationId != null && stationIds.contains(_selectedStationId) ? _selectedStationId : null,
-        decoration: const InputDecoration(
-          labelText: 'Assigned Station *',
-          border: OutlineInputBorder(),
-        ),
-        items: stationOptions.map((opt) => DropdownMenuItem<String>(
-          value: opt['id'],
-          child: Text(opt['name'] as String),
-        )).toList(),
-        validator: (v) => v == null ? 'Select station' : null,
-        onChanged: (v) {
-          setState(() {
-            _selectedStationId = v;
-            _selectedContractStationIds = v != null ? [v] : [];
-          });
-        },
-      ),
+  Widget _buildDivisionStationDropdown(String? division) {
+    if (division == null || division.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: Text('No division assigned to this contract', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return FutureBuilder<List<Station>>(
+      future: ApiService.getStations(division: division, active: true),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        if (snap.hasError) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text('Error loading stations', style: TextStyle(color: Colors.red)),
+          );
+        }
+        final stations = snap.data ?? [];
+        if (stations.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text('No stations found in this division', style: TextStyle(color: Colors.grey)),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: DropdownButtonFormField<String>(
+            value: _selectedStationId != null && stations.any((s) => s.uid == _selectedStationId) ? _selectedStationId : null,
+            decoration: const InputDecoration(
+              labelText: 'Assigned Station *',
+              border: OutlineInputBorder(),
+            ),
+            items: stations.map((s) => DropdownMenuItem<String>(
+              value: s.uid,
+              child: Text(s.stationName),
+            )).toList(),
+            validator: (v) => v == null ? 'Select station' : null,
+            onChanged: (v) {
+              setState(() {
+                _selectedStationId = v;
+                _selectedContractStationIds = v != null ? [v] : [];
+              });
+            },
+          ),
+        );
+      },
     );
   }
 
