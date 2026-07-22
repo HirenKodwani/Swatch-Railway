@@ -64,7 +64,8 @@ export const getRailwaySupervisors = asyncHandler(async (req, res) => {
     division = req.query.division || division;
   }
   
-  const result = await userService.getRailwaySupervisors(zone, division, role);
+  const module = req.query.module || null;
+  const result = await userService.getRailwaySupervisors(zone, division, role, module);
   res.status(200).json(result);
 });
 

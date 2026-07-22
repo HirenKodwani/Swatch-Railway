@@ -1260,11 +1260,14 @@ class ApiService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getSupervisors() async {
+  static Future<List<Map<String, dynamic>>> getSupervisors({String? module}) async {
     try {
       final token = await getToken();
+      final params = <String, String>{};
+      if (module != null) params['module'] = module;
+      final uri = Uri.parse('$baseUrl/api/users/railway-supervisors').replace(queryParameters: params.isNotEmpty ? params : null);
       final response = await http.get(
-        Uri.parse('$baseUrl/api/users/railway-supervisors'),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',

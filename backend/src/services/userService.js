@@ -5,7 +5,7 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
+    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId, domain } = userData;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
     const creatorName = creatorNameAuth || name || creatorRole || 'Admin';
@@ -126,6 +126,7 @@ class UserService {
         stationId: stationId || null,
         platformId: platformId || null,
         areaId: areaId || null,
+        domain: domain || null,
         createdBy: creatorId,
         createdByName: creatorName,
         status: initialStatus,
@@ -704,7 +705,7 @@ class UserService {
     return { count: workersList.length, workers: workersList };
   }
 
-  async getRailwaySupervisors(zone, division, role) {
+  async getRailwaySupervisors(zone, division, role, module) {
     const userRole = (role || "").toUpperCase().replace(/\s+/g, '_');
     
     const ROLE_HIERARCHY = {
@@ -761,14 +762,19 @@ class UserService {
       const data = doc.data();
       const normalizedRole = (data.role || '').toUpperCase().replace(/\s+/g, '_');
       
-      if (allowedRoles.includes(normalizedRole)) {
-        supervisorList.push({
+      if (!allowedRoles.includes(normalizedRole)) return;
+
+      if (module) {
+        const userDomain = data.domain || null;
+        if (userDomain && userDomain !== module) return;
+      }
+
+      supervisorList.push({
           uid: data.uid,
           fullName: data.fullName,
           division: data.division,
           depot: data.depot
         });
-      }
     });
 
     return { count: supervisorList.length, supervisors: supervisorList };
