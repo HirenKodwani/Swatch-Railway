@@ -50,9 +50,6 @@ class ContractService {
         stationIds.push(doc.id);
         stationNames.push(doc.data().stationName || doc.id);
       });
-      if (stationIds.length === 0) {
-        throw new ValidationError("No stations found in the selected division. Add stations first.");
-      }
       effectiveZone = zone || stationsSnap.docs[0]?.data().zone || '';
     } else if (isOBHS) {
       trainIds = reqTrainIds || [];
@@ -87,14 +84,14 @@ class ContractService {
     if (!duplicateSnap.empty) {
       for (const doc of duplicateSnap.docs) {
         const d = doc.data();
-        if (isStationCleaning || (!isOBHS && !contractType)) {
+        if ((isStationCleaning || (!isOBHS && !contractType)) && stationIds.length > 0) {
           const existingStations = d.stationIds || [];
           const overlap = existingStations.filter(s => stationIds.includes(s));
           if (overlap.length > 0) {
             throw new ValidationError(`This Contractor already has an active contract covering station(s): ${overlap.join(', ')}.`);
           }
         }
-        if (isOBHS) {
+        if (isOBHS && trainIds.length > 0) {
           const existingTrains = d.trainIds || [];
           const overlap = existingTrains.filter(t => trainIds.includes(t));
           if (overlap.length > 0) {
@@ -144,7 +141,7 @@ class ContractService {
     });
 
     // Auto-create station-contractor mappings for station cleaning so contractor admin users see these stations
-    if (isStationCleaning) {
+    if (isStationCleaning && stationIds.length > 0) {
       const batch = db.batch();
       for (const sid of stationIds) {
         const mappingRef = db.collection('stationContractorMappings').doc();
