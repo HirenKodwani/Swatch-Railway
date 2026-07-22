@@ -299,7 +299,7 @@ class StationCleaningService {
     const now = new Date().toISOString();
     const scheduledTime = this._shiftDefaultTime(runData.shift);
     for (const plat of (platforms || [])) {
-      if (!plat.janitorId) continue;
+      if (!runData.supervisorId && !user?.uid) continue;
       const taskRef = db.collection('cleaningTasks').doc();
       const areaId = plat.areaId || `platform_${plat.platformNumber || 'unknown'}_${runData.stationId}`;
       const areaName = plat.areaName || (plat.platformNumber ? `Platform ${plat.platformNumber}` : 'Station Area');
@@ -310,8 +310,8 @@ class StationCleaningService {
         platformId: plat.platformNumber || '',
         areaId,
         areaName,
-        workerId: plat.janitorId,
-        workerName: plat.janitorName || '',
+        workerId: runData.supervisorId || (user && user.uid) || null,
+        workerName: runData.supervisorName || '',
         supervisorId: runData.supervisorId || (user && user.uid) || null,
         activityType: 'station_cleaning',
         frequency: runData.frequency || 'daily',
@@ -408,20 +408,6 @@ class StationCleaningService {
     supervisorSnap.forEach(d => {
       runsMap.set(d.id, { id: d.id, ...d.data() });
     });
-    
-    allRunsSnap.forEach(d => {
-      const runData = d.data();
-      if (runData.platforms && Array.isArray(runData.platforms)) {
-        const isAssigned = runData.platforms.some(p => p.janitorId === userId);
-        if (isAssigned && !runsMap.has(d.id)) {
-          const workerPlatforms = runData.platforms.filter(p => p.janitorId === userId);
-          runsMap.set(d.id, {
-            id: d.id,
-            ...runData,
-            platforms: workerPlatforms
-          });
-        }
-      }
     });
 
     const runs = Array.from(runsMap.values()).filter(r => r.status !== 'deleted');

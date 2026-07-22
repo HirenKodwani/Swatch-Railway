@@ -24,6 +24,8 @@ import 'zone/station_zones_screen.dart';
 import 'contractor/contractor_mapping_screen.dart';
 import 'worker_tasks/worker_task_view_screen.dart';
 import 'supervisor_review/supervisor_review_screen.dart';
+import 'execution/cs_field_execution_screen.dart';
+import 'supervisor_log/supervisor_daily_log_screen.dart';
 import 'hierarchical_dashboard/hierarchical_dashboard_screen.dart';
 import 'workforce/workforce_deployment_screen.dart';
 import '../common_railways/station_management/qr_code_screen.dart';
@@ -117,6 +119,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       case 'CONTRACTOR_ADMIN':
         return {0, 1, 2, 5, 8, 9, 13, 15, 16, 18, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
       case 'CONTRACTOR_SUPERVISOR':
+        return {0, 1, 14, 20, 30, 32};
       case 'WORKER':
       case 'RAILWAY_WORKER':
       case 'JANITOR':
@@ -165,6 +168,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 29
       _moduleCard(context, Icons.report_problem_outlined, 'Petty\nIssues', kWarningOrange, () => _openPettyIssues(context)), // 30
       _moduleCard(context, Icons.checklist, 'Task\nTypes', Colors.blue.shade700, () => _openTaskTypes(context)),            // 31
+      _moduleCard(context, Icons.book, 'Daily\nLog', Colors.blue, () => _openDailyLog(context)),                    // 32
     ];
 
     final cards = <Widget>[];
@@ -419,16 +423,11 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   }
 
   void _openWorkerTasks(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => WorkerTaskViewScreen(
-          workerId: user?.uid ?? '',
-          workerName: user?.fullName ?? '',
-        ),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const CSFieldExecutionScreen()));
+  }
+
+  void _openDailyLog(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const SupervisorDailyLogScreen()));
   }
 
   void _openSupervisorReview(BuildContext context) {

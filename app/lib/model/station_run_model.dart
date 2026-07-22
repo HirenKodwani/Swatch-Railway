@@ -48,6 +48,8 @@ class StationCleaningRunModel {
   String status;
   String? frequency;
   List<StationPlatformAssignment> platforms;
+  String? supervisorId;
+  String? supervisorName;
   String? createdAt;
   String? updatedAt;
 
@@ -61,6 +63,8 @@ class StationCleaningRunModel {
     this.status = 'Pending',
     this.frequency = 'daily',
     this.platforms = const [],
+    this.supervisorId,
+    this.supervisorName,
     this.createdAt,
     this.updatedAt,
   });
@@ -81,6 +85,8 @@ class StationCleaningRunModel {
       status: json['status'] ?? 'Pending',
       frequency: json['frequency'] ?? 'daily',
       platforms: parsedPlatforms,
+      supervisorId: json['supervisorId'],
+      supervisorName: json['supervisorName'],
       createdAt: json['createdAt'],
       updatedAt: json['updatedAt'],
     );
