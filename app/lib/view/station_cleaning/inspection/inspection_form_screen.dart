@@ -6,8 +6,8 @@ import 'package:crm_train/repositories/inspection_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,7 +38,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   final Map<String, Map<String, String?>> _sectionGrades = {};
   final Map<String, Map<String, TextEditingController>> _sectionRemarks = {};
 
-  List<File> _photos = [];
   bool _uploadingPhoto = false;
 
   bool get isEdit => widget.inspection != null;
@@ -151,7 +150,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({
           'image': base64Encode(bytes),
-          'fileName': 'inspection_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          'fileName': 'deficiency_${DateTime.now().millisecondsSinceEpoch}.jpg',
         }),
       );
       if (response.statusCode == 200) {
@@ -240,24 +239,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     setState(() => _isLoading = true);
     try {
       final sections = _buildSectionsPayload();
-      List<String> photoUrls = [];
-      final token = await _getToken();
-      for (final photo in _photos) {
-        if (token == null) break;
-        final bytes = await photo.readAsBytes();
-        final resp = await http.post(
-          Uri.parse('${ApiService.baseUrl}/api/evidence/upload/base64'),
-          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
-          body: jsonEncode({'image': base64Encode(bytes), 'fileName': 'rating_${DateTime.now().millisecondsSinceEpoch}.jpg'}),
-        );
-        if (resp.statusCode == 200) {
-          final d = jsonDecode(resp.body);
-          photoUrls.add(d['url'] ?? d['imageUrl'] ?? '');
-        }
-      }
       await InspectionRepository.submitRatings(widget.inspection!.uid, {
         'sections': sections,
-        'photos': photoUrls.isNotEmpty ? photoUrls : (widget.inspection?.photos ?? []),
         'remarks': _remarksCtrl.text.trim(),
       });
       if (mounted) {
@@ -378,13 +361,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     }
   }
 
-  Future<void> _pickRatingPhoto() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
-    if (picked != null) {
-      setState(() => _photos.add(File(picked.path)));
-    }
-  }
 
   void _addDeficiency() {
     _defDescCtrl.clear();
@@ -819,30 +795,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Evidence Photos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: _uploadingPhoto ? null : _pickRatingPhoto,
-                              icon: _uploadingPhoto
-                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Icon(Icons.camera_alt, size: 18),
-                              label: Text(_photos.isEmpty ? 'Add Photos' : '${_photos.length} photo(s)'),
-                            ),
-                            if (_photos.isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              ..._photos.map((f) => Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Image.file(f, width: 40, height: 40, fit: BoxFit.cover),
-                                ),
-                              )),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           height: 48,
