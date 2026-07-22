@@ -57,12 +57,15 @@ class _ContractDropdownState extends State<ContractDropdown> {
       value: selectedContractId,
       hint: const Text("Select Contract"),
       isExpanded: true,
-      items: contracts.map((contract) {
-        return DropdownMenuItem(
-          value: contract['uid'],
-          child: Text(_contractDisplayName(contract)),
-        );
-      }).toList(),
+      items: contracts
+        .where((c) => c['uid'] != null)
+        .map<DropdownMenuItem<String>>((contract) {
+          final uid = contract['uid'] as String;
+          return DropdownMenuItem<String>(
+            value: uid,
+            child: Text(_contractDisplayName(contract)),
+          );
+        }).toList(),
       onChanged: (value) {
         setState(() => selectedContractId = value);
         if (value != null) {
