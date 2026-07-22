@@ -29,8 +29,13 @@ class ContractService {
     const entityName = entityData.companyName;
 
     const stationNames = [];
+    const effectiveDivision = division || '';
+    if (!effectiveDivision) {
+      throw new ValidationError("Division is required to determine contract stations.");
+    }
+
     const stationsSnap = await db.collection('stations')
-      .where('division', '==', division || inferredDivision)
+      .where('division', '==', effectiveDivision)
       .limit(500)
       .get();
     const stationIds = [];
@@ -87,11 +92,27 @@ class ContractService {
       billingCycle: billingCycle || 'monthly',
       contractType: contractType || null,
       zone: effectiveZone,
-      division: division || '',
+      division: effectiveDivision,
       createdAt: db.Timestamp(),
       createdBy: uid,
       createdByName: creatorName
     });
+
+    // Auto-create station-contractor mappings so contractor admin users see these stations
+    const batch = db.batch();
+    for (const sid of stationIds) {
+      const mappingRef = db.collection('stationContractorMappings').doc();
+      batch.set(mappingRef, {
+        uid: mappingRef.id,
+        stationId: sid,
+        contractorId: entityId,
+        contractId: docRef.id,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+    await batch.commit();
 
     return { message: 'Contract created successfully', uid: docRef.id };
   }
