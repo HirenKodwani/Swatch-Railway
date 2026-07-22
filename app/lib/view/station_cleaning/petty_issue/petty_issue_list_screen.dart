@@ -64,7 +64,7 @@ class _PettyIssueListScreenState extends State<PettyIssueListScreen> {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null) return false;
     final r = (user.role ?? '').toUpperCase().replaceAll(' ', '_');
-    return ['SUPER_ADMIN', 'ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'RAILWAY_ADMIN', 'STATION_MASTER', 'AREA_MASTER', 'CONTRACTOR_MASTER'].contains(r);
+    return ['SUPER_ADMIN', 'ADMIN', 'COMPANY_MASTER', 'RAILWAY_ADMIN', 'CONTRACTOR_ADMIN', 'STATION_MASTER', 'AREA_MASTER'].contains(r);
   }
 
   @override

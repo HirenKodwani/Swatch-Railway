@@ -157,9 +157,11 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
     const perms = {
       'SUPER_ADMIN': {'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
       'COMPANY_MASTER': {'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
-      'RAILWAY_MASTER': {'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'RAILWAY_MASTER': {'VIEW'},
       'ADMIN': {'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
       'RAILWAY_ADMIN': {'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
+      'CONTRACTOR_MASTER': {'VIEW'},
+      'CONTRACTOR_ADMIN': {'VIEW', 'MANAGE', 'APPROVE'},
       'STATION_MASTER': {'VIEW', 'APPROVE'},
       'AREA_MASTER': {'VIEW'},
     };

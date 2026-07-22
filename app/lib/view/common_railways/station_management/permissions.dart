@@ -2,15 +2,15 @@ class StationCleaningPermissions {
   static String normalize(String role) => role.toUpperCase().replaceAll(' ', '_');
 
   static bool isSuperAdminOrAdmin(String role) {
-    return ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN'].contains(normalize(role));
+    return ['SUPER_ADMIN', 'COMPANY_MASTER', 'ADMIN', 'RAILWAY_ADMIN', 'CONTRACTOR_ADMIN'].contains(normalize(role));
   }
 
   static bool isSupervisor(String role) {
-    return normalize(role) == 'RAILWAY_SUPERVISOR' || normalize(role) == 'CONTRACTOR_SUPERVISOR';
+    return normalize(role) == 'RAILWAY_SUPERVISOR';
   }
 
   static bool isWorker(String role) {
-    return ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(normalize(role));
+    return ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT', 'CONTRACTOR_SUPERVISOR'].contains(normalize(role));
   }
 
   static bool isStationOrAreaMaster(String role) {

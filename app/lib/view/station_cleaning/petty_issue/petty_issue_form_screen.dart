@@ -179,14 +179,15 @@ class _PettyIssueFormScreenState extends State<PettyIssueFormScreen> {
     const perms = {
       'SUPER_ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
       'COMPANY_MASTER': {'MANAGE', 'VIEW', 'RESOLVE'},
-      'RAILWAY_MASTER': {'MANAGE', 'VIEW', 'RESOLVE'},
+      'RAILWAY_MASTER': {'VIEW'},
       'ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
       'RAILWAY_ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
+      'CONTRACTOR_MASTER': {'VIEW'},
       'STATION_MASTER': {'MANAGE', 'VIEW', 'RESOLVE'},
       'AREA_MASTER': {'MANAGE', 'VIEW', 'RESOLVE'},
-      'RAILWAY_SUPERVISOR': {'VIEW', 'RESOLVE'},
+      'RAILWAY_SUPERVISOR': {'MANAGE', 'VIEW', 'RESOLVE'},
+      'CONTRACTOR_ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
       'CONTRACTOR_SUPERVISOR': {'VIEW'},
-      'CONTRACTOR_ADMIN': {'VIEW'},
     };
     return (perms[role] ?? <String>{}).contains(permission);
   }
