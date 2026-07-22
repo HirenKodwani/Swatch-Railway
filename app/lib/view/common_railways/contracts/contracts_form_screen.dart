@@ -1,4 +1,5 @@
 import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/model/station_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -40,6 +41,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
   String? selectedStatus;
   String? selectedIDType;
   List<String> selectedWorkCategories = [];
+  List<String> selectedStationIds = [];
+  List<String> selectedStationNames = [];
+  List<Station> _availableStations = [];
+  bool _stationsLoading = false;
   String? selectedBillingCycle;
   String? selectedContractType;
   double contractValue = 0;
@@ -68,7 +73,16 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           selectedDepot = user?.depot;
         });
       }
+      _loadStations();
     });
+  }
+
+  Future<void> _loadStations({String? division}) async {
+    setState(() => _stationsLoading = true);
+    try {
+      _availableStations = await ApiService.getStations(active: true, division: division);
+    } catch (_) {}
+    if (mounted) setState(() => _stationsLoading = false);
   }
 
   void _loadContractData() {
@@ -274,6 +288,40 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                               (v) => setState(() => selectedStatus = v),
                           enabled: true,
                         ),
+                        if (selectedContractType != 'Station Cleaning')
+                          const SizedBox(height: 12),
+                        if (selectedContractType != 'Station Cleaning')
+                          const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
+                        if (selectedContractType != 'Station Cleaning')
+                          const SizedBox(height: 4),
+                        if (selectedContractType != 'Station Cleaning')
+                          _stationsLoading
+                              ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+                              : AbsorbPointer(
+                                  absorbing: isEditMode,
+                                  child: Opacity(
+                                    opacity: isEditMode ? 0.5 : 1.0,
+                                    child: _buildMultiSelectDropdown(
+                                      "Stations",
+                                      "Select stations",
+                                      _availableStations.map((s) => '${s.stationCode} - ${s.stationName}').toList(),
+                                      selectedStationNames,
+                                      (values) {
+                                        setState(() {
+                                          selectedStationNames = values;
+                                          selectedStationIds = values.map((v) {
+                                            final match = _availableStations.firstWhere(
+                                              (s) => '${s.stationCode} - ${s.stationName}' == v,
+                                              orElse: () => _availableStations.first,
+                                            );
+                                            return match.uid ?? match.stationCode;
+                                          }).toList();
+                                        });
+                                      },
+                                      enabled: !isEditMode,
+                                    ),
+                                  ),
+                                ),
                         _buildTextField(
                           "Remarks",
                           "Notes about scope or location",
@@ -826,6 +874,10 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
         _showErrorSnackBar("Please select at least one work category");
         return;
       }
+      if (selectedContractType != 'Station Cleaning' && selectedStationIds.isEmpty) {
+        _showErrorSnackBar("Please select at least one station");
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -859,6 +911,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           zone: selectedZone!,
           division: selectedDivision,
           depot: selectedDepot,
+          stationIds: selectedContractType != 'Station Cleaning' && selectedStationIds.isNotEmpty ? selectedStationIds : null,
           startDate: formattedStartDate,
           endDate: formattedEndDate,
           contractValue: double.tryParse(contractValueController.text) ?? 0,

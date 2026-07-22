@@ -3,7 +3,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../errors/index.j
 
 class ContractService {
   async createContract(creatorData, body) {
-    const { contractNumber, contractName, entityId, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
+    const { contractNumber, contractName, entityId, stationIds: reqStationIds, startDate, endDate, contractValue, workCategories, remarks, status, repName, repDesignation, repMobile, repEmail, repIdProofType, repIdProofNumber, assignedRailwayOfficials, assignedContractorUsers, scoringApplicability, billingCycle, zone, division, contractType } = body;
     const { uid, name, fullName, email, role } = creatorData;
     const creatorName = fullName || name || email || role || 'Unknown';
 
@@ -28,23 +28,41 @@ class ContractService {
     }
     const entityName = entityData.companyName;
 
+    // Determine stations: Station Cleaning = auto from division; OBHS = user-selected from request
+    const isStationCleaning = contractType === 'station_cleaning';
     const stationNames = [];
-    const effectiveDivision = division || '';
-    if (!effectiveDivision) {
-      throw new ValidationError("Division is required to determine contract stations.");
-    }
+    let stationIds = [];
+    let effectiveZone = zone || '';
 
-    const stationsSnap = await db.collection('stations')
-      .where('division', '==', effectiveDivision)
-      .limit(500)
-      .get();
-    const stationIds = [];
-    stationsSnap.forEach(doc => {
-      stationIds.push(doc.id);
-      stationNames.push(doc.data().stationName || doc.id);
-    });
-    if (stationIds.length === 0) {
-      throw new ValidationError("No stations found in the selected division. Add stations first.");
+    if (isStationCleaning) {
+      const effectiveDivision = division || '';
+      if (!effectiveDivision) {
+        throw new ValidationError("Division is required for station cleaning contracts.");
+      }
+      const stationsSnap = await db.collection('stations')
+        .where('division', '==', effectiveDivision)
+        .limit(500)
+        .get();
+      stationsSnap.forEach(doc => {
+        stationIds.push(doc.id);
+        stationNames.push(doc.data().stationName || doc.id);
+      });
+      if (stationIds.length === 0) {
+        throw new ValidationError("No stations found in the selected division. Add stations first.");
+      }
+      effectiveZone = zone || stationsSnap.docs[0]?.data().zone || '';
+    } else {
+      stationIds = reqStationIds || [];
+      if (stationIds.length === 0) {
+        throw new ValidationError("Please select at least one station for this contract.");
+      }
+      for (const sid of stationIds) {
+        const snap = await db.collection('stations').doc(sid).get();
+        if (snap.exists) {
+          stationNames.push(snap.data().stationName || sid);
+          if (!effectiveZone) effectiveZone = snap.data().zone;
+        } else throw new NotFoundError(`Station ${sid} not found.`);
+      }
     }
 
     const duplicateSnap = await db.collection('contracts')
@@ -66,8 +84,7 @@ class ContractService {
     const endMs = new Date(endDate).getTime();
     const durationDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
 
-    const inferredZone = stationsSnap.docs[0]?.data().zone || '';
-    const effectiveZone = zone || inferredZone;
+    const savedDivision = isStationCleaning ? division : (division || '');
 
     const docRef = db.collection('contracts').doc();
     await docRef.set({
@@ -92,27 +109,29 @@ class ContractService {
       billingCycle: billingCycle || 'monthly',
       contractType: contractType || null,
       zone: effectiveZone,
-      division: effectiveDivision,
+      division: savedDivision,
       createdAt: db.Timestamp(),
       createdBy: uid,
       createdByName: creatorName
     });
 
-    // Auto-create station-contractor mappings so contractor admin users see these stations
-    const batch = db.batch();
-    for (const sid of stationIds) {
-      const mappingRef = db.collection('stationContractorMappings').doc();
-      batch.set(mappingRef, {
-        uid: mappingRef.id,
-        stationId: sid,
-        contractorId: entityId,
-        contractId: docRef.id,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+    // Auto-create station-contractor mappings for station cleaning so contractor admin users see these stations
+    if (isStationCleaning) {
+      const batch = db.batch();
+      for (const sid of stationIds) {
+        const mappingRef = db.collection('stationContractorMappings').doc();
+        batch.set(mappingRef, {
+          uid: mappingRef.id,
+          stationId: sid,
+          contractorId: entityId,
+          contractId: docRef.id,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await batch.commit();
     }
-    await batch.commit();
 
     return { message: 'Contract created successfully', uid: docRef.id };
   }
