@@ -418,7 +418,6 @@ class StationCleaningService {
     supervisorSnap.forEach(d => {
       runsMap.set(d.id, { id: d.id, ...d.data() });
     });
-    });
 
     const runs = Array.from(runsMap.values()).filter(r => r.status !== 'deleted');
     return { count: runs.length, runs };
