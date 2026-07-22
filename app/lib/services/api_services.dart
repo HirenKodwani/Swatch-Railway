@@ -63,6 +63,8 @@ class ApiService {
     String? division,
     String? depot,
     String? entityId,
+    String? contractId,
+    List<String>? stations,
     String? stationId,
     String? areaId,
     String? platformId,
@@ -92,6 +94,8 @@ class ApiService {
           'division': division,
           'depot': depot,
           'entityId': entityId,
+          'contractId': contractId,
+          'stations': stations,
           'stationId': stationId,
           'areaId': areaId,
           'platformId': platformId,
@@ -417,6 +421,23 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Error fetching pending users: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getContractsForDropdown() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/contracts/for-user-creation'),
+        headers: { 'Authorization': 'Bearer $token' },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['contracts'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      return [];
     }
   }
 

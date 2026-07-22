@@ -14,6 +14,10 @@ class UserRegistrationModel {
 
   final String? entityId;
   final EntityModel? entityDetails;
+  final String? contractId;
+  final String? contractType;
+  final String? domain;
+  final List<String> stations;
 
   final String? zone;
   final String? division;
@@ -57,6 +61,10 @@ class UserRegistrationModel {
     this.designation,
     this.entityId,
     this.entityDetails,
+    this.contractId,
+    this.contractType,
+    this.domain,
+    this.stations = const [],
     this.zone,
     this.division,
     this.depot,
@@ -98,6 +106,10 @@ class UserRegistrationModel {
       entityDetails: json['entityDetails'] != null
           ? EntityModel.fromJson(Map<String, dynamic>.from(json['entityDetails']))
           : null,
+      contractId: json['contractId'],
+      contractType: json['contractType'],
+      domain: json['domain'],
+      stations: (json['stations'] as List?)?.cast<String>() ?? [],
 
       zone: json['zone'],
       division: json['division'],

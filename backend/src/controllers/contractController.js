@@ -31,4 +31,9 @@ export const getContractsByEntity = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
-export default { createContract, updateContract, getContracts, getContractByUid, getContractByNumber, getContractsByEntity };
+export const getContractsForDropdown = asyncHandler(async (req, res) => {
+  const result = await contractService.getContractsForDropdown(req.user);
+  res.status(200).json(result);
+});
+
+export default { createContract, updateContract, getContracts, getContractByUid, getContractByNumber, getContractsByEntity, getContractsForDropdown };

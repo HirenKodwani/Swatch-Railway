@@ -5,7 +5,7 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
+    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
     let domain = userData.domain;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
@@ -43,6 +43,13 @@ class UserService {
       }
     }
 
+    const isContractorAdminOrSupervisor = roleUpper === 'CONTRACTOR_ADMIN' || roleUpper === 'CONTRACTOR_SUPERVISOR';
+    if (isContractorAdminOrSupervisor) {
+      if (!contractId) {
+        throw new ValidationError("Contract is mandatory for Contractor Admin/Supervisor.");
+      }
+    }
+
 
 
     const normalizedUserType = userType.toLowerCase();
@@ -56,15 +63,26 @@ class UserService {
     }
 
     let entityData = null;
+    let resolvedContractType = null;
     if (normalizedUserType === 'contractor') {
-      if (!entityId) {
-        throw new ValidationError("Contractor users must have an 'entityId' (Company ID).");
+      if (isContractorAdminOrSupervisor) {
+        const contractDoc = await db.collection('contracts').doc(contractId).get();
+        if (!contractDoc.exists) {
+          throw new NotFoundError("Contract not found.");
+        }
+        const contractData = contractDoc.data();
+        entityData = contractData.entityName ? { companyName: contractData.entityName } : null;
+        resolvedContractType = contractData.contractType || null;
+      } else {
+        if (!entityId) {
+          throw new ValidationError("Contractor users must have an 'entityId' (Company ID).");
+        }
+        const entityDoc = await db.collection('entities').doc(entityId).get();
+        if (!entityDoc.exists) {
+          throw new NotFoundError("Entity (Company) not found.");
+        }
+        entityData = entityDoc.data();
       }
-      const entityDoc = await db.collection('entities').doc(entityId).get();
-      if (!entityDoc.exists) {
-        throw new NotFoundError("Entity (Company) not found.");
-      }
-      entityData = entityDoc.data();
       const userRoleLower = role.toLowerCase().replace(/_/g, " ");
       const creatorRoleUpper = (creatorRole || '').toUpperCase().replace(/\s+/g, '_');
       const bypassRoles = ['SUPER_ADMIN', 'COMPANY_MASTER', 'ADMIN'];
@@ -92,16 +110,31 @@ class UserService {
       }
 
       if (!domain) {
-        const contractSnapshot2 = await db.collection('contracts')
-          .where('entityId', '==', entityId)
-          .where('status', '==', 'Active')
-          .limit(1).get();
-        if (!contractSnapshot2.empty) {
-          const firstContract = contractSnapshot2.docs[0].data();
-          if (firstContract.contractType === 'station_cleaning' || firstContract.contractType === 'obhs') {
-            domain = firstContract.contractType;
+        if (isContractorAdminOrSupervisor && contractId) {
+          const contractDoc = await db.collection('contracts').doc(contractId).get();
+          if (contractDoc.exists) {
+            const contractData = contractDoc.data();
+            if (contractData.contractType === 'station_cleaning' || contractData.contractType === 'obhs') {
+              domain = contractData.contractType;
+            }
+          }
+        } else {
+          const contractSnapshot2 = await db.collection('contracts')
+            .where('entityId', '==', entityId)
+            .where('status', '==', 'Active')
+            .limit(1).get();
+          if (!contractSnapshot2.empty) {
+            const firstContract = contractSnapshot2.docs[0].data();
+            if (firstContract.contractType === 'station_cleaning' || firstContract.contractType === 'obhs') {
+              domain = firstContract.contractType;
+            }
           }
         }
+      }
+      
+      // If we still don't have a domain, but the creator specifies it or it can be derived, ensure it matches
+      if (domain && !['station_cleaning', 'obhs'].includes(domain)) {
+        domain = null;
       }
     }
 
@@ -132,8 +165,11 @@ class UserService {
         zone: zone || null,
         division: division || null,
         depot: depot || null,
-        entityId: entityId || null,
+        entityId: isContractorAdminOrSupervisor ? null : (entityId || null),
         entityDetails: entityData,
+        contractId: isContractorAdminOrSupervisor ? (contractId || null) : null,
+        contractType: isContractorAdminOrSupervisor ? (resolvedContractType || domain || null) : null,
+        stations: isContractorAdminOrSupervisor ? (stations || []) : [],
         trainId: trainId || null,
         trainIds: trainIds || (trainId ? [trainId] : []),
         worker_type: worker_type || null,
@@ -153,7 +189,7 @@ class UserService {
   }
 
   async updateUser(editorData, uid, updates) {
-    const { fullName, designation, mobile, zone, division, depot, role, userType, password, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId } = updates;
+    const { fullName, designation, mobile, zone, division, depot, role, userType, password, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = updates;
     const { uid: editorId, name, fullName: editorAuthName, role: editorRole } = editorData;
     const editorName = editorAuthName || name || editorRole || 'Admin';
 
@@ -210,6 +246,22 @@ class UserService {
     if (stationId !== undefined) updateData.stationId = stationId;
     if (platformId !== undefined) updateData.platformId = platformId;
     if (areaId !== undefined) updateData.areaId = areaId;
+    
+    // Auto-resolve domain if entity changes or updates domain
+    if (updates.domain !== undefined) {
+      updateData.domain = updates.domain;
+    } else if (entityId !== undefined && entityId) {
+      const contractSnapshot = await db.collection('contracts')
+        .where('entityId', '==', entityId)
+        .where('status', '==', 'Active')
+        .limit(1).get();
+      if (!contractSnapshot.empty) {
+        const firstContract = contractSnapshot.docs[0].data();
+        if (firstContract.contractType === 'station_cleaning' || firstContract.contractType === 'obhs') {
+          updateData.domain = firstContract.contractType;
+        }
+      }
+    }
     updateData.status = 'PENDING';
     updateData.updatedAt = new Date().toISOString();
     updateData.updatedBy = editorId;
@@ -236,6 +288,26 @@ class UserService {
       } else {
         updateData.entityDetails = null;
       }
+    }
+
+    if (contractId !== undefined) {
+      updateData.contractId = contractId;
+      if (contractId) {
+        const contractDoc = await db.collection('contracts').doc(contractId).get();
+        if (contractDoc.exists) {
+          const contractData = contractDoc.data();
+          updateData.contractType = contractData.contractType || null;
+          if (!updateData.entityDetails) {
+            updateData.entityDetails = contractData.entityName ? { companyName: contractData.entityName } : null;
+          }
+        }
+      } else {
+        updateData.contractType = null;
+      }
+    }
+
+    if (stations !== undefined) {
+      updateData.stations = stations;
     }
 
     if (Object.keys(updateData).length === 0 && !password) {
@@ -410,6 +482,16 @@ class UserService {
       query = query.where('division', '==', userDivision);
     }
 
+    if (filters.domain) {
+      query = query.where('domain', '==', filters.domain);
+    } else if (requesterData.userType === 'contractor' && requesterData.domain) {
+      query = query.where('domain', '==', requesterData.domain);
+    }
+
+    if (requesterData.contractId) {
+      query = query.where('contractId', '==', requesterData.contractId);
+    }
+
     const snapshot = await query.limit(5000).get();
     let userList = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
@@ -471,7 +553,11 @@ class UserService {
         query = query.where('zone', '==', requesterZone);
       }
     }
-
+    if (filters.domain) {
+      query = query.where('domain', '==', filters.domain);
+    } else if (requesterData.userType === 'contractor' && requesterData.domain) {
+      query = query.where('domain', '==', requesterData.domain);
+    }
     let snapshot = await query.get();
     console.log(`[GET /api/admin/railway-workers] Firestore query returned ${snapshot.size} users`);
 

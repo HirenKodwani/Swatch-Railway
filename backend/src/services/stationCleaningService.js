@@ -22,6 +22,15 @@ class StationCleaningService {
     return ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes(role);
   }
 
+  _scopeByContract(query, user, stationField = 'stationId') {
+    if (this._isMasterOrAdmin(user)) return query;
+    const userStations = user?.stations;
+    if (userStations && Array.isArray(userStations) && userStations.length > 0) {
+      return query.where(stationField, 'in', userStations);
+    }
+    return query;
+  }
+
   _scopeByDivision(query, user, divisionField = 'division') {
     const role = (user?.role || '').toUpperCase();
     if (this._isMasterOrAdmin(user)) return query;
@@ -370,6 +379,7 @@ class StationCleaningService {
   async listStationRuns(query, user) {
     const { stationId } = query;
     let q = db.collection('stationRuns').limit(200);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     const runs = snapshot.docs
@@ -680,6 +690,7 @@ class StationCleaningService {
   async listStationCleaningForms(query, user) {
     const { stationId, status, startDate, endDate } = query;
     let q = db.collection('stationCleaningForms').limit(200);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
@@ -700,19 +711,18 @@ class StationCleaningService {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const stationId = user && user.stationId;
+    const userStations = user?.stations;
 
     let tasks = [];
+    let tasksQuery = db.collection('cleaningTasks')
+      .where('scheduledDate', '==', today).limit(500);
     if (stationId) {
-      const snapshot = await db.collection('cleaningTasks')
-        .where('stationId', '==', stationId)
-        .where('scheduledDate', '==', today)
-        .limit(500).get();
-      tasks = snapshot.docs.map(d => d.data());
-    } else {
-      const snapshot = await db.collection('cleaningTasks')
-        .where('scheduledDate', '==', today).limit(500).get();
-      tasks = snapshot.docs.map(d => d.data());
+      tasksQuery = tasksQuery.where('stationId', '==', stationId);
+    } else if (userStations && Array.isArray(userStations) && userStations.length > 0) {
+      tasksQuery = tasksQuery.where('stationId', 'in', userStations);
     }
+    const snapshot = await tasksQuery.get();
+    tasks = snapshot.docs.map(d => d.data());
 
     const total = tasks.length;
     const completed = tasks.filter(t => t.status === 'completed' || t.status === 'approved').length;
@@ -770,9 +780,10 @@ class StationCleaningService {
     return records;
   }
 
-  async listAllPestControl(query) {
+  async listAllPestControl(query, user) {
     const { stationId, status } = query || {};
     let q = db.collection('pestControlRecords').limit(300);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
@@ -794,9 +805,10 @@ class StationCleaningService {
     return { message: 'Pest control record reviewed', uid, status };
   }
 
-  async pestControlReport(query) {
+  async pestControlReport(query, user) {
     const { stationId, startDate, endDate } = query || {};
     let q = db.collection('pestControlRecords').limit(300);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     let records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -828,6 +840,7 @@ class StationCleaningService {
   async listMachines(query, user) {
     const { stationId } = query || {};
     let q = db.collection('machineDeployments').limit(200);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -860,9 +873,10 @@ class StationCleaningService {
     return { message: 'Machine sent for maintenance', uid };
   }
 
-  async machineReport(query) {
+  async machineReport(query, user) {
     const { stationId } = query || {};
     let q = db.collection('machineDeployments').limit(300);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     const records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -902,6 +916,7 @@ class StationCleaningService {
   async listGarbageRecords(query, user) {
     const { stationId, startDate, endDate, status } = query || {};
     let q = db.collection('garbageDisposalRecords').limit(300);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
@@ -944,9 +959,10 @@ class StationCleaningService {
     return { message: 'Garbage record rejected', uid };
   }
 
-  async garbageReport(query) {
+  async garbageReport(query, user) {
     const { stationId, startDate, endDate } = query || {};
     let q = db.collection('garbageDisposalRecords').limit(300);
+    q = this._scopeByContract(q, user, 'stationId');
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     let records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));

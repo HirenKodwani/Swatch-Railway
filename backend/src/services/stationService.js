@@ -15,20 +15,26 @@ class StationService {
         .where('status', '==', 'active')
         .get();
       const stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
-      if (stationIds.length === 0) {
+      if (stationIds.length > 0) {
+        q = q.where('uid', 'in', stationIds);
+      } else if (division) {
+        q = q.where('division', '==', division);
+      } else {
         return { count: 0, stations: [] };
       }
-      q = q.where('uid', 'in', stationIds);
     } else if (contractorRoles.includes(userRole) && user?.entityId) {
       const mappings = await db.collection('stationContractorMappings')
         .where('contractorId', '==', user.entityId)
         .where('status', '==', 'active')
         .get();
       const stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
-      if (stationIds.length === 0) {
+      if (stationIds.length > 0) {
+        q = q.where('uid', 'in', stationIds);
+      } else if (division || user.division) {
+        q = q.where('division', '==', division || user.division);
+      } else {
         return { count: 0, stations: [] };
       }
-      q = q.where('uid', 'in', stationIds);
     } else if (userRole === 'RAILWAY_SUPERVISOR' && user?.division) {
       q = q.where('division', '==', user.division);
     }

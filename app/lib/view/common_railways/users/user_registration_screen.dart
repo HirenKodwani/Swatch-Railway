@@ -12,6 +12,8 @@ import '../../../model/station_models.dart';
 import '../../../model/platform_model.dart';
 import '../../../repositories/platform_repository.dart';
 import '../widgets/approve_entity_dropdown.dart';
+import '../widgets/contract_dropdown.dart';
+import '../widgets/station_assignment_field.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:signature/signature.dart';
 import 'dart:convert';
@@ -64,7 +66,11 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
   bool _isLoading = false;
   List<Station> _entityStations = [];
-  bool _loadingEntityStations = false;
+
+  String? _selectedContractId;
+  Map<String, dynamic>? _selectedContractData;
+  List<String> _selectedContractStationIds = [];
+  String? _contractDivision;
 
   @override
   void initState() {
@@ -88,7 +94,6 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   }
 
   Future<void> _loadEntityStations(String entityId) async {
-    setState(() => _loadingEntityStations = true);
     try {
       final stations = await ApiService.getStations(entityId: entityId);
       final uniqueZones = <String>{};
@@ -103,7 +108,6 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         }
       }
       setState(() {
-        _entityStations = stations;
         final sortedUnique = uniqueZones.toList()..sort();
         zones = uniqueZones.isNotEmpty ? sortedUnique : (DepotDatabase.zoneData.keys.toList()..sort());
         _zone = null;
@@ -111,12 +115,20 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         _depot = null;
         divisions = [];
         depots = [];
+        _entityStations = [];
         _selectedStationId = null;
-        _loadingEntityStations = false;
       });
     } catch (e) {
-      setState(() => _loadingEntityStations = false);
       print('Error loading entity stations: $e');
+    }
+  }
+
+  Future<void> _loadDivisionStations(String division) async {
+    try {
+      final stations = await ApiService.getStations(division: division, active: true);
+      setState(() => _entityStations = stations);
+    } catch (e) {
+      print('Error loading division stations: $e');
     }
   }
 
@@ -130,6 +142,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
       _selectedUserType = draft['userType'] ?? 'railway';
       _selectedRole = draft['role'];
       _selectedCompany = draft['entityId'];
+      _selectedContractId = draft['contractId'];
+      _selectedContractStationIds = List<String>.from(draft['stations'] ?? []);
       _zone = draft['zone'];
       _division = draft['division'];
       _depot = draft['depot'];
@@ -231,6 +245,12 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     return r.contains('SUPERVISOR') || r.contains('CTS');
   }
 
+  bool _isContractorAdminOrSupervisor() {
+    if (_selectedRole == null) return false;
+    final r = _selectedRole!.toUpperCase().replaceAll(' ', '_');
+    return r == 'CONTRACTOR_ADMIN' || r == 'CONTRACTOR_SUPERVISOR';
+  }
+
   bool _shouldShowStationSelection() {
     if (_selectedRole == null) return false;
     if (_selectedRole == 'Station Master' ||
@@ -242,30 +262,21 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   }
 
   List<Station> _getFilteredStations() {
-    if (_selectedUserType == 'contractor' && _entityStations.isNotEmpty) {
-      List<Station> result = _entityStations;
-      if (_division != null) {
-        final divLower = _division!.toLowerCase();
-        result = result.where((s) =>
-            s.division.toLowerCase().contains(divLower) || divLower.contains(s.division.toLowerCase())).toList();
-      } else if (_zone != null) {
-        final zoneLower = _zone!.toLowerCase();
-        result = result.where((s) =>
-            s.zone.toLowerCase().contains(zoneLower) || zoneLower.contains(s.zone.toLowerCase())).toList();
-      }
-      return result;
-    }
-    return [];
+    return _entityStations;
   }
 
   Widget _buildStationDropdown() {
     if (_selectedUserType == 'contractor') {
+      if (_division == null) {
+        return const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text('Select division first to see available stations', style: TextStyle(color: Colors.grey)),
+        );
+      }
       if (_entityStations.isEmpty) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _loadingEntityStations
-              ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
-              : const Text('No stations available for this contractor', style: TextStyle(color: Colors.grey)),
+        return const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text('No stations available in this division', style: TextStyle(color: Colors.grey)),
         );
       }
       final stations = _getFilteredStations();
@@ -473,7 +484,25 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
               const SizedBox(height: 12),
 
 
-              if (_selectedUserType == 'contractor')
+              if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor())
+                ContractDropdown(
+                  onSelected: (contractId, contractData) {
+                    setState(() {
+                      _selectedContractId = contractId;
+                      _selectedContractData = contractData;
+                      _selectedCompany = contractData['entityId'];
+                      _contractDivision = contractData['division'];
+                      _selectedContractStationIds = [];
+                      _zone = contractData['zone'];
+                      _division = contractData['division'];
+                      if (_contractDivision != null) {
+                        _loadDivisionStations(_contractDivision!);
+                      }
+                    });
+                  },
+                ),
+
+              if (_selectedUserType == 'contractor' && !_isContractorAdminOrSupervisor())
                 ApprovedEntityDropdown(
                   onSelected: (name) {
                     setState(() {
@@ -483,7 +512,17 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                   },
                 ),
 
-              if (_shouldShowStationSelection())
+              if (_isContractorAdminOrSupervisor() && _contractDivision != null)
+                StationAssignmentField(
+                  selectedStationIds: _selectedContractStationIds,
+                  allowedStationIds: (_selectedContractData?['stationIds'] as List?)?.cast<String>(),
+                  division: _contractDivision,
+                  onChanged: (ids) {
+                    setState(() => _selectedContractStationIds = ids);
+                  },
+                ),
+
+              if (_shouldShowStationSelection() && !_isContractorAdminOrSupervisor())
                 _buildStationDropdown(),
 
               if ((_selectedRole == 'Platform Master' || _selectedRole == 'Area Master') && _selectedStationId != null)
@@ -726,8 +765,12 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       onChanged: _isDivisionReadOnly() ? null : (v) {
                         setState(() {
                           _division = v;
+                          _selectedStationId = null;
                           if (v != null && _zone != null) {
                             _loadDepots(_zone!, v);
+                            if (_selectedUserType == 'contractor') {
+                              _loadDivisionStations(v);
+                            }
                           }
                         });
                       },
@@ -1113,6 +1156,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
       'userType': _selectedUserType,
       'role': _selectedRole,
       'entityId': _selectedCompany,
+      'contractId': _selectedContractId,
+      'stations': _selectedContractStationIds,
       'zone': _zone,
       'division': _division,
       'depot': _depot,
@@ -1166,7 +1211,9 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         zone: _zone?.trim().isEmpty ?? true ? null : _zone?.trim(),
         division: _division?.trim().isEmpty ?? true ? null : _division?.trim(),
         depot: _depot?.trim().isEmpty ?? true ? null : _depot?.trim(),
-        entityId: _selectedCompany?.trim().isEmpty ?? true ? null : _selectedCompany?.trim(),
+        entityId: _isContractorAdminOrSupervisor() ? null : (_selectedCompany?.trim().isEmpty ?? true ? null : _selectedCompany?.trim()),
+        contractId: _isContractorAdminOrSupervisor() ? _selectedContractId : null,
+        stations: _isContractorAdminOrSupervisor() ? _selectedContractStationIds : null,
         createdById: currentUser?.uid,
         worker_type: _workerType,
         trainId: _trainId,

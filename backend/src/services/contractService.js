@@ -84,18 +84,27 @@ class ContractService {
     if (!duplicateSnap.empty) {
       for (const doc of duplicateSnap.docs) {
         const d = doc.data();
-        if ((isStationCleaning || (!isOBHS && !contractType)) && stationIds.length > 0) {
+        const isDocStationCleaning = d.contractType === 'station_cleaning';
+        const isDocOBHS = d.contractType === 'obhs';
+        if (isStationCleaning && isDocStationCleaning && stationIds.length > 0) {
+          const existingStations = d.stationIds || [];
+          const overlap = existingStations.filter(s => stationIds.includes(s));
+          if (overlap.length > 0) {
+            throw new ValidationError(`This Contractor already has an active Station Cleaning contract covering station(s): ${overlap.join(', ')}.`);
+          }
+        }
+        if (isOBHS && isDocOBHS && trainIds.length > 0) {
+          const existingTrains = d.trainIds || [];
+          const overlap = existingTrains.filter(t => trainIds.includes(t));
+          if (overlap.length > 0) {
+            throw new ValidationError(`This Contractor already has an active OBHS contract covering train(s): ${overlap.join(', ')}.`);
+          }
+        }
+        if (!isStationCleaning && !isOBHS && !isDocStationCleaning && !isDocOBHS && stationIds.length > 0) {
           const existingStations = d.stationIds || [];
           const overlap = existingStations.filter(s => stationIds.includes(s));
           if (overlap.length > 0) {
             throw new ValidationError(`This Contractor already has an active contract covering station(s): ${overlap.join(', ')}.`);
-          }
-        }
-        if (isOBHS && trainIds.length > 0) {
-          const existingTrains = d.trainIds || [];
-          const overlap = existingTrains.filter(t => trainIds.includes(t));
-          if (overlap.length > 0) {
-            throw new ValidationError(`This Contractor already has an active contract covering train(s): ${overlap.join(', ')}.`);
           }
         }
       }
@@ -253,6 +262,39 @@ class ContractService {
     const snapshot = await db.collection('contracts').where('contractNumber', '==', contractNumber).limit(1).get();
     if (snapshot.empty) throw new NotFoundError("Contract not found with this number.");
     return snapshot.docs[0].data();
+  }
+
+  async getContractsForDropdown(requesterData) {
+    const { userType, zone: userZone, division: userDivision, entityId, role } = requesterData;
+    const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
+
+    let query = db.collection('contracts').where('status', '==', 'Active');
+
+    if (userType === 'contractor' && entityId) {
+      query = query.where('entityId', '==', entityId);
+    }
+
+    const snapshot = await query.limit(200).get();
+    if (snapshot.empty) return { count: 0, contracts: [] };
+
+    const contracts = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      contracts.push({
+        uid: doc.id,
+        contractNumber: data.contractNumber,
+        contractName: data.contractName,
+        contractType: data.contractType,
+        entityId: data.entityId,
+        entityName: data.entityName,
+        zone: data.zone,
+        division: data.division,
+        stationIds: data.stationIds || [],
+        stationNames: data.stationNames || []
+      });
+    });
+
+    return { count: contracts.length, contracts };
   }
 
   async getContractsByEntity(entityId, query) {

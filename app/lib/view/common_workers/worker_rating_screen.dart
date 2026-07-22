@@ -1174,7 +1174,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                 final me = RailwayWorkerModel(
                   uid: loggedInUid,
                   email: email,
-                  fullName: name,
+                  fullName: name.isNotEmpty ? name : 'Worker',
                   mobile: mobile,
                   role: role,
                   status: status,
@@ -1186,7 +1186,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
 
               // Also pre-select inspector name with logged-in user name if empty
               if (_inspectorController.text.trim().isEmpty) {
-                _inspectorController.text = controller.workerName;
+                _inspectorController.text = controller.workerName.isNotEmpty ? controller.workerName : 'Worker';
               }
 
               // Pre-select worker's assigned coach
@@ -1437,6 +1437,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
               _inputContainer(
                 child: TextField(
                   controller: _inspectorController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     hintText: 'Enter your name / TTE ID',
                     border: InputBorder.none,

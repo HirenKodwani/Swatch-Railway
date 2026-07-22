@@ -78,6 +78,26 @@ export function requireAreaAccess(req, res, next) {
   next();
 }
 
+export function requireContractType(...allowedTypes) {
+  return (req, res, next) => {
+    const userContractType = req.user?.contractType;
+    if (userContractType && !allowedTypes.includes(userContractType)) {
+      throw new ForbiddenError(`Access denied. Requires contract type: ${allowedTypes.join(' or ')}`);
+    }
+    next();
+  };
+}
+
+export function forbidContractType(...forbiddenTypes) {
+  return (req, res, next) => {
+    const userContractType = req.user?.contractType;
+    if (userContractType && forbiddenTypes.includes(userContractType)) {
+      throw new ForbiddenError(`Access denied. Users with contract type "${userContractType}" cannot access this resource.`);
+    }
+    next();
+  };
+}
+
 export function requireMasterAccess(minRole) {
   return (req, res, next) => {
     const role = (req.user?.role || '').toUpperCase();
@@ -126,7 +146,7 @@ export function requireDashboardLevelAccess(level) {
       'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
     };
-    
+
     const userRoleLevel = roleHierarchy[role] || 0;
 
     switch (level) {
