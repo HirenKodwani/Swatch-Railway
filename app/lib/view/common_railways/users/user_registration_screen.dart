@@ -13,7 +13,6 @@ import '../../../model/platform_model.dart';
 import '../../../repositories/platform_repository.dart';
 import '../widgets/approve_entity_dropdown.dart';
 import '../widgets/contract_dropdown.dart';
-import '../widgets/station_assignment_field.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:signature/signature.dart';
 import 'dart:convert';
@@ -337,6 +336,47 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     );
   }
 
+  Widget _buildContractStationDropdown() {
+    final stationIds = (_selectedContractData!['stationIds'] as List?)?.cast<String>() ?? [];
+    final stationNames = (_selectedContractData!['stationNames'] as List?)?.cast<String>() ?? [];
+
+    if (stationIds.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: Text('No stations assigned to this contract', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    final stationOptions = List.generate(stationIds.length, (i) {
+      return <String, String>{
+        'id': stationIds[i],
+        'name': i < stationNames.length ? stationNames[i] : stationIds[i],
+      };
+    });
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        value: _selectedStationId != null && stationIds.contains(_selectedStationId) ? _selectedStationId : null,
+        decoration: const InputDecoration(
+          labelText: 'Assigned Station *',
+          border: OutlineInputBorder(),
+        ),
+        items: stationOptions.map((opt) => DropdownMenuItem<String>(
+          value: opt['id'],
+          child: Text(opt['name'] as String),
+        )).toList(),
+        validator: (v) => v == null ? 'Select station' : null,
+        onChanged: (v) {
+          setState(() {
+            _selectedStationId = v;
+            _selectedContractStationIds = v != null ? [v] : [];
+          });
+        },
+      ),
+    );
+  }
+
   bool _isMultiTrainExport() {
     if (_selectedRole == null) return false;
     return _selectedRole!.toUpperCase() == 'RAILWAY SUPERVISOR';
@@ -354,6 +394,10 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
     return currentUser?.role == 'Railway Admin' ||
         currentUser?.role == 'Contractor Admin';
+  }
+
+  bool _isContractAreaLocked() {
+    return _isContractorAdminOrSupervisor() && _selectedContractId != null;
   }
 
   @override
@@ -424,6 +468,11 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 onChanged: (v) {
                   setState(() {
                     _selectedRole = v;
+                    _selectedCompany = null;
+                    _selectedContractId = null;
+                    _selectedContractData = null;
+                    _selectedContractStationIds = [];
+                    _selectedStationId = null;
                     final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
 
 
@@ -484,23 +533,41 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
               const SizedBox(height: 12),
 
 
-              if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor())
-                ContractDropdown(
-                  onSelected: (contractId, contractData) {
+              if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor()) ...[
+                ApprovedEntityDropdown(
+                  onSelected: (name) {
                     setState(() {
-                      _selectedContractId = contractId;
-                      _selectedContractData = contractData;
-                      _selectedCompany = contractData['entityId'];
-                      _contractDivision = contractData['division'];
+                      _selectedCompany = name;
+                      _selectedContractId = null;
+                      _selectedContractData = null;
                       _selectedContractStationIds = [];
-                      _zone = contractData['zone'];
-                      _division = contractData['division'];
-                      if (_contractDivision != null) {
-                        _loadDivisionStations(_contractDivision!);
-                      }
+                      _selectedStationId = null;
+                      _zone = null;
+                      _division = null;
                     });
+                    _loadEntityStations(name);
                   },
                 ),
+                const SizedBox(height: 12),
+                if (_selectedCompany != null)
+                  ContractDropdown(
+                    entityId: _selectedCompany,
+                    onSelected: (contractId, contractData) {
+                      setState(() {
+                        _selectedContractId = contractId;
+                        _selectedContractData = contractData;
+                        _selectedContractStationIds = [];
+                        _selectedStationId = null;
+                        _zone = contractData['zone'];
+                        _division = contractData['division'];
+                      });
+                    },
+                  ),
+                if (_selectedContractData != null) ...[
+                  const SizedBox(height: 12),
+                  _buildContractStationDropdown(),
+                ],
+              ],
 
               if (_selectedUserType == 'contractor' && !_isContractorAdminOrSupervisor())
                 ApprovedEntityDropdown(
@@ -509,16 +576,6 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       _selectedCompany = name;
                     });
                     _loadEntityStations(name);
-                  },
-                ),
-
-              if (_isContractorAdminOrSupervisor() && _contractDivision != null)
-                StationAssignmentField(
-                  selectedStationIds: _selectedContractStationIds,
-                  allowedStationIds: (_selectedContractData?['stationIds'] as List?)?.cast<String>(),
-                  division: _contractDivision,
-                  onChanged: (ids) {
-                    setState(() => _selectedContractStationIds = ids);
                   },
                 ),
 
@@ -728,7 +785,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                           .map((z) => DropdownMenuItem(value: z, child: Text(z)))
                           .toList(),
                       validator: (v) => v == null ? 'Required' : null,
-                      onChanged: _isZoneReadOnly() ? null : (v) {
+                      onChanged: (_isZoneReadOnly() || _isContractAreaLocked()) ? null : (v) {
                         setState(() {
                           _zone = v;
                           if (_selectedRole?.contains('Master') == true) {
@@ -762,7 +819,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                           .map((d) => DropdownMenuItem(value: d, child: Text(d)))
                           .toList(),
                       validator: (v) => v == null ? 'Required' : null,
-                      onChanged: _isDivisionReadOnly() ? null : (v) {
+                      onChanged: (_isDivisionReadOnly() || _isContractAreaLocked()) ? null : (v) {
                         setState(() {
                           _division = v;
                           _selectedStationId = null;

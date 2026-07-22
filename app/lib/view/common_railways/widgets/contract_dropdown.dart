@@ -5,8 +5,9 @@ import '../../../services/api_services.dart';
 class ContractDropdown extends StatefulWidget {
   final Function(String contractId, Map<String, dynamic> contractData) onSelected;
   final String? initialValue;
+  final String? entityId;
 
-  const ContractDropdown({super.key, required this.onSelected, this.initialValue});
+  const ContractDropdown({super.key, required this.onSelected, this.initialValue, this.entityId});
 
   @override
   State<ContractDropdown> createState() => _ContractDropdownState();
@@ -23,9 +24,19 @@ class _ContractDropdownState extends State<ContractDropdown> {
     _fetchContracts();
   }
 
+  @override
+  void didUpdateWidget(ContractDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entityId != widget.entityId) {
+      selectedContractId = null;
+      _fetchContracts();
+    }
+  }
+
   Future<void> _fetchContracts() async {
+    setState(() => isLoading = true);
     try {
-      final contracts = await ApiService.getContractsForDropdown();
+      final contracts = await ApiService.getContractsForDropdown(entityId: widget.entityId);
       setState(() {
         this.contracts = contracts;
         if (widget.initialValue != null && contracts.isNotEmpty) {

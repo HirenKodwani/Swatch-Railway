@@ -32,7 +32,7 @@ export const getContractsByEntity = asyncHandler(async (req, res) => {
 });
 
 export const getContractsForDropdown = asyncHandler(async (req, res) => {
-  const result = await contractService.getContractsForDropdown(req.user);
+  const result = await contractService.getContractsForDropdown(req.user, req.query);
   res.status(200).json(result);
 });
 

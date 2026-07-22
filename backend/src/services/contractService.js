@@ -264,14 +264,16 @@ class ContractService {
     return snapshot.docs[0].data();
   }
 
-  async getContractsForDropdown(requesterData) {
+  async getContractsForDropdown(requesterData, queryParams) {
     const { userType, zone: userZone, division: userDivision, entityId, role } = requesterData;
+    const { entityId: queryEntityId } = queryParams || {};
     const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
 
     let query = db.collection('contracts').where('status', '==', 'Active');
 
-    if (userType === 'contractor' && entityId) {
-      query = query.where('entityId', '==', entityId);
+    const effectiveEntityId = queryEntityId || entityId;
+    if (effectiveEntityId) {
+      query = query.where('entityId', '==', effectiveEntityId);
     }
 
     const snapshot = await query.limit(200).get();

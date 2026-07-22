@@ -424,11 +424,15 @@ class ApiService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getContractsForDropdown() async {
+  static Future<List<Map<String, dynamic>>> getContractsForDropdown({String? entityId}) async {
     try {
       final token = await getToken();
+      String url = '$baseUrl/api/contracts/for-user-creation';
+      if (entityId != null && entityId.isNotEmpty) {
+        url += '?entityId=$entityId';
+      }
       final response = await http.get(
-        Uri.parse('$baseUrl/api/contracts/for-user-creation'),
+        Uri.parse(url),
         headers: { 'Authorization': 'Bearer $token' },
       );
       if (response.statusCode == 200) {

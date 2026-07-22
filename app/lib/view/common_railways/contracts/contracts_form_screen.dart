@@ -373,7 +373,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                                         ),
                                 ),
                         ],
-                        if (selectedContractType != 'Station Cleaning' && selectedContractType != 'OBHS') ...[
+                        if (selectedContractType != null && selectedContractType != 'Station Cleaning' && selectedContractType != 'OBHS') ...[
                           const SizedBox(height: 12),
                           const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
                           const SizedBox(height: 4),
