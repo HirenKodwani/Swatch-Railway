@@ -217,7 +217,7 @@ class DashboardService {
     const users = [];
     usersSnap.forEach(d => users.push(d.data()));
     const totalWorkers = users.filter(u => u.userType === 'contractor' || u.role === 'CLEANING_STAFF' || u.role === 'WORKER').length;
-    const totalSupervisors = users.filter(u => u.role === 'SUPERVISOR' || u.role === 'STATION_MASTER' || u.role === 'PLATFORM_MASTER').length;
+    const totalSupervisors = users.filter(u => u.role === 'SUPERVISOR' || u.role === 'RAILWAY_SUPERVISOR' || u.role === 'CONTRACTOR_SUPERVISOR').length;
 
     const uniqueAreaIds = new Set();
     areasSnap.forEach(doc => uniqueAreaIds.add(doc.id));

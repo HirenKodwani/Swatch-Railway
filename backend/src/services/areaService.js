@@ -1,6 +1,7 @@
 import { db } from '../database/index.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
 import { paginate } from '../utils/paginate.js';
+import { taskManagementService } from './taskManagementService.js';
 
 const VALID_AREA_TYPES = [
   'Toilet', 'Waiting Hall', 'Track', 'Escalator', 'Lift',
@@ -17,7 +18,7 @@ const STATION_AREA_TYPES = ['Waiting Room', 'Station Toilet', 'FOB', 'Escalator'
 
 const TENDER_FIELDS = ['section', 'sectionName', 'platformRef', 'surfaceType', 'areaSqft', 'shiftConsidered', 'tenderedAreaPerDay', 'cleaningInterval'];
 
-const VALID_FREQUENCIES = ['hourly', '2hrs', '4hrs', 'daily'];
+const VALID_FREQUENCIES = ['hourly', '2hrs', '4hrs', 'daily', 'shift_wise', 'once_per_day', 'twice_per_day', 'three_times_per_day', 'every_six_hours', 'weekly', 'fortnightly', 'monthly', 'as_and_when_required'];
 
 async function _generateAreaCode(stationId, platformId, areaType) {
   const stationDoc = await db.collection('stations').doc(stationId).get();
@@ -302,8 +303,14 @@ class AreaService {
     return { message: 'Platform unassigned from area successfully' };
   }
 
-  async generateTasksFromFrequency(uid, body) {
-    return { message: 'Tasks generated successfully', areaId: uid };
+  async generateTasksFromFrequency(uid, body, user) {
+    const { date, workerIds } = body;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const result = await taskManagementService.bulkGenerate(
+      { areaIds: [uid], date: targetDate, workerIds: workerIds || [] },
+      user
+    );
+    return { message: `Generated ${result.count} tasks for area ${uid}`, areaId: uid, ...result };
   }
 
   async getAreasByCompany(companyId) {

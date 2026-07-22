@@ -6,7 +6,7 @@ class StationCleaningService {
 
   _resolveStationId(requestedStationId, user) {
     const role = (user?.role || '').toUpperCase();
-    if (user?.stationId && ['RAILWAY_SUPERVISOR', 'STATION_MASTER', 'AREA_MASTER', 'PLATFORM_MASTER'].includes(role)) {
+    if (user?.stationId && role === 'RAILWAY_SUPERVISOR') {
       return user.stationId;
     }
     return requestedStationId;
@@ -14,9 +14,6 @@ class StationCleaningService {
 
   _resolveAreaId(requestedAreaId, user) {
     const role = (user?.role || '').toUpperCase();
-    if (user?.areaId && role === 'PLATFORM_MASTER') {
-      return user.areaId;
-    }
     return requestedAreaId;
   }
 
@@ -35,10 +32,6 @@ class StationCleaningService {
   }
 
   _scopeByArea(query, user, field = 'areaId') {
-    const role = (user?.role || '').toUpperCase();
-    if (role === 'PLATFORM_MASTER' && user?.areaId) {
-      return query.where(field, '==', user.areaId);
-    }
     return query;
   }
 
@@ -51,12 +44,9 @@ class StationCleaningService {
 
   _verifyStationAccess(task, user) {
     const role = (user?.role || '').toUpperCase();
-    if (role === 'STATION_MASTER' || role === 'AREA_MASTER' || role === 'PLATFORM_MASTER') {
-      const userStationId = user?.stationId;
-      if (!userStationId) throw new ValidationError('No station assigned to your account');
-      if (task.stationId && task.stationId !== userStationId) {
-        throw new ForbiddenError('You can only access tasks in your assigned station');
-      }
+    const userStationId = user?.stationId;
+    if (userStationId && task.stationId && task.stationId !== userStationId) {
+      throw new ForbiddenError('You can only access tasks in your assigned station');
     }
   }
 
@@ -508,13 +498,9 @@ class StationCleaningService {
 
   async submitStationTask(body, user) {
     const { stationId, areaId, workerId } = body;
-    const role = (user?.role || '').toUpperCase();
-    if (role === 'STATION_MASTER' || role === 'AREA_MASTER' || role === 'PLATFORM_MASTER') {
-      const userStationId = user?.stationId;
-      if (!userStationId) throw new ValidationError('No station assigned to your account');
-      if (stationId && stationId !== userStationId) {
-        throw new ForbiddenError('You can only create tasks in your assigned station');
-      }
+    const userStationId = user?.stationId;
+    if (userStationId && stationId && stationId !== userStationId) {
+      throw new ForbiddenError('You can only create tasks in your assigned station');
     }
     const ref = db.collection('cleaningTasks').doc();
     const data = {

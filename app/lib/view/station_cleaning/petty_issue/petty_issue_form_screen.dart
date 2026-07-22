@@ -183,8 +183,6 @@ class _PettyIssueFormScreenState extends State<PettyIssueFormScreen> {
       'ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
       'RAILWAY_ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
       'CONTRACTOR_MASTER': {'VIEW'},
-      'STATION_MASTER': {'MANAGE', 'VIEW', 'RESOLVE'},
-      'AREA_MASTER': {'MANAGE', 'VIEW', 'RESOLVE'},
       'RAILWAY_SUPERVISOR': {'MANAGE', 'VIEW', 'RESOLVE'},
       'CONTRACTOR_ADMIN': {'MANAGE', 'VIEW', 'RESOLVE'},
       'CONTRACTOR_SUPERVISOR': {'VIEW'},

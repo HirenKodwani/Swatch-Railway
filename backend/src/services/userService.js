@@ -42,23 +42,7 @@ class UserService {
       }
     }
 
-    if (roleUpper === 'STATION_MASTER') {
-      if (!stationId) {
-        throw new ValidationError("stationId is mandatory for Station Master.");
-      }
-    }
 
-    if (roleUpper === 'PLATFORM_MASTER') {
-      if (!areaId) {
-        throw new ValidationError("areaId is mandatory for Platform Master.");
-      }
-      if (!platformId) {
-        throw new ValidationError("platformId is mandatory for Platform Master.");
-      }
-      if (!stationId) {
-        throw new ValidationError("stationId is mandatory for Platform Master.");
-      }
-    }
 
     const normalizedUserType = userType.toLowerCase();
     const isWorkerRole = roleUpper.includes('WORKER') || roleUpper === 'JANITOR' || roleUpper === 'ATTENDANT';
@@ -387,9 +371,9 @@ class UserService {
 
     const ROLE_HIERARCHY = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
-      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
-      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
-      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
     };
     const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
@@ -443,9 +427,9 @@ class UserService {
 
     const ROLE_HIERARCHY = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
-      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
-      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
-      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
     };
     const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
@@ -720,9 +704,9 @@ class UserService {
     
     const ROLE_HIERARCHY = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
-      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
-      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
-      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
     };
     const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
@@ -766,7 +750,7 @@ class UserService {
       return { count: 0, supervisors: [] };
     }
 
-    const allowedRoles = ['RAILWAY_SUPERVISOR', 'STATION_MASTER', 'RAILWAY_ADMIN', 'AREA_MASTER', 'PLATFORM_MASTER', 'RAILWAY_MASTER'];
+    const allowedRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER'];
 
     snapshot.forEach(doc => {
       const data = doc.data();

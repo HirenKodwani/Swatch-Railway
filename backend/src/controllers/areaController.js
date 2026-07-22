@@ -88,7 +88,7 @@ export const unassignPlatformFromArea = asyncHandler(async (req, res) => {
 });
 
 export const generateTasksFromFrequency = asyncHandler(async (req, res) => {
-  const result = await areaService.generateTasksFromFrequency(req.params.uid, req.body);
+  const result = await areaService.generateTasksFromFrequency(req.params.uid, req.body, req.user);
   res.status(200).json(result);
 });
 

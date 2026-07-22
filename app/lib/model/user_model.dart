@@ -61,12 +61,6 @@ class UserModel {
         return 'Contractor Admin';
       case 'CONTRACTOR_SUPERVISOR':
         return 'Contractor Supervisor';
-      case 'STATION_MASTER':
-        return 'Station Master';
-      case 'AREA_MASTER':
-        return 'Area Master';
-      case 'PLATFORM_MASTER':
-        return 'Platform Master';
       case 'CTS':
         return 'CTS';
       case 'WORKER':

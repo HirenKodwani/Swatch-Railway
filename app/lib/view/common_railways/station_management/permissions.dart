@@ -13,14 +13,6 @@ class StationCleaningPermissions {
     return ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT', 'CONTRACTOR_SUPERVISOR'].contains(normalize(role));
   }
 
-  static bool isStationOrAreaMaster(String role) {
-    return ['STATION_MASTER', 'AREA_MASTER'].contains(normalize(role));
-  }
-
-  static bool isPlatformMaster(String role) {
-    return normalize(role) == 'PLATFORM_MASTER';
-  }
-
   static bool canCreateArea(String role) {
     return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
@@ -38,19 +30,19 @@ class StationCleaningPermissions {
   }
 
   static bool canAssignWorker(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canBulkAssign(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canGenerateTasks(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canApproveTasks(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canStartTask(String role) {
@@ -62,7 +54,7 @@ class StationCleaningPermissions {
   }
 
   static bool canCreateMachine(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canDeleteMachine(String role) {
@@ -70,15 +62,15 @@ class StationCleaningPermissions {
   }
 
   static bool canAssignMachine(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canCreateMaterial(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canIssueMaterial(String role) {
-    return isSuperAdminOrAdmin(role) || isSupervisor(role) || isStationOrAreaMaster(role) || isPlatformMaster(role);
+    return isSuperAdminOrAdmin(role) || isSupervisor(role);
   }
 
   static bool canApproveReorder(String role) {

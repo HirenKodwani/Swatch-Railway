@@ -75,16 +75,6 @@ export function requirePlatformAccess(req, res, next) {
 
 export function requireAreaAccess(req, res, next) {
   const role = (req.user?.role || '').toUpperCase();
-  if (role === 'AREA_MASTER') {
-    const areaId = req.user.areaId || req.user.platformId;
-    if (!areaId) {
-      throw new ForbiddenError('No area assigned to your account');
-    }
-    const targetAreaId = req.params.areaId || req.body.areaId || req.query.areaId;
-    if (targetAreaId && targetAreaId !== areaId) {
-      throw new ForbiddenError('You can only access your assigned area');
-    }
-  }
   next();
 }
 
@@ -100,9 +90,6 @@ export function requireMasterAccess(minRole) {
       'RAILWAY_SUPERVISOR': 50,
       'CONTRACTOR_ADMIN': 45,
       'CONTRACTOR_SUPERVISOR': 40,
-      'STATION_MASTER': 55,
-      'AREA_MASTER': 48,
-      'PLATFORM_MASTER': 35,
       'CTS': 30,
       'WORKER': 10,
       'RAILWAY_WORKER': 10,
@@ -129,30 +116,14 @@ export function requireZoneMasterAccess(req, res, next) {
   next();
 }
 
-export function requireAreaMasterAccess(req, res, next) {
-  const role = (req.user?.role || '').toUpperCase();
-  if (!['AREA_MASTER', 'STATION_MASTER', 'PLATFORM_MASTER'].includes(role)) {
-    throw new ForbiddenError('Access denied. Requires area master, station master, or platform master role');
-  }
-  next();
-}
-
-export function requirePlatformMasterAccess(req, res, next) {
-  const role = (req.user?.role || '').toUpperCase();
-  if (!['PLATFORM_MASTER', 'AREA_MASTER', 'STATION_MASTER'].includes(role)) {
-    throw new ForbiddenError('Access denied. Requires platform master, area master, or station master role');
-  }
-  next();
-}
-
 export function requireDashboardLevelAccess(level) {
   return (req, res, next) => {
     const role = (req.user?.role || '').toUpperCase().replace(/\s+/g, '_');
     const roleHierarchy = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
-      'ADMIN': 70, 'RAILWAY_ADMIN': 60, 'STATION_MASTER': 55,
-      'RAILWAY_SUPERVISOR': 50, 'AREA_MASTER': 48, 'CONTRACTOR_ADMIN': 45,
-      'CONTRACTOR_SUPERVISOR': 40, 'PLATFORM_MASTER': 35, 'CTS': 30,
+      'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
+      'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
     };
     

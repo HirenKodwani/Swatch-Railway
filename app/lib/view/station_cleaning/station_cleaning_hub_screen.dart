@@ -7,8 +7,6 @@ import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/view/common_railways/station_management/station_feedback_list_screen.dart';
 import 'dashboard/station_dashboard_kpi_screen.dart';
 import 'dashboard/supervisor_dashboard_screen.dart';
-import 'dashboard/station_master_dashboard_screen.dart';
-import 'dashboard/platform_master_dashboard_screen.dart';
 import 'attendance/station_attendance_screen.dart';
 import 'activities/daily_activity_list_screen.dart';
 import 'billing/billing_support_pack_screen.dart';
@@ -43,6 +41,7 @@ import '../../model/station_run_model.dart';
 import 'attendance/worker_attendance_screen.dart';
 import 'inspection/inspection_list_screen.dart';
 import 'petty_issue/petty_issue_list_screen.dart';
+import 'task_master/task_type_list_screen.dart';
 
 class StationCleaningHubScreen extends StatefulWidget {
   final String stationId;
@@ -113,7 +112,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   // Each role has a permission set defining which card indices are visible
   Set<int> _visibleCards(String role) {
-    return {0, 1, 5, 8, 9, 15, 21, 22, 29, 30};
+    return {0, 1, 5, 8, 9, 15, 21, 22, 29, 30, 31};
   }
 
   @override
@@ -153,6 +152,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       _moduleCard(context, Icons.warning_amber_rounded, 'Att.\nExceptions', Colors.deepOrange, () => _openExceptionAction(context)), // 28
       _moduleCard(context, Icons.view_quilt, 'Platforms', Colors.teal, () => _openPlatforms(context)),             // 29
       _moduleCard(context, Icons.report_problem_outlined, 'Petty\nIssues', kWarningOrange, () => _openPettyIssues(context)), // 30
+      _moduleCard(context, Icons.checklist, 'Task\nTypes', Colors.blue.shade700, () => _openTaskTypes(context)),            // 31
     ];
 
     final cards = <Widget>[];
@@ -219,14 +219,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     final role = user?.role ?? '';
     final r = role.toUpperCase().replaceAll(' ', '_');
-    if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => StationMasterDashboardScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
-    } else if (r == 'PLATFORM_MASTER') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => PlatformMasterDashboardScreen(
-        stationId: _selectedStationId, stationName: _selectedStationName,
-        platformId: user?.platformId ?? '',
-      )));
-    } else if (r == 'RAILWAY_SUPERVISOR' || r == 'CONTRACTOR_SUPERVISOR') {
+    if (r == 'RAILWAY_SUPERVISOR' || r == 'CONTRACTOR_SUPERVISOR') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorDashboardScreen(
         stationId: _selectedStationId, stationName: _selectedStationName,
         platformId: user?.platformId,
@@ -410,11 +403,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   }
 
   void _openAreaConfig(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-    final role = user?.role ?? '';
-    final r = role.toUpperCase().replaceAll(' ', '_');
-    final platformId = r == 'PLATFORM_MASTER' ? user?.platformId : null;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaConfigScreen(stationId: _selectedStationId, stationName: _selectedStationName, platformId: platformId)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AreaConfigScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 
   void _openWorkerTasks(BuildContext context) {
@@ -439,19 +428,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   }
 
   void _openHierDashboard(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-    final role = user?.role ?? '';
-    final r = role.toUpperCase().replaceAll(' ', '_');
-    String? level;
-    String? levelId;
-    if (r == 'PLATFORM_MASTER') {
-      level = 'platform';
-      levelId = user?.platformId;
-    } else if (r == 'STATION_MASTER' || r == 'AREA_MASTER') {
-      level = 'station';
-      levelId = _selectedStationId;
-    }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => HierarchicalDashboardScreen(initialLevel: level, levelId: levelId)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => HierarchicalDashboardScreen(initialLevel: null, levelId: null)));
   }
 
   void _openZones(BuildContext context) {
@@ -508,5 +485,9 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   void _openPettyIssues(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => PettyIssueListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
+  }
+
+  void _openTaskTypes(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => TaskTypeListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
   }
 }

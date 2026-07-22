@@ -162,8 +162,6 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
       'RAILWAY_ADMIN': {'VIEW', 'MANAGE', 'APPROVE', 'PAY'},
       'CONTRACTOR_MASTER': {'VIEW'},
       'CONTRACTOR_ADMIN': {'VIEW', 'MANAGE', 'APPROVE'},
-      'STATION_MASTER': {'VIEW', 'APPROVE'},
-      'AREA_MASTER': {'VIEW'},
     };
     return (perms[r] ?? <String>{}).contains(permission);
   }
