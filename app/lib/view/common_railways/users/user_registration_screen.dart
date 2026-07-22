@@ -63,6 +63,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   Map<String, String> pickedDocs = {};
 
   bool _isLoading = false;
+  List<Station> _entityStations = [];
+  bool _loadingEntityStations = false;
 
   @override
   void initState() {
@@ -82,6 +84,38 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
       setState(() => allTrains = trains);
     } catch (e) {
       print('Error loading trains: $e');
+    }
+  }
+
+  Future<void> _loadEntityStations(String entityId) async {
+    setState(() => _loadingEntityStations = true);
+    try {
+      final stations = await ApiService.getStations(entityId: entityId);
+      final uniqueZones = <String>{};
+      for (final s in stations) {
+        if (s.zone.isNotEmpty) {
+          for (final z in DepotDatabase.zoneData.keys) {
+            if (z.toLowerCase().contains(s.zone.toLowerCase()) || s.zone.toLowerCase().contains(z.toLowerCase())) {
+              uniqueZones.add(z);
+              break;
+            }
+          }
+        }
+      }
+      setState(() {
+        _entityStations = stations;
+        zones = uniqueZones.isNotEmpty ? uniqueZones.toList()..sort() : DepotDatabase.zoneData.keys.toList()..sort();
+        _zone = null;
+        _division = null;
+        _depot = null;
+        divisions = [];
+        depots = [];
+        _selectedStationId = null;
+        _loadingEntityStations = false;
+      });
+    } catch (e) {
+      setState(() => _loadingEntityStations = false);
+      print('Error loading entity stations: $e');
     }
   }
 
@@ -124,8 +158,31 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   }
 
   void _loadDivisions(String zone) {
+    final allDivs = DepotDatabase.zoneData[zone]?.keys.toList() ?? [];
+    List<String> filtered = allDivs;
+    if (_entityStations.isNotEmpty && _selectedCompany != null) {
+      final entityDivs = _entityStations
+          .where((s) => s.zone.isNotEmpty && (zone.toLowerCase().contains(s.zone.toLowerCase()) || s.zone.toLowerCase().contains(zone.toLowerCase())))
+          .map((s) => s.division)
+          .where((d) => d != null && d.isNotEmpty)
+          .map((d) => d!)
+          .toSet()
+          .toList();
+      if (entityDivs.isNotEmpty) {
+        final matched = <String>{};
+        for (final ed in entityDivs) {
+          for (final dd in allDivs) {
+            if (dd.toLowerCase().contains(ed.toLowerCase()) || ed.toLowerCase().contains(dd.toLowerCase())) {
+              matched.add(dd);
+              break;
+            }
+          }
+        }
+        filtered = matched.isNotEmpty ? matched.toList()..sort() : allDivs;
+      }
+    }
     setState(() {
-      divisions = DepotDatabase.zoneData[zone]?.keys.toList() ?? [];
+      divisions = filtered;
       _division = null;
       depots = [];
       _depot = null;
@@ -170,6 +227,101 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     if (_selectedRole == null) return false;
     final r = _selectedRole!.toUpperCase();
     return r.contains('SUPERVISOR') || r.contains('CTS');
+  }
+
+  bool _shouldShowStationSelection() {
+    if (_selectedRole == null) return false;
+    if (_selectedRole == 'Station Master' ||
+        _selectedRole == 'Area Master' ||
+        _selectedRole == 'Platform Master' ||
+        _selectedRole!.toLowerCase().contains('worker')) return true;
+    if (_selectedUserType == 'contractor' && _selectedCompany != null) return true;
+    return false;
+  }
+
+  List<Station> _getFilteredStations() {
+    if (_selectedUserType == 'contractor' && _entityStations.isNotEmpty) {
+      List<Station> result = _entityStations;
+      if (_division != null) {
+        final divLower = _division!.toLowerCase();
+        result = result.where((s) =>
+            s.division.toLowerCase().contains(divLower) || divLower.contains(s.division.toLowerCase())).toList();
+      } else if (_zone != null) {
+        final zoneLower = _zone!.toLowerCase();
+        result = result.where((s) =>
+            s.zone.toLowerCase().contains(zoneLower) || zoneLower.contains(s.zone.toLowerCase())).toList();
+      }
+      return result;
+    }
+    return [];
+  }
+
+  Widget _buildStationDropdown() {
+    if (_selectedUserType == 'contractor') {
+      if (_entityStations.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _loadingEntityStations
+              ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
+              : const Text('No stations available for this contractor', style: TextStyle(color: Colors.grey)),
+        );
+      }
+      final stations = _getFilteredStations();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DropdownButtonFormField<String>(
+          value: (_selectedStationId != null && stations.any((s) => s.uid == _selectedStationId)) ? _selectedStationId : null,
+          decoration: const InputDecoration(labelText: 'Station *', border: OutlineInputBorder()),
+          items: stations.map((s) => DropdownMenuItem(value: s.uid, child: Text(s.stationName))).toList(),
+          validator: (v) => v == null ? 'Select station' : null,
+          onChanged: (v) => setState(() => _selectedStationId = v),
+        ),
+      );
+    }
+    // Non-contractor: load all stations via FutureBuilder
+    return FutureBuilder<List<Station>>(
+      future: ApiService.getStations(),
+      builder: (ctx, snap) {
+        if (snap.connectionState != ConnectionState.done) return const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Center(child: CircularProgressIndicator()),
+        );
+        if (snap.hasError) return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text('Error loading stations', style: TextStyle(color: Colors.red)),
+        );
+        final rawStations = snap.data ?? [];
+        final seenStationIds = <String>{};
+        final stations = rawStations.where((s) {
+          if (s.uid == null || s.uid!.isEmpty) return false;
+          return seenStationIds.add(s.uid!);
+        }).toList();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: DropdownButtonFormField<String>(
+            value: (_selectedStationId != null && stations.any((s) => s.uid == _selectedStationId)) ? _selectedStationId : null,
+            decoration: InputDecoration(
+              labelText: _selectedRole?.toLowerCase().contains('worker') == true
+                  ? 'Station (Required for Station Worker)'
+                  : 'Station *',
+              border: const OutlineInputBorder(),
+            ),
+            items: stations.map((s) => DropdownMenuItem(value: s.uid, child: Text(s.stationName))).toList(),
+            validator: (v) {
+              if (v == null && (_selectedRole == 'Station Master' || _selectedRole == 'Area Master' || _selectedRole == 'Platform Master')) {
+                return 'Select station';
+              }
+              return null;
+            },
+            onChanged: (v) => setState(() {
+              _selectedStationId = v;
+              _selectedAreaId = null;
+              _selectedPlatformId = null;
+            }),
+          ),
+        );
+      },
+    );
   }
 
   bool _isMultiTrainExport() {
@@ -239,6 +391,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                   _zone = null;
                   _division = null;
                   _depot = null;
+                  _entityStations = [];
+                  zones = DepotDatabase.zoneData.keys.toList();
                 }),
               ),
               const SizedBox(height: 12),
@@ -323,98 +477,12 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                     setState(() {
                       _selectedCompany = name;
                     });
+                    _loadEntityStations(name);
                   },
                 ),
 
-              if (_selectedRole == 'Station Master' ||
-                  _selectedRole == 'Area Master' ||
-                  _selectedRole == 'Platform Master' ||
-                  _selectedRole?.toLowerCase().contains('worker') == true)
-                FutureBuilder<List<Station>>(
-                  future: ApiService.getStations(),
-                  builder: (ctx, snap) {
-                    if (snap.connectionState != ConnectionState.done) return const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                    if (snap.hasError) return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text('Error loading stations', style: TextStyle(color: Colors.red)),
-                    );
-                    final rawStations = snap.data ?? [];
-                    // Deduplicate by uid to prevent Flutter dropdown assertion error
-                    final seenStationIds = <String>{};
-                    final stations = rawStations.where((s) {
-                      if (s.uid == null || s.uid!.isEmpty) return false;
-                      return seenStationIds.add(s.uid!);
-                    }).toList();
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        value: (_selectedStationId != null && stations.any((s) => s.uid == _selectedStationId)) ? _selectedStationId : null,
-                        decoration: InputDecoration(
-                          labelText: _selectedRole?.toLowerCase().contains('worker') == true
-                              ? 'Station (Required for Station Worker)'
-                              : 'Station *',
-                          border: const OutlineInputBorder(),
-                        ),
-                        items: stations.map((s) => DropdownMenuItem(value: s.uid, child: Text(s.stationName))).toList(),
-                        validator: (v) {
-                          if (v == null) {
-                            if (_selectedRole == 'Station Master' ||
-                                _selectedRole == 'Area Master' ||
-                                _selectedRole == 'Platform Master') {
-                              return 'Select station';
-                            }
-                          }
-                          return null;
-                        },
-                        onChanged: (v) => setState(() {
-                          _selectedStationId = v;
-                          _selectedAreaId = null;
-                          _selectedPlatformId = null;
-                          if (v != null) {
-                            final selectedStn = stations.firstWhere(
-                              (s) => s.uid == v,
-                              orElse: () => Station(stationCode: '', stationName: '', zone: '', division: ''),
-                            );
-                            if (selectedStn.zone.isNotEmpty) {
-                              String? matchedZone;
-                              for (final zKey in zones) {
-                                if (zKey.toLowerCase() == selectedStn.zone.toLowerCase() ||
-                                    zKey.toLowerCase().contains(selectedStn.zone.toLowerCase()) ||
-                                    selectedStn.zone.toLowerCase().contains(zKey.toLowerCase())) {
-                                  matchedZone = zKey;
-                                  break;
-                                }
-                              }
-                              if (matchedZone != null) {
-                                _zone = matchedZone;
-                                divisions = DepotDatabase.zoneData[_zone]?.keys.toList() ?? [];
-                                String? matchedDiv;
-                                for (final dKey in divisions) {
-                                  if (dKey.toLowerCase() == selectedStn.division.toLowerCase() ||
-                                      dKey.toLowerCase().contains(selectedStn.division.toLowerCase()) ||
-                                      selectedStn.division.toLowerCase().contains(dKey.toLowerCase())) {
-                                    matchedDiv = dKey;
-                                    break;
-                                  }
-                                }
-                                if (matchedDiv != null) {
-                                  _division = matchedDiv;
-                                  depots = DepotDatabase.zoneData[_zone]?[_division] ?? [];
-                                } else {
-                                  _division = null;
-                                  depots = [];
-                                }
-                              }
-                            }
-                          }
-                        }),
-                      ),
-                    );
-                  },
-                ),
+              if (_shouldShowStationSelection())
+                _buildStationDropdown(),
 
               if ((_selectedRole == 'Platform Master' || _selectedRole == 'Area Master') && _selectedStationId != null)
                 FutureBuilder<List<Platform>>(

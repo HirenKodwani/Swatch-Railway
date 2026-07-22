@@ -3709,7 +3709,7 @@ class ApiService {
     }
   }
 
-  static Future<List<Station>> getStations({String? zone, String? division, String? category, bool? active}) async {
+  static Future<List<Station>> getStations({String? zone, String? division, String? category, bool? active, String? entityId}) async {
     try {
       final token = await getToken();
       final params = <String, String>{};
@@ -3717,6 +3717,7 @@ class ApiService {
       if (division != null) params['division'] = division;
       if (category != null) params['category'] = category;
       if (active != null) params['active'] = active.toString();
+      if (entityId != null) params['entityId'] = entityId;
       final uri = Uri.parse('$baseUrl/api/stations').replace(queryParameters: params.isNotEmpty ? params : null);
       final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {

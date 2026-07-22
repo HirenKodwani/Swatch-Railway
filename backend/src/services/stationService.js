@@ -3,13 +3,23 @@ import { NotFoundError, ValidationError, ConflictError } from '../errors/index.j
 
 class StationService {
   async getStations(query = {}, user) {
-    const { zone, division, category, active, limit } = query;
+    const { zone, division, category, active, limit, entityId } = query;
     let q = db.collection('stations');
 
     const contractorRoles = ['CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER', 'CONTRACTOR_SUPERVISOR'];
     const userRole = (user?.role || '').toUpperCase().replace(/\s+/g, '_');
 
-    if (contractorRoles.includes(userRole) && user?.entityId) {
+    if (entityId && !contractorRoles.includes(userRole)) {
+      const mappings = await db.collection('stationContractorMappings')
+        .where('contractorId', '==', entityId)
+        .where('status', '==', 'active')
+        .get();
+      const stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
+      if (stationIds.length === 0) {
+        return { count: 0, stations: [] };
+      }
+      q = q.where('uid', 'in', stationIds);
+    } else if (contractorRoles.includes(userRole) && user?.entityId) {
       const mappings = await db.collection('stationContractorMappings')
         .where('contractorId', '==', user.entityId)
         .where('status', '==', 'active')

@@ -5,7 +5,8 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId, domain } = userData;
+    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
+    let domain = userData.domain;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
     const creatorName = creatorNameAuth || name || creatorRole || 'Admin';
