@@ -77,17 +77,9 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
     setState(() => _loadingStations = true);
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-      final role = user?.role ?? '';
       final all = await ApiService.getStations();
-      List<Station> filtered = all;
-      if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
-        filtered = all.where((s) => s.uid == user?.stationId).toList();
-        if (filtered.isEmpty && user?.stationId != null) {
-          filtered = all.where((s) => s.uid == user?.stationId).toList();
-        }
-      }
       setState(() {
-        _availableStations = filtered;
+        _availableStations = all;
         _loadingStations = false;
       });
     } catch (e) {
