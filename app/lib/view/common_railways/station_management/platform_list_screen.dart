@@ -43,8 +43,7 @@ class _PlatformListScreenState extends State<PlatformListScreen> {
         final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
         final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
         _stations = await ApiService.getStations(active: true);
-        if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master' ||
-            role == 'Contractor Admin' || role == 'Contractor Master') {
+        if (role == 'Contractor Admin' || role == 'Contractor Master') {
           final userStationIds = <String>{};
           if (user?.stationId != null && user!.stationId!.isNotEmpty) {
             userStationIds.add(user.stationId!);
@@ -132,7 +131,7 @@ class _PlatformListScreenState extends State<PlatformListScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Platform Master', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Platform List', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),

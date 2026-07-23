@@ -51,8 +51,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
       List<Station> allowed = fetched;
       if (widget.stationId != null) {
         allowed = fetched.where((s) => s.uid == widget.stationId).toList();
-      } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master' ||
-                 role == 'Contractor Admin' || role == 'Contractor Master') {
+      } else if (role == 'Contractor Admin' || role == 'Contractor Master') {
         final userStationIds = <String>{};
         if (user?.stationId != null && user!.stationId!.isNotEmpty) {
           userStationIds.add(user.stationId!);
@@ -114,19 +113,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
       }
 
       List<StationArea> displayAreas;
-      if (role == 'Area Master' || role == 'Platform Master') {
-        if (assignedPlatformId != null && assignedPlatformId.isNotEmpty) {
-          // Only show areas that belong to this master's platform
-          displayAreas = fetched.where((a) => a.platformId == assignedPlatformId).toList();
-        } else {
-          displayAreas = fetched;
-        }
+      if (_selectedPlatformId != null) {
+        displayAreas = fetched.where((a) => a.platformId == _selectedPlatformId).toList();
       } else {
-        if (_selectedPlatformId != null) {
-          displayAreas = fetched.where((a) => a.platformId == _selectedPlatformId).toList();
-        } else {
-          displayAreas = fetched;
-        }
+        displayAreas = fetched;
       }
 
       if (mounted) {
@@ -194,13 +184,11 @@ class _AreaListScreenState extends State<AreaListScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Area Master', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Area List', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          if (_selectedStation != null &&
-              Provider.of<AuthProvider>(context, listen: false).currentUser?.role != 'Area Master' &&
-              Provider.of<AuthProvider>(context, listen: false).currentUser?.role != 'Platform Master')
+          if (_selectedStation != null)
             IconButton(
               icon: const Icon(Icons.view_quilt),
               tooltip: 'Manage Platforms',
@@ -240,55 +228,26 @@ class _AreaListScreenState extends State<AreaListScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       color: Colors.white,
-                      child: Builder(builder: (ctx) {
-                        final isMaster = Provider.of<AuthProvider>(ctx, listen: false).currentUser?.role == 'Area Master' ||
-                            Provider.of<AuthProvider>(ctx, listen: false).currentUser?.role == 'Platform Master';
-                        return DropdownButtonFormField<Station>(
-                          value: _selectedStation,
-                          decoration: const InputDecoration(
-                            labelText: 'Station',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.train),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          items: _stations.map((s) => DropdownMenuItem(value: s, child: Text('${s.stationCode} - ${s.stationName}'))).toList(),
-                          onChanged: isMaster ? null : (v) async {
-                            setState(() {
-                              _selectedStation = v;
-                              _selectedPlatformId = null;
-                            });
-                            await _loadPlatforms();
-                            _loadAreas();
-                          },
-                        );
-                      }),
+                      child: DropdownButtonFormField<Station>(
+                        value: _selectedStation,
+                        decoration: const InputDecoration(
+                          labelText: 'Station',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.train),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: _stations.map((s) => DropdownMenuItem(value: s, child: Text('${s.stationCode} - ${s.stationName}'))).toList(),
+                        onChanged: (v) async {
+                          setState(() {
+                            _selectedStation = v;
+                            _selectedPlatformId = null;
+                          });
+                          await _loadPlatforms();
+                          _loadAreas();
+                        },
+                      ),
                     ),
-                    if (Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Area Master' ||
-                        Provider.of<AuthProvider>(context, listen: false).currentUser?.role == 'Platform Master')
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: kRailwayBlue.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: kRailwayBlue.withOpacity(0.25)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.view_quilt, color: kRailwayBlue, size: 20),
-                            const SizedBox(width: 10),
-                            Text(
-                              _assignedPlatformName.isNotEmpty
-                                  ? 'Assigned Platform: $_assignedPlatformName'
-                                  : 'Loading platform...',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: kRailwayBlue),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.lock, color: kRailwayBlue, size: 14),
-                          ],
-                        ),
-                      )
-                    else if (_platforms.isNotEmpty)
+                    if (_platforms.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         color: Colors.white,

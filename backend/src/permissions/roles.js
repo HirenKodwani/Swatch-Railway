@@ -84,11 +84,9 @@ export const PERMISSIONS = Object.freeze({
   VIEW_REPORTS: 'view_reports',
   GENERATE_REPORTS: 'generate_reports',
 
-  // Platform Master
   MANAGE_PLATFORMS: 'manage_platforms',
   VIEW_PLATFORMS: 'view_platforms',
 
-  // Area Master
   MANAGE_AREAS: 'manage_areas',
   VIEW_AREAS: 'view_areas',
 

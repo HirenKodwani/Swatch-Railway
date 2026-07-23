@@ -156,22 +156,22 @@ export function requireDashboardLevelAccess(level) {
         }
         break;
       case 'zone':
-        if (userRoleLevel < 48) { // Area Master and above
+        if (userRoleLevel < 48) {
           throw new ForbiddenError('Zone dashboard access requires zone-level privileges');
         }
         break;
       case 'station':
-        if (userRoleLevel < 48) { // Area Master and above
+        if (userRoleLevel < 48) {
           throw new ForbiddenError('Station dashboard access requires station-level privileges');
         }
         break;
       case 'platform':
-        if (userRoleLevel < 35) { // Platform Master and above
+        if (userRoleLevel < 35) {
           throw new ForbiddenError('Platform dashboard access requires platform-level privileges');
         }
         break;
       case 'area':
-        if (userRoleLevel < 35) { // Platform Master and above. Workers (10) are restricted.
+        if (userRoleLevel < 35) {
           throw new ForbiddenError('Area dashboard access requires area-level privileges');
         }
         break;

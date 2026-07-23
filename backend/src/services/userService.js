@@ -50,7 +50,42 @@ class UserService {
       }
     }
 
-
+    // Resolve station names in the stations list to actual station document IDs
+    if (stations && stations.length > 0) {
+      const resolvedStations = [];
+      for (const stationName of stations) {
+        if (!stationName || typeof stationName !== 'string') continue;
+        const trimmed = stationName.trim();
+        if (!trimmed) continue;
+        // Try exact match first, then case-insensitive
+        let snap = await db.collection('stations')
+          .where('stationName', '==', trimmed)
+          .limit(1)
+          .get();
+        if (snap.empty) {
+          snap = await db.collection('stations')
+            .where('stationName', '>=', trimmed)
+            .where('stationName', '<=', trimmed + '\uf8ff')
+            .limit(1)
+            .get();
+        }
+        if (!snap.empty) {
+          resolvedStations.push(snap.docs[0].id);
+        } else {
+          // Try matching by stationCode
+          const codeSnap = await db.collection('stations')
+            .where('stationCode', '==', trimmed.toUpperCase())
+            .limit(1)
+            .get();
+          if (!codeSnap.empty) {
+            resolvedStations.push(codeSnap.docs[0].id);
+          } else {
+            throw new ValidationError(`Station "${stationName}" not found. Please check the station name.`);
+          }
+        }
+      }
+      stations = resolvedStations;
+    }
 
     const normalizedUserType = userType.toLowerCase();
     const isWorkerRole = roleUpper.includes('WORKER') || roleUpper === 'JANITOR' || roleUpper === 'ATTENDANT';
@@ -307,7 +342,41 @@ class UserService {
     }
 
     if (stations !== undefined) {
-      updateData.stations = stations;
+      if (stations && stations.length > 0) {
+        const resolvedStations = [];
+        for (const stationName of stations) {
+          if (!stationName || typeof stationName !== 'string') continue;
+          const trimmed = stationName.trim();
+          if (!trimmed) continue;
+          let snap = await db.collection('stations')
+            .where('stationName', '==', trimmed)
+            .limit(1)
+            .get();
+          if (snap.empty) {
+            snap = await db.collection('stations')
+              .where('stationName', '>=', trimmed)
+              .where('stationName', '<=', trimmed + '\uf8ff')
+              .limit(1)
+              .get();
+          }
+          if (!snap.empty) {
+            resolvedStations.push(snap.docs[0].id);
+          } else {
+            const codeSnap = await db.collection('stations')
+              .where('stationCode', '==', trimmed.toUpperCase())
+              .limit(1)
+              .get();
+            if (!codeSnap.empty) {
+              resolvedStations.push(codeSnap.docs[0].id);
+            } else {
+              throw new ValidationError(`Station "${stationName}" not found.`);
+            }
+          }
+        }
+        updateData.stations = resolvedStations;
+      } else {
+        updateData.stations = stations;
+      }
     }
 
     if (Object.keys(updateData).length === 0 && !password) {

@@ -256,10 +256,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
   bool _shouldShowStationSelection() {
     if (_selectedRole == null) return false;
-    if (_selectedRole == 'Station Master' ||
-        _selectedRole == 'Area Master' ||
-        _selectedRole == 'Platform Master' ||
-        _selectedRole!.toLowerCase().contains('worker')) return true;
+    if (_selectedRole!.toLowerCase().contains('worker')) return true;
     if (_selectedUserType == 'contractor' && _selectedCompany != null) return true;
     return false;
   }
@@ -324,9 +321,6 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
             ),
             items: stations.map((s) => DropdownMenuItem(value: s.uid, child: Text(s.stationName))).toList(),
             validator: (v) {
-              if (v == null && (_selectedRole == 'Station Master' || _selectedRole == 'Area Master' || _selectedRole == 'Platform Master')) {
-                return 'Select station';
-              }
               return null;
             },
             onChanged: (v) => setState(() {
@@ -612,41 +606,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
               if (_shouldShowStationSelection() && !_isContractorAdminOrSupervisor())
                 _buildStationDropdown(),
 
-              if ((_selectedRole == 'Platform Master' || _selectedRole == 'Area Master') && _selectedStationId != null)
-                FutureBuilder<List<Platform>>(
-                  future: PlatformRepository.getByStation(_selectedStationId!),
-                  builder: (ctx, snap) {
-                    if (snap.connectionState != ConnectionState.done) return const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                    if (snap.hasError) return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text('Error loading platforms', style: TextStyle(color: Colors.red)),
-                    );
-                    final rawPlatforms = snap.data ?? [];
-                    // Deduplicate by uid to prevent Flutter dropdown assertion error
-                    final seenPlatformIds = <String>{};
-                    final platforms = rawPlatforms.where((p) {
-                      final id = p.uid ?? p.platformNumber;
-                      if (id == null || id.isEmpty) return false;
-                      return seenPlatformIds.add(id);
-                    }).toList();
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String>(
-                        value: (_selectedPlatformId != null && platforms.any((p) => (p.uid ?? p.platformNumber) == _selectedPlatformId)) ? _selectedPlatformId : null,
-                        decoration: const InputDecoration(labelText: 'Platform *', border: OutlineInputBorder()),
-                        items: platforms.map((p) => DropdownMenuItem(value: p.uid ?? p.platformNumber, child: Text(p.displayName))).toList(),
-                        validator: (v) => v == null ? 'Select platform' : null,
-                        onChanged: (v) => setState(() {
-                          _selectedPlatformId = v;
-                          _selectedAreaId = v; // Stored in areaId for DB consistency
-                        }),
-                      ),
-                    );
-                  },
-                ),
+
 
               const SizedBox(height: 12),
 
