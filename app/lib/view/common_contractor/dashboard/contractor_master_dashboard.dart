@@ -291,8 +291,8 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
 
   @override
 
-  List<Map<String, dynamic>> _getSidebarMenuItems(String? userRole) {
-    return [
+  List<Map<String, dynamic>> _getSidebarMenuItems(String? userRole, String? contractType) {
+    List<Map<String, dynamic>> items = [
       {
         "icon": Icons.dashboard_rounded,
         "title": "Dashboard",
@@ -318,17 +318,18 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "title": "Operations",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
-          {"title": "Coach Cleaning", "route": "coach_cleaning"},
-          {"title": "Premise Cleaning", "route": "premise_cleaning"},
-          {"title": "CTS Forms", "route": "cts_cleaning"},
-          {"title": "Station Cleaning Forms", "route": "station_cleaning"},
-          {"title": "Station Cleaning Runs", "route": "station_cleaning_runs"},
+          {"title": "Coach Cleaning", "route": "coach_cleaning", "contractTypes": ["coach"]},
+          {"title": "Premise Cleaning", "route": "premise_cleaning", "contractTypes": ["premises"]},
+          {"title": "CTS Forms", "route": "cts_cleaning", "contractTypes": ["cts"]},
+          {"title": "Station Cleaning Forms", "route": "station_cleaning", "contractTypes": ["station_cleaning"]},
+          {"title": "Station Cleaning Runs", "route": "station_cleaning_runs", "contractTypes": ["station_cleaning"]},
         ]
       },
       {
         "icon": Icons.cleaning_services_rounded,
         "title": "Station Cleaning",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "contractTypes": ["station_cleaning"],
         "children": [
           {"title": "Dashboard", "route": "sc_dashboard"},
           {"title": "Area Management", "route": "sc_areas"},
@@ -342,6 +343,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "icon": Icons.directions_run,
         "title": "OBHS",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "contractTypes": ["obhs"],
         "children": [
           {"title": "Attendance", "route": "obhs_attendance"},
           {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
@@ -354,10 +356,10 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "title": "Reports",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
-          {"title": "Coach Reports", "route": "coach_reports"},
-          {"title": "Premise Reports", "route": "premise_reports"},
-          {"title": "Station Reports", "route": "station_reports"},
-          {"title": "OBHS Reports", "route": "obhs_reports"},
+          {"title": "Coach Reports", "route": "coach_reports", "contractTypes": ["coach"]},
+          {"title": "Premise Reports", "route": "premise_reports", "contractTypes": ["premises"]},
+          {"title": "Station Reports", "route": "station_reports", "contractTypes": ["station_cleaning"]},
+          {"title": "OBHS Reports", "route": "obhs_reports", "contractTypes": ["obhs"]},
         ]
       },
       {
@@ -381,7 +383,28 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
           {"title": "Business Activities", "route": "activity_logs"},
         ]
       },
-    ].where((item) => (item['roles'] as List<String>).contains(userRole)).toList();
+    ];
+
+    return items.where((item) {
+      if (!(item['roles'] as List<String>).contains(userRole)) return false;
+      if (item.containsKey('contractTypes') && contractType != null) {
+        final allowedTypes = item['contractTypes'] as List<String>;
+        if (!allowedTypes.contains(contractType)) return false;
+      }
+      return true;
+    }).map((item) {
+      if (item.containsKey('children')) {
+        final children = (item['children'] as List<Map<String, dynamic>>).where((child) {
+          if (child.containsKey('contractTypes') && contractType != null) {
+            final allowedTypes = child['contractTypes'] as List<String>;
+            if (!allowedTypes.contains(contractType)) return false;
+          }
+          return true;
+        }).toList();
+        item['children'] = children;
+      }
+      return item;
+    }).where((item) => !item.containsKey('children') || (item['children'] as List).isNotEmpty).toList();
   }
 
   void _handleSidebarNavigation(String? route, BuildContext context, String? userRole) {
@@ -631,7 +654,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     const accentGreen = Color(0xFF12C27D);
     const softBorder = Color(0xFFE8E8F0);
 
-    final sidebarMenuItems = _getSidebarMenuItems(user?.role);
+    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType);
     return Scaffold(
       appBar: AppBar(
         title: Text(
