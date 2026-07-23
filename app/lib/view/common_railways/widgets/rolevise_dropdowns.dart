@@ -85,7 +85,7 @@ class _ZoneDivisionDepotDropdownsState
   Widget build(BuildContext context) {
     final userRole = widget.user.role;
 
-    if (userRole == 'Railway Supervisor' || userRole == 'Contractor Supervisor' || userRole == 'Station Master' || userRole == 'Area Master') {
+    if (userRole == 'Railway Supervisor' || userRole == 'Contractor Supervisor') {
       return const SizedBox.shrink();
     }
 

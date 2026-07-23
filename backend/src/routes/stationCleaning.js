@@ -120,4 +120,7 @@ router.post('/api/station-cleaning/attendance/report-issue', verifyToken, statio
 router.get('/api/station-cleaning/attendance/exceptions', verifyToken, stationCleaningAttendance.getAttendanceExceptions);
 router.post('/api/station-cleaning/attendance/exceptions/action', verifyToken, stationCleaningAttendance.takeAttendanceExceptionAction);
 
+// ─── Daily Log ──────────────────────────────────────────────────────────────
+router.post('/api/station-cleaning/daily-logs', verifyToken, stationCleaning.submitDailyLog);
+
 export default router;

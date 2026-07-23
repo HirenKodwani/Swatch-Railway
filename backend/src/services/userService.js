@@ -5,7 +5,7 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
+    let { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
     let domain = userData.domain;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
@@ -28,29 +28,57 @@ class UserService {
     }
 
     const roleUpper = role.toUpperCase();
-    if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
-      if (!division || !trainId) {
-        throw new ValidationError("Division and Train ID are mandatory for Contractor Supervisor.");
-      }
-      if (trainIds && trainIds.length > 1) {
-        throw new ValidationError("Contractor Supervisor can only be mapped to ONE train.");
-      }
-    }
 
-    if (roleUpper === 'RAILWAY SUPERVISOR') {
-      if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
-        throw new ValidationError("Division and at least one Train ID are mandatory for Railway Supervisor.");
-      }
-    }
-
-    const isContractorAdminOrSupervisor = roleUpper === 'CONTRACTOR_ADMIN' || roleUpper === 'CONTRACTOR_SUPERVISOR';
-    if (isContractorAdminOrSupervisor) {
+    if (normalizedUserType === 'contractor') {
       if (!contractId) {
-        throw new ValidationError("Contract is mandatory for Contractor Admin/Supervisor.");
+        throw new ValidationError("Contract is mandatory for all Contractor users.");
       }
     }
 
-
+    // Resolve station names in the stations list to actual station document IDs
+    if (stations && stations.length > 0) {
+      const resolvedStations = [];
+      for (const stationName of stations) {
+        if (!stationName || typeof stationName !== 'string') continue;
+        const trimmed = stationName.trim();
+        if (!trimmed) continue;
+        // If it looks like a Firestore document ID (>=20 alphanum), check directly
+        if (/^[a-zA-Z0-9]{20,}$/.test(trimmed)) {
+          const directSnap = await db.collection('stations').doc(trimmed).get();
+          if (directSnap.exists) {
+            resolvedStations.push(trimmed);
+            continue;
+          }
+        }
+        // Try exact match on stationName
+        let snap = await db.collection('stations')
+          .where('stationName', '==', trimmed)
+          .limit(1)
+          .get();
+        if (snap.empty) {
+          snap = await db.collection('stations')
+            .where('stationName', '>=', trimmed)
+            .where('stationName', '<=', trimmed + '\uf8ff')
+            .limit(1)
+            .get();
+        }
+        if (!snap.empty) {
+          resolvedStations.push(snap.docs[0].id);
+        } else {
+          // Try matching by stationCode
+          const codeSnap = await db.collection('stations')
+            .where('stationCode', '==', trimmed.toUpperCase())
+            .limit(1)
+            .get();
+          if (!codeSnap.empty) {
+            resolvedStations.push(codeSnap.docs[0].id);
+          } else {
+            throw new ValidationError(`Station "${stationName}" not found. Please check the station name.`);
+          }
+        }
+      }
+      stations = resolvedStations;
+    }
 
     const normalizedUserType = userType.toLowerCase();
     const isWorkerRole = roleUpper.includes('WORKER') || roleUpper === 'JANITOR' || roleUpper === 'ATTENDANT';
@@ -65,24 +93,15 @@ class UserService {
     let entityData = null;
     let resolvedContractType = null;
     if (normalizedUserType === 'contractor') {
-      if (isContractorAdminOrSupervisor) {
-        const contractDoc = await db.collection('contracts').doc(contractId).get();
-        if (!contractDoc.exists) {
-          throw new NotFoundError("Contract not found.");
-        }
-        const contractData = contractDoc.data();
-        entityData = contractData.entityName ? { companyName: contractData.entityName } : null;
-        resolvedContractType = contractData.contractType || null;
-      } else {
-        if (!entityId) {
-          throw new ValidationError("Contractor users must have an 'entityId' (Company ID).");
-        }
-        const entityDoc = await db.collection('entities').doc(entityId).get();
-        if (!entityDoc.exists) {
-          throw new NotFoundError("Entity (Company) not found.");
-        }
-        entityData = entityDoc.data();
+      const contractDoc = await db.collection('contracts').doc(contractId).get();
+      if (!contractDoc.exists) {
+        throw new NotFoundError("Contract not found.");
       }
+      const contractData = contractDoc.data();
+      entityData = contractData.entityName ? { companyName: contractData.entityName } : null;
+      resolvedContractType = contractData.contractType || null;
+      entityId = contractData.entityId || entityId;
+      userData.entityId = entityId;
       const userRoleLower = role.toLowerCase().replace(/_/g, " ");
       const creatorRoleUpper = (creatorRole || '').toUpperCase().replace(/\s+/g, '_');
       const bypassRoles = ['SUPER_ADMIN', 'COMPANY_MASTER', 'ADMIN'];
@@ -110,24 +129,11 @@ class UserService {
       }
 
       if (!domain) {
-        if (isContractorAdminOrSupervisor && contractId) {
-          const contractDoc = await db.collection('contracts').doc(contractId).get();
-          if (contractDoc.exists) {
-            const contractData = contractDoc.data();
-            if (contractData.contractType === 'station_cleaning' || contractData.contractType === 'obhs') {
-              domain = contractData.contractType;
-            }
-          }
-        } else {
-          const contractSnapshot2 = await db.collection('contracts')
-            .where('entityId', '==', entityId)
-            .where('status', '==', 'Active')
-            .limit(1).get();
-          if (!contractSnapshot2.empty) {
-            const firstContract = contractSnapshot2.docs[0].data();
-            if (firstContract.contractType === 'station_cleaning' || firstContract.contractType === 'obhs') {
-              domain = firstContract.contractType;
-            }
+        const contractDoc = await db.collection('contracts').doc(contractId).get();
+        if (contractDoc.exists) {
+          const contractData = contractDoc.data();
+          if (contractData.contractType === 'station_cleaning' || contractData.contractType === 'obhs') {
+            domain = contractData.contractType;
           }
         }
       }
@@ -135,6 +141,26 @@ class UserService {
       // If we still don't have a domain, but the creator specifies it or it can be derived, ensure it matches
       if (domain && !['station_cleaning', 'obhs'].includes(domain)) {
         domain = null;
+      }
+    }
+
+    if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
+      if (!division) {
+        throw new ValidationError("Division is mandatory for Contractor Supervisor.");
+      }
+      if (resolvedContractType !== 'station_cleaning') {
+        if (!trainId) {
+          throw new ValidationError("Train ID is mandatory for Contractor Supervisor on this contract type.");
+        }
+        if (trainIds && trainIds.length > 1) {
+          throw new ValidationError("Contractor Supervisor can only be mapped to ONE train.");
+        }
+      }
+    }
+
+    if (roleUpper === 'RAILWAY SUPERVISOR') {
+      if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
+        throw new ValidationError("Division and at least one Train ID are mandatory for Railway Supervisor.");
       }
     }
 
@@ -212,8 +238,14 @@ class UserService {
     const finalTrainIds = trainIds || currentData.trainIds;
 
     if (finalRoleUpper === 'CTS' || finalRoleUpper === 'CONTRACTOR SUPERVISOR') {
-      if (!finalDivision || !finalTrainId) {
-        throw new ValidationError("Division and Train ID are mandatory for Contractor Supervisor.");
+      if (!finalDivision) {
+        throw new ValidationError("Division is mandatory for Contractor Supervisor.");
+      }
+      const finalContractId = contractId || currentData.contractId;
+      const finalContractType = currentData.contractType;
+      const isStationCleaning = finalContractType === 'station_cleaning';
+      if (!isStationCleaning && !finalTrainId) {
+        throw new ValidationError("Train ID is mandatory for Contractor Supervisor on this contract type.");
       }
       if (Array.isArray(finalTrainId) || (finalTrainIds && finalTrainIds.length > 1)) {
         throw new ValidationError("Contractor Supervisor can only be mapped to ONE train.");
@@ -307,7 +339,49 @@ class UserService {
     }
 
     if (stations !== undefined) {
-      updateData.stations = stations;
+      if (stations && stations.length > 0) {
+        const resolvedStations = [];
+        for (const stationName of stations) {
+          if (!stationName || typeof stationName !== 'string') continue;
+          const trimmed = stationName.trim();
+          if (!trimmed) continue;
+          // If it looks like a Firestore document ID, check directly
+          if (/^[a-zA-Z0-9]{20,}$/.test(trimmed)) {
+            const directSnap = await db.collection('stations').doc(trimmed).get();
+            if (directSnap.exists) {
+              resolvedStations.push(trimmed);
+              continue;
+            }
+          }
+          let snap = await db.collection('stations')
+            .where('stationName', '==', trimmed)
+            .limit(1)
+            .get();
+          if (snap.empty) {
+            snap = await db.collection('stations')
+              .where('stationName', '>=', trimmed)
+              .where('stationName', '<=', trimmed + '\uf8ff')
+              .limit(1)
+              .get();
+          }
+          if (!snap.empty) {
+            resolvedStations.push(snap.docs[0].id);
+          } else {
+            const codeSnap = await db.collection('stations')
+              .where('stationCode', '==', trimmed.toUpperCase())
+              .limit(1)
+              .get();
+            if (!codeSnap.empty) {
+              resolvedStations.push(codeSnap.docs[0].id);
+            } else {
+              throw new ValidationError(`Station "${stationName}" not found.`);
+            }
+          }
+        }
+        updateData.stations = resolvedStations;
+      } else {
+        updateData.stations = stations;
+      }
     }
 
     if (Object.keys(updateData).length === 0 && !password) {

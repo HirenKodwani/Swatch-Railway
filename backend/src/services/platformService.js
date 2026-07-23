@@ -5,7 +5,7 @@ import { taskManagementService } from './taskManagementService.js';
 
 class PlatformService {
   async createPlatform(userData, body) {
-    const { platformNumber, stationId, platformName, surfaceType, length, width } = body;
+    const { platformNumber, stationId, platformName, surfaceType, length, width, platformArea } = body;
     if (!platformNumber || !stationId) throw new ValidationError('platformNumber and stationId are required');
 
     const stationDoc = await db.collection('stations').doc(stationId).get();
@@ -26,6 +26,7 @@ class PlatformService {
       surfaceType: surfaceType || null,
       length: length || null,
       width: width || null,
+      platformArea: platformArea || null,
       status: 'active',
       createdBy: userData.uid,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
@@ -55,7 +56,7 @@ class PlatformService {
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Platform not found');
     const updates = {};
-    const allowed = ['platformNumber', 'platformName', 'surfaceType', 'length', 'width', 'status'];
+    const allowed = ['platformNumber', 'platformName', 'surfaceType', 'length', 'width', 'platformArea', 'status'];
     for (const key of allowed) {
       if (body[key] !== undefined) updates[key] = body[key];
     }

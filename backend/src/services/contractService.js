@@ -38,19 +38,30 @@ class ContractService {
     let effectiveZone = zone || '';
 
     if (isStationCleaning) {
-      const effectiveDivision = division || '';
-      if (!effectiveDivision) {
-        throw new ValidationError("Division is required for station cleaning contracts.");
+      if (reqStationIds && reqStationIds.length > 0) {
+        for (const sid of reqStationIds) {
+          const snap = await db.collection('stations').doc(sid).get();
+          if (snap.exists) {
+            stationIds.push(snap.id);
+            stationNames.push(snap.data().stationName || snap.id);
+            if (!effectiveZone) effectiveZone = snap.data().zone;
+          } else throw new NotFoundError(`Station ${sid} not found.`);
+        }
+      } else {
+        const effectiveDivision = division || '';
+        if (!effectiveDivision) {
+          throw new ValidationError("Division is required for station cleaning contracts.");
+        }
+        const stationsSnap = await db.collection('stations')
+          .where('division', '==', effectiveDivision)
+          .limit(500)
+          .get();
+        stationsSnap.forEach(doc => {
+          stationIds.push(doc.id);
+          stationNames.push(doc.data().stationName || doc.id);
+        });
+        effectiveZone = zone || stationsSnap.docs[0]?.data().zone || '';
       }
-      const stationsSnap = await db.collection('stations')
-        .where('division', '==', effectiveDivision)
-        .limit(500)
-        .get();
-      stationsSnap.forEach(doc => {
-        stationIds.push(doc.id);
-        stationNames.push(doc.data().stationName || doc.id);
-      });
-      effectiveZone = zone || stationsSnap.docs[0]?.data().zone || '';
     } else if (isOBHS) {
       trainIds = reqTrainIds || [];
       if (trainIds.length === 0) {

@@ -119,6 +119,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
         division: user.division,
         depot: user.depot,
         entityId: user.entityId,
+        contractId: user.contractId,
       );
 
       final coachData = await FirebaseCountService.getCoachCleaningStats(
@@ -128,6 +129,7 @@ class _CommonReportScreenState extends State<CommonReportScreen>
         division: user.division,
         depot: user.depot,
         entityId: user.entityId,
+        contractId: user.contractId,
       );
 
       final ctsData = await ApiService.getCTSStatistics(

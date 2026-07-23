@@ -39,11 +39,6 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
   bool _active = true;
   String? _selectedPlatformId;
 
-  bool get _isReadOnly {
-    final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
-    return role == 'Area Master' || role == 'Platform Master';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -166,7 +161,6 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
             children: [
               Text(isEdit ? 'Edit Area Details' : 'Select Areas to Create', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              // Platform dropdown (read-only for Area/Platform Master)
               if (widget.platforms != null && widget.platforms!.isNotEmpty) ...[
                 DropdownButtonFormField<String?>(
                   value: widget.platforms!.any((p) => p.uid == _selectedPlatformId)
@@ -179,10 +173,7 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   items: widget.platforms!.map((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))).toList(),
-                  onChanged: _isReadOnly
-                      ? null
-                      : (v) => setState(() => _selectedPlatformId = v),
-                  disabledHint: Text(widget.platforms!.where((p) => p.uid == _selectedPlatformId).firstOrNull?.displayName ?? widget.platformName ?? ''),
+                  onChanged: (v) => setState(() => _selectedPlatformId = v),
                 ),
                 const SizedBox(height: 12),
               ] else if (widget.platformName != null && widget.platformName!.isNotEmpty) ...[

@@ -49,6 +49,9 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
   List<Station> _availableStations = [];
   List<TrainModel> _availableTrains = [];
   bool _stationsLoading = false;
+  final TextEditingController _stationNameController = TextEditingController();
+  String? _manualStationId;
+  String? _manualStationName;
   String? selectedBillingCycle;
   String? selectedContractType;
   double contractValue = 0;
@@ -132,7 +135,48 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
     repIdNumberController.text = c.repIdProofNumber ?? '';
     selectedIDType = c.repIdProofType;
 
+    if (c.stationIds != null && c.stationIds.isNotEmpty) {
+      _manualStationId = c.stationIds.first;
+      _manualStationName = c.stationNames.isNotEmpty ? c.stationNames.first : c.stationIds.first;
+      _stationNameController.text = _manualStationName ?? '';
+    }
+
     setState(() {});
+  }
+
+  Future<void> _resolveStation(String name) async {
+    if (name.isEmpty) return;
+    try {
+      final stations = await ApiService.getStations(division: selectedDivision, active: true);
+      final match = stations.firstWhere(
+        (s) => s.stationName?.toLowerCase() == name.toLowerCase(),
+        orElse: () => stations.firstWhere(
+          (s) => (s.stationName?.toLowerCase().contains(name.toLowerCase()) ?? false),
+          orElse: () => Station(stationCode: '', stationName: '', zone: '', division: ''),
+        ),
+      );
+      if (match.uid != null && match.uid!.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _manualStationId = match.uid;
+            _manualStationName = match.stationName;
+            _stationNameController.text = match.stationName ?? name;
+          });
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Station not found in this division'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -231,6 +275,38 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                       ),
                     ),
                   ),
+                  if (selectedContractType == 'Station Cleaning') ...[
+                    const SizedBox(height: 16),
+                    _buildCard(
+                      title: "Station Assignment",
+                      icon: Icons.train,
+                      child: _manualStationId != null && _manualStationName != null
+                          ? Chip(
+                              avatar: const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                              label: Text('Station: $_manualStationName'),
+                              onDeleted: () => setState(() {
+                                _manualStationId = null;
+                                _manualStationName = null;
+                                _stationNameController.clear();
+                              }),
+                            )
+                          : TextFormField(
+                              controller: _stationNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Station Name *',
+                                hintText: 'Type station name',
+                                border: OutlineInputBorder(),
+                                suffixIcon: Icon(Icons.search),
+                              ),
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              onChanged: (v) {
+                                _manualStationId = null;
+                                _manualStationName = null;
+                              },
+                              onFieldSubmitted: (v) => _resolveStation(v.trim()),
+                            ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
 
                   _buildCard(
@@ -344,35 +420,7 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
                             enabled: !isEditMode,
                           ),
                         ],
-                        // Station Cleaning → show read-only station list from division
-                        if (selectedContractType == 'Station Cleaning') ...[
-                          const SizedBox(height: 12),
-                          const Text('Stations in Division (auto-assigned)', style: TextStyle(fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 4),
-                          _stationsLoading
-                              ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                              : Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade300),
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: Colors.grey.shade50,
-                                  ),
-                                  child: _availableStations.isEmpty
-                                      ? const Text('No stations found in this division', style: TextStyle(color: Colors.grey))
-                                      : Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: _availableStations.map((s) => Chip(
-                                            label: Text('${s.stationCode ?? ""} - ${s.stationName ?? ""}',
-                                                style: const TextStyle(fontSize: 12)),
-                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                            visualDensity: VisualDensity.compact,
-                                          )).toList(),
-                                        ),
-                                ),
-                        ],
+
                         if (selectedContractType != null && selectedContractType != 'Station Cleaning' && selectedContractType != 'OBHS') ...[
                           const SizedBox(height: 12),
                           const Text('Assigned Stations *', style: TextStyle(fontWeight: FontWeight.w500)),
@@ -998,7 +1046,9 @@ class _ContractFormScreenState extends State<ContractFormScreen> {
           zone: selectedZone!,
           division: selectedDivision,
           depot: selectedDepot,
-          stationIds: selectedContractType == 'Station Cleaning' ? null : (selectedStationIds.isNotEmpty ? selectedStationIds : null),
+          stationIds: selectedContractType == 'Station Cleaning'
+              ? (_manualStationId != null ? [_manualStationId!] : null)
+              : (selectedStationIds.isNotEmpty ? selectedStationIds : null),
           trainIds: selectedContractType == 'OBHS' ? (selectedTrainIds.isNotEmpty ? selectedTrainIds : null) : null,
           startDate: formattedStartDate,
           endDate: formattedEndDate,

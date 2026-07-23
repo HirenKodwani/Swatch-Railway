@@ -3,7 +3,8 @@ import 'package:crm_train/repositories/station_run_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 
-import 'package:crm_train/view/station_cleaning/worker_tasks/worker_task_view_screen.dart';
+import 'package:crm_train/view/common_workers/worker_station_cleaning_screen.dart';
+import 'package:crm_train/view/station_cleaning/supervisor_log/supervisor_daily_log_screen.dart';
 
 class CSFieldExecutionScreen extends StatefulWidget {
   const CSFieldExecutionScreen({super.key});
@@ -49,13 +50,27 @@ class _CSFieldExecutionScreenState extends State<CSFieldExecutionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('My Execution Runs'),
+        title: const Text('My Scheduled Runs', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: kRailwayBlue,
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMyRuns),
         ],
       ),
       body: _buildBody(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SupervisorDailyLogScreen()),
+          );
+        },
+        backgroundColor: kRailwayBlue,
+        icon: const Icon(Icons.edit_document, color: Colors.white),
+        label: const Text('Daily Log', style: TextStyle(color: Colors.white)),
+      ),
     );
   }
 
@@ -95,9 +110,9 @@ class _CSFieldExecutionScreenState extends State<CSFieldExecutionScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => WorkerTaskViewScreen(
-                    workerId: run.supervisorId ?? '', 
-                    workerName: run.supervisorName ?? '',
+                  builder: (_) => WorkerStationRunDetailScreen(
+                    run: run,
+                    onRefresh: _loadMyRuns,
                   ),
                 ),
               ).then((_) => _loadMyRuns());

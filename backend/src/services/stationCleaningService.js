@@ -51,6 +51,14 @@ class StationCleaningService {
     return query;
   }
 
+  _scopeByContractId(query, user, contractField = 'contractId') {
+    if (this._isMasterOrAdmin(user)) return query;
+    if (user?.contractId) {
+      return query.where(contractField, '==', user.contractId);
+    }
+    return query;
+  }
+
   _verifyStationAccess(task, user) {
     const role = (user?.role || '').toUpperCase();
     const userStationId = user?.stationId;
@@ -364,6 +372,7 @@ class StationCleaningService {
       platforms: body.platforms || [],
       supervisorId: body.supervisorId || (user && user.uid) || null,
       contractorId: body.contractorId || null,
+      contractId: body.contractId || (user && user.contractId) || null,
       status: body.status || 'active',
       createdBy: user && user.uid,
       createdAt: new Date().toISOString(),
@@ -380,6 +389,7 @@ class StationCleaningService {
     const { stationId } = query;
     let q = db.collection('stationRuns').limit(200);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     const runs = snapshot.docs
@@ -408,18 +418,16 @@ class StationCleaningService {
   }
 
   async getMyStationRuns(userId) {
-    const [supervisorSnap, allRunsSnap] = await Promise.all([
-      db.collection('stationRuns').where('supervisorId', '==', userId).limit(100).get(),
-      db.collection('stationRuns').limit(300).get()
-    ]);
+    const supervisorSnap = await db.collection('stationRuns')
+      .where('supervisorId', '==', userId).limit(100).get();
     
-    const runsMap = new Map();
-    
+    const runs = [];
     supervisorSnap.forEach(d => {
-      runsMap.set(d.id, { id: d.id, ...d.data() });
+      const data = d.data();
+      if (data.status !== 'deleted') {
+        runs.push({ id: d.id, ...data });
+      }
     });
-
-    const runs = Array.from(runsMap.values()).filter(r => r.status !== 'deleted');
     return { count: runs.length, runs };
   }
 
@@ -432,7 +440,9 @@ class StationCleaningService {
   }
 
   async getWorkerStationRuns(workerId, user) {
-    const snapshot = await db.collection('stationRuns').limit(300).get();
+    let q = db.collection('stationRuns').limit(300);
+    q = this._scopeByContractId(q, user);
+    const snapshot = await q.get();
     const runs = [];
     snapshot.forEach(d => {
       const runData = d.data();
@@ -448,15 +458,17 @@ class StationCleaningService {
   }
 
   async getSupervisorStationRuns(supervisorId, user) {
-    const snapshot = await db.collection('stationRuns')
-      .where('supervisorId', '==', supervisorId).limit(100).get();
+    let q = db.collection('stationRuns')
+      .where('supervisorId', '==', supervisorId).limit(100);
+    q = this._scopeByContractId(q, user);
+    const snapshot = await q.get();
     const runs = snapshot.docs
       .filter(d => d.data().status !== 'deleted')
       .map(d => ({ id: d.id, ...d.data() }));
     return { count: runs.length, runs };
   }
 
-  async completePlatform(runId, user) {
+  async completePlatform(runId, body, user) {
     const ref = db.collection('stationRuns').doc(runId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station run not found');
@@ -464,27 +476,40 @@ class StationCleaningService {
     const runData = doc.data();
     if (runData.status === 'deleted') throw new NotFoundError('Station run not found');
 
+    const platformNumber = body.platformNumber;
+    const photoUrl = body.photoUrl;
+
+    if (!platformNumber) {
+      throw new Error('platformNumber is required in the body');
+    }
+
     const platforms = runData.platforms || [];
-    const myPlatform = platforms.find(p => p.janitorId === user.uid && p.status !== 'Completed');
-    if (!myPlatform) throw new ForbiddenError('No pending platform assignment found for you');
+    const platformIndex = platforms.findIndex(p => p.platformNumber === platformNumber);
+    if (platformIndex === -1) {
+      throw new NotFoundError('Platform not found in this run');
+    }
 
-    const updatedPlatforms = platforms.map(p => {
-      if (p.janitorId === user.uid && p.status !== 'Completed') {
-        return { ...p, status: 'Completed' };
-      }
-      return p;
-    });
+    if (platforms[platformIndex].status === 'Completed') {
+       throw new Error('Platform is already completed');
+    }
 
-    const allCompleted = updatedPlatforms.every(p => p.status === 'Completed');
+    platforms[platformIndex].status = 'Completed';
+    platforms[platformIndex].completedAt = new Date().toISOString();
+    platforms[platformIndex].completedBy = user.uid;
+    if (photoUrl) {
+      platforms[platformIndex].photoUrl = photoUrl;
+    }
+
+    const allCompleted = platforms.every(p => p.status === 'Completed');
     const newStatus = allCompleted ? 'Completed' : 'In Progress';
 
     await ref.update({
-      platforms: updatedPlatforms,
+      platforms: platforms,
       status: newStatus,
       updatedAt: new Date().toISOString()
     });
 
-    return { message: `Platform ${myPlatform.platformNumber} marked complete`, runId, platformNumber: myPlatform.platformNumber };
+    return { message: `Platform ${platformNumber} marked complete`, runId, platformNumber: platformNumber };
   }
 
   // ─── Station Tasks ──────────────────────────────────────────────────────────
@@ -690,6 +715,7 @@ class StationCleaningService {
     const { stationId, status, startDate, endDate } = query;
     let q = db.collection('stationCleaningForms').limit(200);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
@@ -752,6 +778,7 @@ class StationCleaningService {
       stationName: body.stationName || '',
       pestType: pestType || 'General',
       entityId: body.entityId || null,
+      contractId: body.contractId || (user && user.contractId) || null,
       frequency: body.frequency || 'monthly',
       conductedDate: body.conductedDate || new Date().toISOString().split('T')[0],
       area: body.area || '',
@@ -783,6 +810,7 @@ class StationCleaningService {
     const { stationId, status } = query || {};
     let q = db.collection('pestControlRecords').limit(300);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
@@ -808,6 +836,7 @@ class StationCleaningService {
     const { stationId, startDate, endDate } = query || {};
     let q = db.collection('pestControlRecords').limit(300);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     let records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -825,6 +854,7 @@ class StationCleaningService {
       uid: ref.id, stationId,
       machineType: machineType || 'General',
       entityId: body.entityId || null,
+      contractId: body.contractId || (user && user.contractId) || null,
       deployedDate: body.deployedDate || new Date().toISOString().split('T')[0],
       status: 'deployed',
       quantity: body.quantity || 1,
@@ -840,6 +870,7 @@ class StationCleaningService {
     const { stationId } = query || {};
     let q = db.collection('machineDeployments').limit(200);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -876,6 +907,7 @@ class StationCleaningService {
     const { stationId } = query || {};
     let q = db.collection('machineDeployments').limit(300);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     const records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -891,6 +923,7 @@ class StationCleaningService {
       uid: ref.id, stationId,
       stationName: body.stationName || '',
       entityId: body.entityId || null,
+      contractId: body.contractId || (user && user.contractId) || null,
       disposalDate: body.disposalDate || new Date().toISOString().split('T')[0],
       garbageType: body.garbageType || body.wasteType || 'General',
       wasteType: body.wasteType || '',
@@ -916,6 +949,7 @@ class StationCleaningService {
     const { stationId, startDate, endDate, status } = query || {};
     let q = db.collection('garbageDisposalRecords').limit(300);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     if (status) q = q.where('status', '==', status);
     const snapshot = await q.get();
@@ -962,6 +996,7 @@ class StationCleaningService {
     const { stationId, startDate, endDate } = query || {};
     let q = db.collection('garbageDisposalRecords').limit(300);
     q = this._scopeByContract(q, user, 'stationId');
+    q = this._scopeByContractId(q, user);
     if (stationId) q = q.where('stationId', '==', stationId);
     const snapshot = await q.get();
     let records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1115,6 +1150,32 @@ class StationCleaningService {
       data.push({ month: m, year: y, label: `${y}-${String(m).padStart(2, '0')}`, averageScore: avgScore, taskCount: tasks.length });
     }
     return { stationId, trend: data };
+  }
+
+  // ─── Daily Log ──────────────────────────────────────────────────────────────
+
+  async submitDailyLog(body, user) {
+    const { activitiesSummary, machineUsage, issuesEncountered, handoverNotes } = body;
+    if (!activitiesSummary) {
+      throw new Error('Activities summary is required');
+    }
+
+    const logData = {
+      supervisorId: user.uid,
+      supervisorName: user.name || 'Unknown',
+      contractId: user.contractId || null,
+      stationId: user.stationId || null,
+      date: new Date().toISOString().split('T')[0],
+      activitiesSummary,
+      machineUsage: machineUsage || '',
+      issuesEncountered: issuesEncountered || '',
+      handoverNotes: handoverNotes || '',
+      createdAt: new Date().toISOString(),
+      status: 'SUBMITTED'
+    };
+
+    const ref = await db.collection('stationDailyLogs').add(logData);
+    return { id: ref.id, ...logData };
   }
 }
 

@@ -404,28 +404,28 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "title": "Review Forms",
         "subtitle": "$pendingForms pending",
         "color": Colors.blue,
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.event_note_sharp,
         "title": "Pending Scorecards",
         "subtitle": "$scoringProgressForms forms ready",
         "color": Colors.purple,
-        "roles": ["Company Master", "Contractor Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.train,
         "title": "Add New Train",
         "subtitle": "Register Train",
         "color": Colors.green,
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Station Master", "Area Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Master"]
       },
       {
         "icon": Icons.location_city_outlined,
         "title": "Add New Entity",
         "subtitle": "Entity Registration",
         "color": Colors.red,
-        "roles": ["Company Master", "Contractor Admin", "Railway Master", "Station Master", "Area Master"]
+        "roles": ["Company Master", "Contractor Admin", "Railway Master"]
       },
     ];
 
@@ -437,18 +437,18 @@ class _CommonDashboardState extends State<CommonDashboard> {
         .toList();
   }
 
-  List<Map<String, dynamic>> _getSidebarMenuItems(String? userRole) {
-    return [
+  List<Map<String, dynamic>> _getSidebarMenuItems(String? userRole, String? contractType) {
+    List<Map<String, dynamic>> items = [
       {
         "icon": Icons.dashboard_rounded,
         "title": "Dashboard",
         "route": null,
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.admin_panel_settings,
         "title": "Masters",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Station Master", "Area Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
         "children": [
           {"title": "User Management", "route": "users"},
           {"title": "Entity Management", "route": "entities"},
@@ -462,22 +462,23 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.cleaning_services,
         "title": "Operations",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
-          {"title": "Coach Cleaning", "route": "coach_cleaning"},
-          {"title": "Premise Cleaning", "route": "premise_cleaning"},
-          {"title": "CTS Forms", "route": "cts_cleaning"},
-          {"title": "Station Cleaning Forms", "route": "station_cleaning"},
-          {"title": "Station Cleaning Runs", "route": "station_cleaning_runs"},
-          {"title": "Pest Control", "route": "pest_control"},
-          {"title": "Machines & Materials", "route": "machines"},
-          {"title": "Garbage Disposal", "route": "garbage"},
+          {"title": "Coach Cleaning", "route": "coach_cleaning", "contractTypes": ["coach"]},
+          {"title": "Premise Cleaning", "route": "premise_cleaning", "contractTypes": ["premises"]},
+          {"title": "CTS Forms", "route": "cts_cleaning", "contractTypes": ["cts"]},
+          {"title": "Station Cleaning Forms", "route": "station_cleaning", "contractTypes": ["station_cleaning"]},
+          {"title": "Station Cleaning Runs", "route": "station_cleaning_runs", "contractTypes": ["station_cleaning"]},
+          {"title": "Pest Control", "route": "pest_control", "contractTypes": ["station_cleaning"]},
+          {"title": "Machines & Materials", "route": "machines", "contractTypes": ["station_cleaning"]},
+          {"title": "Garbage Disposal", "route": "garbage", "contractTypes": ["station_cleaning"]},
         ]
       },
       {
         "icon": Icons.cleaning_services_rounded,
         "title": "Station Cleaning",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "contractTypes": ["station_cleaning"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
           {"title": "Module Hub", "route": "sc_main"},
           {"title": "Inspection", "route": "sc_inspection"},
@@ -493,7 +494,8 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.directions_run,
         "title": "OBHS",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "contractTypes": ["obhs"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
           {"title": "Attendance", "route": "obhs_attendance"},
           {"title": "Attendance Exceptions", "route": "attendance_exceptions"},
@@ -504,30 +506,51 @@ class _CommonDashboardState extends State<CommonDashboard> {
       {
         "icon": Icons.analytics,
         "title": "Reports",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"],
         "children": [
-          {"title": "Coach Reports", "route": "coach_reports"},
-          {"title": "Premise Reports", "route": "premise_reports"},
-          {"title": "Station Reports", "route": "station_reports"},
-          {"title": "OBHS Reports", "route": "obhs_reports"},
+          {"title": "Coach Reports", "route": "coach_reports", "contractTypes": ["coach"]},
+          {"title": "Premise Reports", "route": "premise_reports", "contractTypes": ["premises"]},
+          {"title": "Station Reports", "route": "station_reports", "contractTypes": ["station_cleaning"]},
+          {"title": "OBHS Reports", "route": "obhs_reports", "contractTypes": ["obhs"]},
         ]
       },
       {
         "icon": Icons.star_outline,
         "title": "Ratings",
         "route": "ratings",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Station Master", "Area Master", "Platform Master"]
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]
       },
       {
         "icon": Icons.security,
         "title": "Audit & Compliance",
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Station Master", "Area Master"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
         "children": [
           {"title": "Compliance & Security Tracking", "route": "audit_logs"},
           {"title": "Business Activities", "route": "activity_logs"},
         ]
       },
-    ].where((item) => (item['roles'] as List<String>).contains(userRole)).toList();
+    ];
+
+    return items.where((item) {
+      if (!(item['roles'] as List<String>).contains(userRole)) return false;
+      if (item.containsKey('contractTypes') && contractType != null) {
+        final allowedTypes = item['contractTypes'] as List<String>;
+        if (!allowedTypes.contains(contractType)) return false;
+      }
+      return true;
+    }).map((item) {
+      if (item.containsKey('children')) {
+        final children = (item['children'] as List<Map<String, dynamic>>).where((child) {
+          if (child.containsKey('contractTypes') && contractType != null) {
+            final allowedTypes = child['contractTypes'] as List<String>;
+            if (!allowedTypes.contains(contractType)) return false;
+          }
+          return true;
+        }).toList();
+        item['children'] = children;
+      }
+      return item;
+    }).where((item) => !item.containsKey('children') || (item['children'] as List).isNotEmpty).toList();
   }
 
   void _handleSidebarNavigation(String? route, BuildContext context, String? userRole) {
@@ -672,7 +695,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
     final quickActions = _getQuickActions(user?.role);
-    final sidebarMenuItems = _getSidebarMenuItems(user?.role);
+    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType);
 
     final parts = [
       if (user?.zone != null && user!.zone!.isNotEmpty) user.zone!,

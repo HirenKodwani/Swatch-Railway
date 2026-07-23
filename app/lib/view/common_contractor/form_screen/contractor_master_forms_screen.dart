@@ -1,5 +1,6 @@
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/view/common_contractor/form_screen/select_from_screen.dart';
+import 'package:crm_train/view/station_cleaning/cleaning_form/station_cleaning_form_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:provider/provider.dart';
@@ -22,8 +23,9 @@ import 'forms/new_premises_form.dart';
 
 class ContractorMasterFormsScreen extends StatefulWidget {
   final int initialTabIndex;
+  final String? contractType;
 
-  const ContractorMasterFormsScreen({super.key, this.initialTabIndex = 0});
+  const ContractorMasterFormsScreen({super.key, this.initialTabIndex = 0, this.contractType});
 
   @override
   State<ContractorMasterFormsScreen> createState() => _ContractorMasterFormsScreenState();
@@ -260,7 +262,8 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
+    final isStationCleaning = widget.contractType == 'station_cleaning';
+    _tabController = TabController(length: isStationCleaning ? 1 : 3, vsync: this, initialIndex: widget.initialTabIndex);
     _fetchCoachForms();
     _fetchPremisesForms();
     _fetchCTSForms();
@@ -342,24 +345,30 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
           preferredSize: const Size.fromHeight(50),
           child: TabBar(
             controller: _tabController,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: Colors.white,
-            tabs: const [
-              Tab(child: Text('Coach', style: TextStyle(fontWeight: FontWeight.w600))),
-              Tab(child: Text('Premises', style: TextStyle(fontWeight: FontWeight.w600))),
-              Tab(child: Text('CTS', style: TextStyle(fontWeight: FontWeight.w600))),
-            ],
+            indicatorColor: Colors.blue,
+            labelColor: Colors.blue,
+            unselectedLabelColor: Colors.grey,
+            tabs: widget.contractType == 'station_cleaning'
+                ? const [
+                    Tab(child: Text('Station Cleaning', style: TextStyle(fontWeight: FontWeight.w600))),
+                  ]
+                : const [
+                    Tab(child: Text('Coach', style: TextStyle(fontWeight: FontWeight.w600))),
+                    Tab(child: Text('Premises', style: TextStyle(fontWeight: FontWeight.w600))),
+                    Tab(child: Text('CTS', style: TextStyle(fontWeight: FontWeight.w600))),
+                  ],
           ),
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildCoachFormsTab(),
-          _buildPremisesFormsTab(),
-          _buildCtsFormsTab()
-        ],
+        children: widget.contractType == 'station_cleaning'
+            ? [_buildStationCleaningFormsTab()]
+            : [
+                _buildCoachFormsTab(),
+                _buildPremisesFormsTab(),
+                _buildCtsFormsTab()
+              ],
       ),
       floatingActionButton: canCreateForm ? FloatingActionButton.extended(
         onPressed: () {
@@ -416,6 +425,50 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
           const Text("Premises Forms", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           _buildFormsList2(),
           const SizedBox(height: 50),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStationCleaningFormsTab() {
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    final stations = user?.stations ?? [];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Station Cleaning Forms",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          if (stations.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text('No stations assigned to your contract.',
+                    style: TextStyle(color: Colors.grey, fontSize: 16)),
+              ),
+            )
+          else
+            ...stations.map((stationId) => Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: const Icon(Icons.train, color: kRailwayBlue),
+                    title: Text(stationId),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => StationCleaningFormListScreen(
+                            stationId: stationId,
+                            stationName: stationId,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                )),
         ],
       ),
     );
