@@ -135,12 +135,15 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
   Future<void> _autoAssignFromCurrentUser() async {
     final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
-    if (currentUser?.role != 'Contractor Admin' || currentUser?.contractId == null || currentUser!.contractId!.isEmpty) {
-      return;
-    }
+    if (currentUser?.role != 'Contractor Admin') return;
+    if (currentUser?.entityId == null || currentUser!.entityId!.isEmpty) return;
     try {
       final contracts = await ApiService.getContractsForDropdown(entityId: currentUser.entityId);
-      final match = contracts.where((c) => c['uid'] == currentUser.contractId).firstOrNull;
+      Map<String, dynamic>? match;
+      if (currentUser.contractId != null && currentUser.contractId!.isNotEmpty) {
+        match = contracts.where((c) => c['uid'] == currentUser.contractId).firstOrNull;
+      }
+      match ??= contracts.where((c) => c['contractType'] == 'station_cleaning').firstOrNull;
       if (match == null) return;
       final contractData = match;
       final rawZone = contractData['zone'] as String?;
@@ -573,6 +576,18 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       _division = null;
                       _depot = null;
                       depots = [];
+                    }
+
+                    else if (currentUser?.role == 'Contractor Admin') {
+                      _zone = currentUser?.zone;
+                      _division = currentUser?.division;
+                      if (_zone != null) {
+                        divisions = DepotDatabase.zoneData[_zone]?.keys.toList() ?? [];
+                        if (_division != null) {
+                          depots = DepotDatabase.zoneData[_zone]?[_division] ?? [];
+                        }
+                      }
+                      _depot = null;
                     }
 
                     else if (currentUser?.role == 'Contractor Master') {
