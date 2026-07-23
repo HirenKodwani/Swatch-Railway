@@ -50,13 +50,27 @@ class _CSFieldExecutionScreenState extends State<CSFieldExecutionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('My Execution Runs'),
+        title: const Text('My Scheduled Runs', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: kRailwayBlue,
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMyRuns),
         ],
       ),
       body: _buildBody(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SupervisorDailyLogScreen()),
+          );
+        },
+        backgroundColor: kRailwayBlue,
+        icon: const Icon(Icons.edit_document, color: Colors.white),
+        label: const Text('Daily Log', style: TextStyle(color: Colors.white)),
+      ),
     );
   }
 
@@ -106,41 +120,6 @@ class _CSFieldExecutionScreenState extends State<CSFieldExecutionScreen> {
           ),
         );
       },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: const Text('My Scheduled Runs', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: kRailwayBlue,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMyRuns),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-              : _myRuns.isEmpty
-                  ? const Center(child: Text('No assigned runs found for you today.'))
-                  : _buildRunList(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SupervisorDailyLogScreen()),
-          );
-        },
-        backgroundColor: kRailwayBlue,
-        icon: const Icon(Icons.edit_document, color: Colors.white),
-        label: const Text('Daily Log', style: TextStyle(color: Colors.white)),
-      ),
     );
   }
 }
