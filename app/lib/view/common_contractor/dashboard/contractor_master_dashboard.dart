@@ -175,6 +175,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         formType: 'coach',
         days: days,
         entityId: user.entityId,
+        contractId: user.contractId,
       );
 
       print("Coach Forms Stats: $coachStats");
@@ -183,6 +184,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         formType: 'premises',
         days: days,
         entityId: user.entityId,
+        contractId: user.contractId,
       );
 
       print("Premises Forms Stats: $premisesStatsData");
@@ -191,6 +193,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         formType: 'cts',
         days: days,
         entityId: user.entityId,
+        contractId: user.contractId,
       );
 
       print("CTS Forms Stats: $ctsStatsData");
@@ -249,6 +252,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         division: user.division,
         depot: user.depot,
         entityId: user.entityId,
+        contractId: user.contractId,
         startDate: startDate,
         endDate: endDate,
       );
@@ -261,6 +265,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         division: user.division,
         depot: user.depot,
         entityId: user.entityId,
+        contractId: user.contractId,
         startDate: startDate,
         endDate: endDate,
       );
