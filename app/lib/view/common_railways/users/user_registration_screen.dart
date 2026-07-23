@@ -71,6 +71,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   Map<String, dynamic>? _selectedContractData;
   List<String> _selectedContractStationIds = [];
   String? _contractDivision;
+  bool _isContractAutoAssigned = false;
 
   @override
   void initState() {
@@ -130,6 +131,41 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     } catch (e) {
       print('Error loading division stations: $e');
     }
+  }
+
+  Future<void> _autoAssignFromCurrentUser() async {
+    final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (currentUser?.role != 'Contractor Admin' || currentUser?.contractId == null || currentUser!.contractId!.isEmpty) {
+      return;
+    }
+    try {
+      final contracts = await ApiService.getContractsForDropdown(entityId: currentUser.entityId);
+      final match = contracts.where((c) => c['uid'] == currentUser.contractId).firstOrNull;
+      if (match == null) return;
+      final contractData = match;
+      final rawZone = contractData['zone'] as String?;
+      final rawDivision = contractData['division'] as String?;
+      final normZone = _normalizeZoneFromContract(rawZone);
+      final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
+      final zoneDivisions = normZone.isNotEmpty
+          ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
+          : <String>[];
+      final contractStationIds = (contractData['stationIds'] as List?)?.cast<String>() ?? [];
+      setState(() {
+        _isContractAutoAssigned = true;
+        _selectedCompany = currentUser.entityId;
+        _selectedContractId = currentUser.contractId;
+        _selectedContractData = contractData;
+        _selectedContractStationIds = contractStationIds;
+        _selectedStationId = null;
+        _zone = normZone;
+        _division = normDivision;
+        divisions = zoneDivisions;
+        if (normZone.isNotEmpty && !zones.contains(normZone)) {
+          zones = [...zones, normZone];
+        }
+      });
+    } catch (_) {}
   }
 
   void _loadDraftData(Map<String, dynamic> draft) {
@@ -513,6 +549,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                     _selectedContractData = null;
                     _selectedContractStationIds = [];
                     _selectedStationId = null;
+                    _isContractAutoAssigned = false;
                     final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
 
 
@@ -538,18 +575,6 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       depots = [];
                     }
 
-                    else if (currentUser?.role == 'Contractor Admin') {
-                      _zone = currentUser?.zone;
-                      _division = currentUser?.division;
-                      if (_zone != null) {
-                        divisions = DepotDatabase.zoneData[_zone]?.keys.toList() ?? [];
-                        if (_division != null) {
-                          depots = DepotDatabase.zoneData[_zone]?[_division] ?? [];
-                        }
-                      }
-                      _depot = null;
-                    }
-
                     else if (currentUser?.role == 'Contractor Master') {
                       _zone = currentUser?.zone;
                       if (_zone != null) {
@@ -568,56 +593,79 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                       depots = [];
                     }
                   });
+                  _autoAssignFromCurrentUser();
                 },
               ),
               const SizedBox(height: 12),
 
 
               if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor()) ...[
-                ApprovedEntityDropdown(
-                  onSelected: (name) {
-                    setState(() {
-                      _selectedCompany = name;
-                      _selectedContractId = null;
-                      _selectedContractData = null;
-                      _selectedContractStationIds = [];
-                      _selectedStationId = null;
-                      _zone = null;
-                      _division = null;
-                    });
-                    _loadEntityStations(name);
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (_selectedCompany != null)
-                  ContractDropdown(
-                    entityId: _selectedCompany,
-                    onSelected: (contractId, contractData) {
-                      _stationNameController.clear();
-                      final rawZone = contractData['zone'] as String?;
-                      final rawDivision = contractData['division'] as String?;
-                      final normZone = _normalizeZoneFromContract(rawZone);
-                      final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
-                      final zoneDivisions = normZone.isNotEmpty
-                          ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
-                          : <String>[];
+                if (_isContractAutoAssigned && _selectedContractData != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Entity', style: TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        Chip(avatar: const Icon(Icons.business, size: 18), label: Text(_selectedCompany ?? 'Auto-assigned')),
+                        const SizedBox(height: 8),
+                        const Text('Contract', style: TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        Chip(
+                          avatar: const Icon(Icons.assignment, size: 18),
+                          label: Text('${_selectedContractData!['contractNumber'] ?? ''} - ${_selectedContractData!['contractName'] ?? ''}'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _buildContractStationDropdown(),
+                ] else ...[
+                  ApprovedEntityDropdown(
+                    onSelected: (name) {
                       setState(() {
-                        _selectedContractId = contractId;
-                        _selectedContractData = contractData;
+                        _selectedCompany = name;
+                        _selectedContractId = null;
+                        _selectedContractData = null;
                         _selectedContractStationIds = [];
                         _selectedStationId = null;
-                        _zone = normZone;
-                        _division = normDivision;
-                        divisions = zoneDivisions;
-                        if (normZone.isNotEmpty && !zones.contains(normZone)) {
-                          zones = [...zones, normZone];
-                        }
+                        _zone = null;
+                        _division = null;
                       });
+                      _loadEntityStations(name);
                     },
                   ),
-                if (_selectedContractData != null) ...[
                   const SizedBox(height: 12),
-                  _buildContractStationDropdown(),
+                  if (_selectedCompany != null)
+                    ContractDropdown(
+                      entityId: _selectedCompany,
+                      onSelected: (contractId, contractData) {
+                        _stationNameController.clear();
+                        final rawZone = contractData['zone'] as String?;
+                        final rawDivision = contractData['division'] as String?;
+                        final normZone = _normalizeZoneFromContract(rawZone);
+                        final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
+                        final zoneDivisions = normZone.isNotEmpty
+                            ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
+                            : <String>[];
+                        setState(() {
+                          _selectedContractId = contractId;
+                          _selectedContractData = contractData;
+                          _selectedContractStationIds = [];
+                          _selectedStationId = null;
+                          _zone = normZone;
+                          _division = normDivision;
+                          divisions = zoneDivisions;
+                          if (normZone.isNotEmpty && !zones.contains(normZone)) {
+                            zones = [...zones, normZone];
+                          }
+                        });
+                      },
+                    ),
+                  if (_selectedContractData != null) ...[
+                    const SizedBox(height: 12),
+                    _buildContractStationDropdown(),
+                  ],
                 ],
               ],
 
