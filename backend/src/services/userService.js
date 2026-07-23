@@ -29,7 +29,7 @@ class UserService {
 
     const roleUpper = role.toUpperCase();
 
-    const isContractorAdminOrSupervisor = roleUpper === 'CONTRACTOR_ADMIN' || roleUpper === 'CONTRACTOR_SUPERVISOR';
+    const isContractorAdminOrSupervisor = roleUpper === 'CONTRACTOR_ADMIN' || roleUpper === 'CONTRACTOR_SUPERVISOR' || roleUpper === 'CONTRACTOR SUPERVISOR';
     if (isContractorAdminOrSupervisor) {
       if (!contractId) {
         throw new ValidationError("Contract is mandatory for Contractor Admin/Supervisor.");
