@@ -8,6 +8,7 @@ class UserService {
     let { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
     let domain = userData.domain;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
+    const normalizedUserType = (userType || '').toLowerCase();
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
     const creatorName = creatorNameAuth || name || creatorRole || 'Admin';
 
@@ -80,7 +81,6 @@ class UserService {
       stations = resolvedStations;
     }
 
-    const normalizedUserType = userType.toLowerCase();
     const isWorkerRole = roleUpper.includes('WORKER') || roleUpper === 'JANITOR' || roleUpper === 'ATTENDANT';
     if (isWorkerRole) {
       const explicitWorkerType = worker_type || (roleUpper === 'JANITOR' ? 'Janitor' : (roleUpper === 'ATTENDANT' ? 'Attendant' : null));
@@ -851,19 +851,24 @@ class UserService {
     };
   }
 
-  async getWorkers(module = null) {
-    const snapshot = await db.collection('users').get();
+  async getWorkers(requesterData = {}, filters = {}) {
+    let query = db.collection('users');
+
+    if (filters.domain) {
+      query = query.where('domain', '==', filters.domain);
+    } else if (requesterData.userType === 'contractor' && requesterData.domain) {
+      query = query.where('domain', '==', requesterData.domain);
+    }
+
+    const snapshot = await query.get();
 
     const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
     const workersList = [];
     snapshot.forEach(doc => {
       const data = doc.data();
+      if (doc.id === requesterData.uid) return;
       const role = (data.role || '').toLowerCase();
       if (!validRoles.includes(role)) return;
-      if (module) {
-        const userDomain = data.domain || null;
-        if (userDomain && userDomain !== module) return;
-      }
       workersList.push({
         uid: data.uid || doc.id,
         fullName: data.fullName || '',
@@ -876,14 +881,15 @@ class UserService {
         stationId: data.stationId || '',
         depot: data.depot || '',
         zone: data.zone || '',
-        division: data.division || ''
+        division: data.division || '',
+        domain: data.domain || ''
       });
     });
 
     return { count: workersList.length, workers: workersList };
   }
 
-  async getRailwaySupervisors(zone, division, role, module) {
+  async getRailwaySupervisors(zone, division, role, module, requesterData = {}) {
     const userRole = (role || "").toUpperCase().replace(/\s+/g, '_');
     
     const ROLE_HIERARCHY = {
@@ -895,11 +901,16 @@ class UserService {
     };
     const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
     
-    // Master or Admin levels
     const isMaster = requesterLevel >= 60;
 
     let query = db.collection('users')
       .where('status', '==', 'APPROVED');
+
+    if (module) {
+      query = query.where('domain', '==', module);
+    } else if ((requesterData.userType === 'contractor' || requesterData.userType === 'contractor') && requesterData.domain) {
+      query = query.where('domain', '==', requesterData.domain);
+    }
 
     if (isMaster) {
       if (zone) {
@@ -935,17 +946,13 @@ class UserService {
     }
 
     const allowedRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER'];
+    const supervisorList = [];
 
     snapshot.forEach(doc => {
       const data = doc.data();
       const normalizedRole = (data.role || '').toUpperCase().replace(/\s+/g, '_');
       
       if (!allowedRoles.includes(normalizedRole)) return;
-
-      if (module) {
-        const userDomain = data.domain || null;
-        if (userDomain && userDomain !== module) return;
-      }
 
       supervisorList.push({
           uid: data.uid,

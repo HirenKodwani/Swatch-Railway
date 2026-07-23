@@ -264,7 +264,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   void _openAttendance(BuildContext context) {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     final role = user?.role?.toUpperCase().replaceAll(' ', '_') ?? '';
-    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(role);
+    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT', 'CONTRACTOR_SUPERVISOR'].contains(role);
     if (isWorker) {
       _openWorkerAttendance(context, user!.uid, user.fullName ?? '');
     } else {

@@ -33,7 +33,7 @@ class CommonNavBar extends StatelessWidget {
 
   List<Widget> _contractorScreens() {
     final screens = <Widget>[
-      ContractorMasterDashboard(),
+      ContractorMasterDashboard(contractType: contractType),
       ContractorMasterFormsScreen(contractType: contractType),
       ContractorMasterMyContractsScreen(),
       ContractorReportScreen(contractType: contractType),

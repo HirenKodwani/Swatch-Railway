@@ -802,11 +802,14 @@ class ApiService {
   }
 
   static Future<List<ContractModel>> getContractsContractor(
-    String entityId,
-  ) async {
+    String entityId, {
+    String? contractType,
+  }) async {
     final token = await getToken();
+    String url = '$baseUrl/api/contracts/by-entity/$entityId';
+    if (contractType != null) url += '?contractType=$contractType';
     final response = await http.get(
-      Uri.parse('$baseUrl/api/contracts/by-entity/$entityId'),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -824,13 +827,14 @@ class ApiService {
   static Future<List<ContractModel>> getContractsByStatus(
     String entityId,
     String zone,
-    String division,
-  ) async {
+    String division, {
+    String? contractType,
+  }) async {
     final token = await getToken();
+    String url = '$baseUrl/api/contracts/by-entity/$entityId?zone=$zone&division=$division';
+    if (contractType != null) url += '&contractType=$contractType';
     final response = await http.get(
-      Uri.parse(
-        '$baseUrl/api/contracts/by-entity/$entityId?zone=$zone&division=$division',
-      ),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
@@ -848,13 +852,14 @@ class ApiService {
   static Future<List<ContractModel>> getContractsActive(
     String entityId,
     String zone,
-    String division,
-  ) async {
+    String division, {
+    String? contractType,
+  }) async {
     final token = await getToken();
+    String url = '$baseUrl/api/contracts/by-entity/$entityId?zone=$zone&division=$division&status=Active';
+    if (contractType != null) url += '&contractType=$contractType';
     final response = await http.get(
-      Uri.parse(
-        '$baseUrl/api/contracts/by-entity/$entityId?zone=$zone&division=$division&status=Active',
-      ),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',

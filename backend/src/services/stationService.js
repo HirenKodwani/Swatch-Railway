@@ -23,6 +23,10 @@ class StationService {
         return { count: 0, stations: [] };
       }
     } else if (contractorRoles.includes(userRole) && user?.entityId) {
+      // OBHS contractors should not see stations
+      if (user.domain === 'obhs') {
+        return { count: 0, stations: [] };
+      }
       const mappings = await db.collection('stationContractorMappings')
         .where('contractorId', '==', user.entityId)
         .where('status', '==', 'active')

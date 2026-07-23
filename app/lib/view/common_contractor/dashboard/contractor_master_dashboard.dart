@@ -39,7 +39,8 @@ import '../../common_railways/station_management/material_list_screen.dart';
 import '../../common_railways/station_management/area_performance_dashboard.dart';
 
 class ContractorMasterDashboard extends StatefulWidget {
-  const ContractorMasterDashboard({super.key});
+  final String? contractType;
+  const ContractorMasterDashboard({super.key, this.contractType});
 
   @override
   _ContractorMasterDashboardState createState() => _ContractorMasterDashboardState();
@@ -160,6 +161,10 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     ]);
   }
 
+  String? get _effectiveContractType => widget.contractType;
+  bool get _isStationCleaning => _effectiveContractType == 'station_cleaning';
+  bool get _isOBHS => _effectiveContractType == 'obhs';
+
   Future<void> _loadFormStatusCounts() async {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null) {
@@ -171,14 +176,27 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     try {
       final days = _getDaysFromRange();
 
-      final coachStats = await FirebaseCountService.getFormStatusCounts(
-        formType: 'coach',
-        days: days,
-        entityId: user.entityId,
-        contractId: user.contractId,
-      );
+      // Station cleaning users don't need form status counts from OBHS forms
+      if (!_isStationCleaning) {
+        final coachStats = await FirebaseCountService.getFormStatusCounts(
+          formType: 'coach',
+          days: days,
+          entityId: user.entityId,
+          contractId: user.contractId,
+        );
 
-      print("Coach Forms Stats: $coachStats");
+        print("Coach Forms Stats: $coachStats");
+
+        setState(() {
+          coachTotal = coachStats['total'] ?? 0;
+          coachPending = coachStats['pending'] ?? 0;
+          coachManpowerApproved = coachStats['manpowerApproved'] ?? 0;
+          coachRejected = coachStats['rejected'] ?? 0;
+          coachScoringProgress = coachStats['scoringProgress'] ?? 0;
+          coachAutoApproved = coachStats['autoApproved'] ?? 0;
+          coachLocked = coachStats['locked'] ?? 0;
+        });
+      }
 
       final premisesStatsData = await FirebaseCountService.getFormStatusCounts(
         formType: 'premises',
@@ -189,6 +207,16 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
 
       print("Premises Forms Stats: $premisesStatsData");
 
+      setState(() {
+        premisesTotal = premisesStatsData['total'] ?? 0;
+        premisesPending = premisesStatsData['pending'] ?? 0;
+        premisesManpowerApproved = premisesStatsData['manpowerApproved'] ?? 0;
+        premisesRejected = premisesStatsData['rejected'] ?? 0;
+        premisesScoringProgress = premisesStatsData['scoringProgress'] ?? 0;
+        premisesAutoApproved = premisesStatsData['autoApproved'] ?? 0;
+        premisesLocked = premisesStatsData['locked'] ?? 0;
+      });
+
       final ctsStatsData = await FirebaseCountService.getFormStatusCounts(
         formType: 'cts',
         days: days,
@@ -198,25 +226,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
 
       print("CTS Forms Stats: $ctsStatsData");
 
-      print("=" * 60);
-
       setState(() {
-        coachTotal = coachStats['total'] ?? 0;
-        coachPending = coachStats['pending'] ?? 0;
-        coachManpowerApproved = coachStats['manpowerApproved'] ?? 0;
-        coachRejected = coachStats['rejected'] ?? 0;
-        coachScoringProgress = coachStats['scoringProgress'] ?? 0;
-        coachAutoApproved = coachStats['autoApproved'] ?? 0;
-        coachLocked = coachStats['locked'] ?? 0;
-
-        premisesTotal = premisesStatsData['total'] ?? 0;
-        premisesPending = premisesStatsData['pending'] ?? 0;
-        premisesManpowerApproved = premisesStatsData['manpowerApproved'] ?? 0;
-        premisesRejected = premisesStatsData['rejected'] ?? 0;
-        premisesScoringProgress = premisesStatsData['scoringProgress'] ?? 0;
-        premisesAutoApproved = premisesStatsData['autoApproved'] ?? 0;
-        premisesLocked = premisesStatsData['locked'] ?? 0;
-
         ctsTotal = ctsStatsData['total'] ?? 0;
         ctsPending = ctsStatsData['pending'] ?? 0;
         ctsManpowerApproved = ctsStatsData['manpowerApproved'] ?? 0;
@@ -236,6 +246,12 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
   Future<void> _loadCleaningStats() async {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null) return;
+
+    // Station cleaning users don't need OBHS cleaning stats
+    if (_isStationCleaning) {
+      setState(() => isStatsLoading = false);
+      return;
+    }
 
     setState(() => isStatsLoading = true);
 
@@ -307,8 +323,8 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
           {"title": "User Management", "route": "users"},
           {"title": "Entity Management", "route": "entities"},
           {"title": "Contract Management", "route": "contracts"},
-          {"title": "Station Management", "route": "station_management_master"},
-          {"title": "Train Management", "route": "trains"},
+          {"title": "Station Management", "route": "station_management_master", "contractTypes": ["station_cleaning"]},
+          {"title": "Train Management", "route": "trains", "contractTypes": ["obhs"]},
           {"title": "Division Management", "route": "divisions"},
           {"title": "Billing Rules", "route": "billing_rules"},
         ]
@@ -318,9 +334,9 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "title": "Operations",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
-          {"title": "Coach Cleaning", "route": "coach_cleaning", "contractTypes": ["coach"]},
-          {"title": "Premise Cleaning", "route": "premise_cleaning", "contractTypes": ["premises"]},
-          {"title": "CTS Forms", "route": "cts_cleaning", "contractTypes": ["cts"]},
+          {"title": "Coach Cleaning", "route": "coach_cleaning", "contractTypes": ["obhs"]},
+          {"title": "Premise Cleaning", "route": "premise_cleaning", "contractTypes": ["obhs"]},
+          {"title": "CTS Forms", "route": "cts_cleaning", "contractTypes": ["obhs"]},
           {"title": "Station Cleaning Forms", "route": "station_cleaning", "contractTypes": ["station_cleaning"]},
           {"title": "Station Cleaning Runs", "route": "station_cleaning_runs", "contractTypes": ["station_cleaning"]},
         ]
@@ -356,8 +372,8 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         "title": "Reports",
         "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
         "children": [
-          {"title": "Coach Reports", "route": "coach_reports", "contractTypes": ["coach"]},
-          {"title": "Premise Reports", "route": "premise_reports", "contractTypes": ["premises"]},
+          {"title": "Coach Reports", "route": "coach_reports", "contractTypes": ["obhs"]},
+          {"title": "Premise Reports", "route": "premise_reports", "contractTypes": ["obhs"]},
           {"title": "Station Reports", "route": "station_reports", "contractTypes": ["station_cleaning"]},
           {"title": "OBHS Reports", "route": "obhs_reports", "contractTypes": ["obhs"]},
         ]
@@ -783,154 +799,203 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
 
                 const SizedBox(height: 18),
 
-                Text("Forms Overview",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87)),
-                const SizedBox(height: 10),
+                // Station cleaning users see a redirect card instead of form stats
+                if (_isStationCleaning)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.cleaning_services, size: 48, color: Colors.blue.shade700),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Station Cleaning Module',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Use the sidebar menu to access Station Cleaning features like Area Management, Tasks, Machines, and Materials.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.blue.shade700, fontSize: 13),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const StationDashboardScreen()),
+                            );
+                          },
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('Go to Station Dashboard'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                SizedBox(
-                  height: 370,
-                  child: ListView(
-                    shrinkWrap: true,
+                // OBHS and railway users see the full forms dashboard
+                if (!_isStationCleaning) ...[
+                  Text("Forms Overview",
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87)),
+                  const SizedBox(height: 10),
+
+                  SizedBox(
+                    height: 370,
+                    child: ListView(
+                      shrinkWrap: true,
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _buildFormsCard(
+                          'Coach\nCleaning',
+                          pending: coachPending,
+                          approved: coachManpowerApproved,
+                          rejected: coachRejected,
+                          progress: coachScoringProgress,
+                          autoApproved: coachAutoApproved,
+                          locked: coachLocked,
+                        ),
+                        const SizedBox(width: 16),
+                        _buildFormsCard(
+                          'Premises\nCleaning',
+                          pending: premisesPending,
+                          approved: premisesManpowerApproved,
+                          rejected: premisesRejected,
+                          progress: premisesScoringProgress,
+                          autoApproved: premisesAutoApproved,
+                          locked: premisesLocked,
+                        ),
+                        const SizedBox(width: 16),
+                        _buildFormsCard(
+                          'CTS\nForm',
+                          pending: ctsPending,
+                          approved: ctsManpowerApproved,
+                          rejected: ctsRejected,
+                          progress: ctsScoringProgress,
+                          autoApproved: ctsAutoApproved,
+                          locked: ctsLocked,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Text("Coach Cleaning Forms",
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87)),
+                  const SizedBox(height: 10),
+
+                  SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        children: List.generate(coachKpi.length, (index) {
+                          final item = coachKpi[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: StatusTile(
+                              number: int.parse(item['value']),
+                              label: item['title'],
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Text("Premises Cleaning Forms",
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87)),
+                  const SizedBox(height: 10),
+
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        children: List.generate(premisesKpi.length, (index) {
+                          final item = premisesKpi[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: StatusTile(
+                              number: int.parse(item['value']),
+                              label: item['title'],
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+
+
+                  const SizedBox(height: 20),
+
+                  Text("CTS Forms",
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87)),
+                  const SizedBox(height: 10),
+
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        children: List.generate(ctsKpi.length, (index) {
+                          final item = ctsKpi[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: StatusTile(
+                              number: int.parse(item['value']),
+                              label: item['title'],
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  Column(
                     children: [
-                      _buildFormsCard(
-                        'Coach\nCleaning',
-                        pending: coachPending,
-                        approved: coachManpowerApproved,
-                        rejected: coachRejected,
-                        progress: coachScoringProgress,
-                        autoApproved: coachAutoApproved,
-                        locked: coachLocked,
+                      _scoreCardCoach(
+                        title: 'Overall Score — Coach Cleaning',
+                        accent: accentGreen,
+                        softBorder: softBorder,
+                        cardBg: cardBg,
+                        subtitle: 'Based on selected filters',
+                        iconInner: Icons.cleaning_services,
                       ),
-                      const SizedBox(width: 16),
-                      _buildFormsCard(
-                        'Premises\nCleaning',
-                        pending: premisesPending,
-                        approved: premisesManpowerApproved,
-                        rejected: premisesRejected,
-                        progress: premisesScoringProgress,
-                        autoApproved: premisesAutoApproved,
-                        locked: premisesLocked,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildFormsCard(
-                        'CTS\nForm',
-                        pending: ctsPending,
-                        approved: ctsManpowerApproved,
-                        rejected: ctsRejected,
-                        progress: ctsScoringProgress,
-                        autoApproved: ctsAutoApproved,
-                        locked: ctsLocked,
-                      ),
-                    ],
-                  ),
-                ),
 
-                const SizedBox(height: 20),
-
-                Text("Coach Cleaning Forms",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87)),
-                const SizedBox(height: 10),
-
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      children: List.generate(coachKpi.length, (index) {
-                        final item = coachKpi[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: StatusTile(
-                            number: int.parse(item['value']),
-                            label: item['title'],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                Text("Premises Cleaning Forms",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87)),
-                const SizedBox(height: 10),
-
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      children: List.generate(premisesKpi.length, (index) {
-                        final item = premisesKpi[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: StatusTile(
-                            number: int.parse(item['value']),
-                            label: item['title'],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ),
-
-
-                const SizedBox(height: 20),
-
-                Text("CTS Forms",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87)),
-                const SizedBox(height: 10),
-
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      children: List.generate(ctsKpi.length, (index) {
-                        final item = ctsKpi[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: StatusTile(
-                            number: int.parse(item['value']),
-                            label: item['title'],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                Column(
-                  children: [
-                    _scoreCardCoach(
-                      title: 'Overall Score — Coach Cleaning',
-                      accent: accentGreen,
-                      softBorder: softBorder,
-                      cardBg: cardBg,
-                      subtitle: 'Based on selected filters',
-                      iconInner: Icons.cleaning_services,
-                    ),
-
-                    const SizedBox(height: 12),
-                    _scoreCardPremises(
-                      title: 'Overall Score — Premises Cleaning',
-                      accent: accentGreen,
+                      const SizedBox(height: 12),
+                      _scoreCardPremises(
+                        title: 'Overall Score — Premises Cleaning',
+                        accent: accentGreen,
                       softBorder: softBorder,
                       cardBg: cardBg,
                       subtitle: 'Based on selected filters',
@@ -938,6 +1003,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
                     ),
                   ],
                 ),
+                ],
 
                 const SizedBox(height: 18),
 

@@ -35,7 +35,14 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadContracts();
+    // Defer reading AuthProvider until after build context is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      if (user?.contractType != null) {
+        setState(() => _selectedContractType = user!.contractType);
+      }
+      _loadContracts();
+    });
   }
 
   @override
@@ -48,9 +55,11 @@ class _CommonContractsScreenState extends State<CommonContractsScreen>
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     setState(() => _isLoading = true);
 
+    final effectiveContractType = contractType ?? _selectedContractType;
+
     try {
-      final activeContractsResponse = await ApiService.getActiveContracts(contractType: contractType);
-      final inactiveContractsResponse = await ApiService.getInActiveContracts(contractType: contractType);
+      final activeContractsResponse = await ApiService.getActiveContracts(contractType: effectiveContractType);
+      final inactiveContractsResponse = await ApiService.getInActiveContracts(contractType: effectiveContractType);
 
       List<ContractModel> allContracts = [
         ...activeContractsResponse,

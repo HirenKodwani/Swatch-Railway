@@ -202,8 +202,8 @@ class ContractService {
   }
 
   async getContracts(requesterData, query) {
-    const { status, stationId, entityId, contractType } = query;
-    const { userType, zone: userZone, division: userDivision, role } = requesterData;
+    const { status, stationId, entityId, contractType: queryContractType } = query;
+    const { userType, zone: userZone, division: userDivision, role, domain } = requesterData;
     const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let firestoreQuery = db.collection('contracts');
@@ -218,7 +218,10 @@ class ContractService {
 
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
     if (entityId && userType !== 'contractor') firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
-    if (contractType) firestoreQuery = firestoreQuery.where('contractType', '==', contractType);
+
+    // Auto-filter by contractType/domain for contractor users
+    const effectiveContractType = queryContractType || (userType === 'contractor' ? domain : null);
+    if (effectiveContractType) firestoreQuery = firestoreQuery.where('contractType', '==', effectiveContractType);
 
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
@@ -276,8 +279,8 @@ class ContractService {
   }
 
   async getContractsForDropdown(requesterData, queryParams) {
-    const { userType, zone: userZone, division: userDivision, entityId, role } = requesterData;
-    const { entityId: queryEntityId } = queryParams || {};
+    const { userType, zone: userZone, division: userDivision, entityId, role, domain } = requesterData;
+    const { entityId: queryEntityId, contractType: queryContractType } = queryParams || {};
     const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
 
     let query = db.collection('contracts').where('status', '==', 'Active');
@@ -285,6 +288,11 @@ class ContractService {
     const effectiveEntityId = queryEntityId || entityId;
     if (effectiveEntityId) {
       query = query.where('entityId', '==', effectiveEntityId);
+    }
+
+    const effectiveContractType = queryContractType || (userType === 'contractor' ? domain : null);
+    if (effectiveContractType) {
+      query = query.where('contractType', '==', effectiveContractType);
     }
 
     const snapshot = await query.limit(200).get();
@@ -312,9 +320,10 @@ class ContractService {
 
   async getContractsByEntity(entityId, query) {
     if (!entityId) throw new ValidationError("Entity ID is required.");
-    const { status, stationId, category } = query || {};
+    const { status, stationId, category, contractType } = query || {};
     let firestoreQuery = db.collection('contracts').where('entityId', '==', entityId);
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
+    if (contractType) firestoreQuery = firestoreQuery.where('contractType', '==', contractType);
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
     const contracts = [];
