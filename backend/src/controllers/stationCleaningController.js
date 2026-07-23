@@ -335,3 +335,8 @@ export const deleteAreaTaskFrequency = asyncHandler(async (req, res) => {
 export const listAreaTaskFrequencies = asyncHandler(async (req, res) => {
   res.json(await stationCleaningService.listAreaTaskFrequencies(req.query));
 });
+
+export const submitDailyLog = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.submitDailyLog(req.body, req.user);
+  res.status(201).json({ success: true, ...result });
+});

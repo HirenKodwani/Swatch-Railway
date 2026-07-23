@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 
@@ -30,8 +34,24 @@ class _SupervisorDailyLogScreenState extends State<SupervisorDailyLogScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      // Simulate API call for now.
-      await Future.delayed(const Duration(seconds: 1));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) throw Exception('Auth token not available');
+
+      final resp = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/station-cleaning/daily-logs'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({
+          'activitiesSummary': _activitiesCtrl.text.trim(),
+          'machineUsage': _machineUsageCtrl.text.trim(),
+          'issuesEncountered': _issuesCtrl.text.trim(),
+          'handoverNotes': _handoverCtrl.text.trim(),
+        }),
+      );
+      final decoded = jsonDecode(resp.body);
+      if (resp.statusCode != 201 || decoded['success'] != true) {
+        throw Exception(decoded['error'] ?? 'Failed to submit daily log');
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

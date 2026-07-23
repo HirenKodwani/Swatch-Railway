@@ -1151,6 +1151,32 @@ class StationCleaningService {
     }
     return { stationId, trend: data };
   }
+
+  // ─── Daily Log ──────────────────────────────────────────────────────────────
+
+  async submitDailyLog(body, user) {
+    const { activitiesSummary, machineUsage, issuesEncountered, handoverNotes } = body;
+    if (!activitiesSummary) {
+      throw new Error('Activities summary is required');
+    }
+
+    const logData = {
+      supervisorId: user.uid,
+      supervisorName: user.name || 'Unknown',
+      contractId: user.contractId || null,
+      stationId: user.stationId || null,
+      date: new Date().toISOString().split('T')[0],
+      activitiesSummary,
+      machineUsage: machineUsage || '',
+      issuesEncountered: issuesEncountered || '',
+      handoverNotes: handoverNotes || '',
+      createdAt: new Date().toISOString(),
+      status: 'SUBMITTED'
+    };
+
+    const ref = await db.collection('stationDailyLogs').add(logData);
+    return { id: ref.id, ...logData };
+  }
 }
 
 export const stationCleaningService = new StationCleaningService();
