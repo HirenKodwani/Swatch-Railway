@@ -144,28 +144,38 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         match = contracts.where((c) => c['uid'] == currentUser.contractId).firstOrNull;
       }
       match ??= contracts.where((c) => c['contractType'] == 'station_cleaning').firstOrNull;
-      if (match == null) return;
-      final contractData = match;
-      final rawZone = contractData['zone'] as String?;
-      final rawDivision = contractData['division'] as String?;
-      final normZone = _normalizeZoneFromContract(rawZone);
-      final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
-      final zoneDivisions = normZone.isNotEmpty
-          ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
-          : <String>[];
-      final contractStationIds = (contractData['stationIds'] as List?)?.cast<String>() ?? [];
+      if (match != null) {
+        final contractData = match;
+        final rawZone = contractData['zone'] as String?;
+        final rawDivision = contractData['division'] as String?;
+        final normZone = _normalizeZoneFromContract(rawZone);
+        final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
+        final zoneDivisions = normZone.isNotEmpty
+            ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
+            : <String>[];
+        final contractStationIds = (contractData['stationIds'] as List?)?.cast<String>() ?? [];
+        setState(() {
+          _isContractAutoAssigned = true;
+          _selectedCompany = currentUser.entityId;
+          _selectedContractId = contractData['uid'] as String? ?? currentUser.contractId;
+          _selectedContractData = contractData;
+          _selectedContractStationIds = contractStationIds;
+          _selectedStationId = null;
+          _zone = normZone;
+          _division = normDivision;
+          divisions = zoneDivisions;
+          if (normZone.isNotEmpty && !zones.contains(normZone)) {
+            zones = [...zones, normZone];
+          }
+        });
+        return;
+      }
       setState(() {
-        _isContractAutoAssigned = true;
         _selectedCompany = currentUser.entityId;
-        _selectedContractId = contractData['uid'] as String? ?? currentUser.contractId;
-        _selectedContractData = contractData;
-        _selectedContractStationIds = contractStationIds;
-        _selectedStationId = null;
-        _zone = normZone;
-        _division = normDivision;
-        divisions = zoneDivisions;
-        if (normZone.isNotEmpty && !zones.contains(normZone)) {
-          zones = [...zones, normZone];
+        _zone = _normalizeZoneFromContract(currentUser.zone);
+        _division = _normalizeDivisionFromContract(_zone, currentUser.division);
+        if (_zone != null && _zone!.isNotEmpty) {
+          divisions = DepotDatabase.zoneData[_zone]?.keys.toList() ?? [];
         }
       });
     } catch (_) {}
@@ -273,7 +283,9 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
   bool _shouldShowDepot() {
     if (_selectedRole == null || _division == null) return false;
-    return _selectedRole!.contains('Supervisor') || _selectedRole!.contains('Worker');
+    if (_selectedRole!.toLowerCase().contains('contractor supervisor')) return false;
+    if (_selectedRole!.toLowerCase().contains('railway supervisor')) return true;
+    return _selectedRole!.contains('Worker');
   }
 
   bool _shouldShowWorkerType() {
@@ -635,6 +647,48 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                     ),
                   ),
                   _buildContractStationDropdown(),
+                ] else if (_selectedCompany != null && !_isContractAutoAssigned && _selectedRole != null && _selectedRole!.contains('Supervisor')) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Entity', style: TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        Chip(avatar: const Icon(Icons.business, size: 18), label: Text(_selectedCompany ?? 'Auto-assigned')),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ContractDropdown(
+                    entityId: _selectedCompany,
+                    onSelected: (contractId, contractData) {
+                      _stationNameController.clear();
+                      final rawZone = contractData['zone'] as String?;
+                      final rawDivision = contractData['division'] as String?;
+                      final normZone = _normalizeZoneFromContract(rawZone);
+                      final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
+                      final zoneDivisions = normZone.isNotEmpty
+                          ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
+                          : <String>[];
+                      setState(() {
+                        _selectedContractId = contractId;
+                        _selectedContractData = contractData;
+                        _selectedContractStationIds = [];
+                        _selectedStationId = null;
+                        _zone = normZone;
+                        _division = normDivision;
+                        divisions = zoneDivisions;
+                        if (normZone.isNotEmpty && !zones.contains(normZone)) {
+                          zones = [...zones, normZone];
+                        }
+                      });
+                    },
+                  ),
+                  if (_selectedContractData != null) ...[
+                    const SizedBox(height: 12),
+                    _buildContractStationDropdown(),
+                  ],
                 ] else ...[
                   ApprovedEntityDropdown(
                     onSelected: (name) {
@@ -1316,6 +1370,10 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor() && _selectedContractId == null) {
+      _showError('Please select a contract for Contractor Admin/Supervisor.');
+      return;
+    }
 
     setState(() => _isLoading = true);
 
