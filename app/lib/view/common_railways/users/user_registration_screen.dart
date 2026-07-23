@@ -245,7 +245,12 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   bool _shouldShowTrainSelection() {
     if (_selectedRole == null) return false;
     final r = _selectedRole!.toUpperCase();
-    return r.contains('SUPERVISOR') || r.contains('CTS');
+    if (!(r.contains('SUPERVISOR') || r.contains('CTS'))) return false;
+    if (_selectedContractData != null) {
+      final ct = _selectedContractData!['contractType'] as String?;
+      if (ct == 'station_cleaning') return false;
+    }
+    return true;
   }
 
   bool _isContractorAdminOrSupervisor() {
