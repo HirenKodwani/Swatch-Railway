@@ -468,7 +468,7 @@ class StationCleaningService {
     return { count: runs.length, runs };
   }
 
-  async completePlatform(runId, user) {
+  async completePlatform(runId, body, user) {
     const ref = db.collection('stationRuns').doc(runId);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Station run not found');
@@ -476,27 +476,40 @@ class StationCleaningService {
     const runData = doc.data();
     if (runData.status === 'deleted') throw new NotFoundError('Station run not found');
 
+    const platformNumber = body.platformNumber;
+    const photoUrl = body.photoUrl;
+
+    if (!platformNumber) {
+      throw new Error('platformNumber is required in the body');
+    }
+
     const platforms = runData.platforms || [];
-    const myPlatform = platforms.find(p => p.janitorId === user.uid && p.status !== 'Completed');
-    if (!myPlatform) throw new ForbiddenError('No pending platform assignment found for you');
+    const platformIndex = platforms.findIndex(p => p.platformNumber === platformNumber);
+    if (platformIndex === -1) {
+      throw new NotFoundError('Platform not found in this run');
+    }
 
-    const updatedPlatforms = platforms.map(p => {
-      if (p.janitorId === user.uid && p.status !== 'Completed') {
-        return { ...p, status: 'Completed' };
-      }
-      return p;
-    });
+    if (platforms[platformIndex].status === 'Completed') {
+       throw new Error('Platform is already completed');
+    }
 
-    const allCompleted = updatedPlatforms.every(p => p.status === 'Completed');
+    platforms[platformIndex].status = 'Completed';
+    platforms[platformIndex].completedAt = new Date().toISOString();
+    platforms[platformIndex].completedBy = user.uid;
+    if (photoUrl) {
+      platforms[platformIndex].photoUrl = photoUrl;
+    }
+
+    const allCompleted = platforms.every(p => p.status === 'Completed');
     const newStatus = allCompleted ? 'Completed' : 'In Progress';
 
     await ref.update({
-      platforms: updatedPlatforms,
+      platforms: platforms,
       status: newStatus,
       updatedAt: new Date().toISOString()
     });
 
-    return { message: `Platform ${myPlatform.platformNumber} marked complete`, runId, platformNumber: myPlatform.platformNumber };
+    return { message: `Platform ${platformNumber} marked complete`, runId, platformNumber: platformNumber };
   }
 
   // ─── Station Tasks ──────────────────────────────────────────────────────────

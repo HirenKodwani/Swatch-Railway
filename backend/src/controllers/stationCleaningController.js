@@ -132,7 +132,7 @@ export const getWorkerStationRuns = asyncHandler(async (req, res) => {
 });
 
 export const completePlatform = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.completePlatform(req.params.runId, req.user);
+  const result = await stationCleaningService.completePlatform(req.params.runId, req.body, req.user);
   res.status(200).json({ success: true, ...result });
 });
 

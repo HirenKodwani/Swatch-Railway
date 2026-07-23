@@ -316,6 +316,10 @@ class _WorkerStationRunDetailScreenState extends State<WorkerStationRunDetailScr
       final resp = await http.post(
         Uri.parse('${ApiService.baseUrl}/api/station-runs/${widget.run.id ?? widget.run.runInstanceId}/complete-platform'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({
+          'platformNumber': platform.platformNumber,
+          // 'photoUrl': '' // Photo upload can be implemented here later
+        }),
       );
       final decoded = jsonDecode(resp.body);
       if (resp.statusCode != 200 || decoded['success'] != true) {

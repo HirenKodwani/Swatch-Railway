@@ -3,7 +3,7 @@ import 'package:crm_train/repositories/station_run_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:flutter/material.dart';
 
-import 'package:crm_train/view/station_cleaning/worker_tasks/worker_task_view_screen.dart';
+import 'package:crm_train/view/common_workers/worker_station_cleaning_screen.dart';
 
 class CSFieldExecutionScreen extends StatefulWidget {
   const CSFieldExecutionScreen({super.key});
@@ -95,9 +95,9 @@ class _CSFieldExecutionScreenState extends State<CSFieldExecutionScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => WorkerTaskViewScreen(
-                    workerId: run.supervisorId ?? '', 
-                    workerName: run.supervisorName ?? '',
+                  builder: (_) => WorkerStationRunDetailScreen(
+                    run: run,
+                    onRefresh: _loadMyRuns,
                   ),
                 ),
               ).then((_) => _loadMyRuns());
