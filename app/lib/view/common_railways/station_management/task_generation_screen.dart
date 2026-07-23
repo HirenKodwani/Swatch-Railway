@@ -67,9 +67,17 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       if (widget.stationId != null) {
         filtered = stData.where((s) => s.uid == widget.stationId).toList();
         stationLocked = true;
-      } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
+      } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master' ||
+                 role == 'Contractor Admin' || role == 'Contractor Master') {
+        final userStationIds = <String>{};
         if (user?.stationId != null && user!.stationId!.isNotEmpty) {
-          filtered = stData.where((s) => s.uid == user.stationId).toList();
+          userStationIds.add(user.stationId!);
+        }
+        if (user?.stations != null && user!.stations.isNotEmpty) {
+          userStationIds.addAll(user.stations);
+        }
+        if (userStationIds.isNotEmpty) {
+          filtered = stData.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
           stationLocked = true;
         }
       }

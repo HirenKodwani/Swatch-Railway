@@ -43,8 +43,18 @@ class _PlatformListScreenState extends State<PlatformListScreen> {
         final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
         final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
         _stations = await ApiService.getStations(active: true);
-        if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
-          _stations = _stations.where((s) => s.uid == user?.stationId).toList();
+        if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master' ||
+            role == 'Contractor Admin' || role == 'Contractor Master') {
+          final userStationIds = <String>{};
+          if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+            userStationIds.add(user.stationId!);
+          }
+          if (user?.stations != null && user!.stations.isNotEmpty) {
+            userStationIds.addAll(user.stations);
+          }
+          if (userStationIds.isNotEmpty) {
+            _stations = _stations.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
+          }
         }
       }
       if (_stations.isNotEmpty) {

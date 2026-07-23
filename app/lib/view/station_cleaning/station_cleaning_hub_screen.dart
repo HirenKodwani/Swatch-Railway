@@ -79,9 +79,25 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
     setState(() => _loadingStations = true);
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      final role = user?.role ?? '';
       final all = await ApiService.getStations();
+      final contractorRoles = {'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER', 'CONTRACTOR_SUPERVISOR'};
+      final isContractor = contractorRoles.contains(role.toUpperCase().replaceAll(' ', '_'));
+      List<Station> filtered = all;
+      if (isContractor) {
+        final userStationIds = <String>{};
+        if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+          userStationIds.add(user.stationId!);
+        }
+        if (user?.stations != null && user!.stations.isNotEmpty) {
+          userStationIds.addAll(user.stations);
+        }
+        if (userStationIds.isNotEmpty) {
+          filtered = all.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
+        }
+      }
       setState(() {
-        _availableStations = all;
+        _availableStations = filtered;
         _loadingStations = false;
       });
     } catch (e) {

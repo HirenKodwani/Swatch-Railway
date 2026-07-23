@@ -130,10 +130,18 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
         List<Station> all = data;
         if (role == 'Railway Supervisor') {
           all = all.where((s) => s.division == user?.division).toList();
-        } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
-          all = all.where((s) => s.uid == user?.stationId).toList();
-        } else if (role == 'Contractor Admin' || role == 'Contractor' || role == 'Contractor Master') {
-          all = all.where((s) => s.uid == user?.stationId).toList();
+        } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master' ||
+                   role == 'Contractor Admin' || role == 'Contractor' || role == 'Contractor Master') {
+          final userStationIds = <String>{};
+          if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+            userStationIds.add(user.stationId!);
+          }
+          if (user?.stations != null && user!.stations.isNotEmpty) {
+            userStationIds.addAll(user.stations);
+          }
+          if (userStationIds.isNotEmpty) {
+            all = all.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
+          }
         }
         setState(() {
           _allStations = all;

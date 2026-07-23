@@ -51,9 +51,17 @@ class _AreaListScreenState extends State<AreaListScreen> {
       List<Station> allowed = fetched;
       if (widget.stationId != null) {
         allowed = fetched.where((s) => s.uid == widget.stationId).toList();
-      } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master') {
+      } else if (role == 'Station Master' || role == 'Area Master' || role == 'Platform Master' ||
+                 role == 'Contractor Admin' || role == 'Contractor Master') {
+        final userStationIds = <String>{};
         if (user?.stationId != null && user!.stationId!.isNotEmpty) {
-          allowed = fetched.where((s) => s.uid == user.stationId).toList();
+          userStationIds.add(user.stationId!);
+        }
+        if (user?.stations != null && user!.stations.isNotEmpty) {
+          userStationIds.addAll(user.stations);
+        }
+        if (userStationIds.isNotEmpty) {
+          allowed = fetched.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
         }
       }
       
