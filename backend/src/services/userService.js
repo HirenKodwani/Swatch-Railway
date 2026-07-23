@@ -29,10 +29,9 @@ class UserService {
 
     const roleUpper = role.toUpperCase();
 
-    const isContractorAdminOrSupervisor = roleUpper === 'CONTRACTOR_ADMIN' || roleUpper === 'CONTRACTOR_SUPERVISOR' || roleUpper === 'CONTRACTOR SUPERVISOR';
-    if (isContractorAdminOrSupervisor) {
+    if (normalizedUserType === 'contractor') {
       if (!contractId) {
-        throw new ValidationError("Contract is mandatory for Contractor Admin/Supervisor.");
+        throw new ValidationError("Contract is mandatory for all Contractor users.");
       }
     }
 
@@ -94,24 +93,15 @@ class UserService {
     let entityData = null;
     let resolvedContractType = null;
     if (normalizedUserType === 'contractor') {
-      if (isContractorAdminOrSupervisor) {
-        const contractDoc = await db.collection('contracts').doc(contractId).get();
-        if (!contractDoc.exists) {
-          throw new NotFoundError("Contract not found.");
-        }
-        const contractData = contractDoc.data();
-        entityData = contractData.entityName ? { companyName: contractData.entityName } : null;
-        resolvedContractType = contractData.contractType || null;
-      } else {
-        if (!entityId) {
-          throw new ValidationError("Contractor users must have an 'entityId' (Company ID).");
-        }
-        const entityDoc = await db.collection('entities').doc(entityId).get();
-        if (!entityDoc.exists) {
-          throw new NotFoundError("Entity (Company) not found.");
-        }
-        entityData = entityDoc.data();
+      const contractDoc = await db.collection('contracts').doc(contractId).get();
+      if (!contractDoc.exists) {
+        throw new NotFoundError("Contract not found.");
       }
+      const contractData = contractDoc.data();
+      entityData = contractData.entityName ? { companyName: contractData.entityName } : null;
+      resolvedContractType = contractData.contractType || null;
+      entityId = contractData.entityId || entityId;
+      userData.entityId = entityId;
       const userRoleLower = role.toLowerCase().replace(/_/g, " ");
       const creatorRoleUpper = (creatorRole || '').toUpperCase().replace(/\s+/g, '_');
       const bypassRoles = ['SUPER_ADMIN', 'COMPANY_MASTER', 'ADMIN'];
@@ -139,24 +129,11 @@ class UserService {
       }
 
       if (!domain) {
-        if (isContractorAdminOrSupervisor && contractId) {
-          const contractDoc = await db.collection('contracts').doc(contractId).get();
-          if (contractDoc.exists) {
-            const contractData = contractDoc.data();
-            if (contractData.contractType === 'station_cleaning' || contractData.contractType === 'obhs') {
-              domain = contractData.contractType;
-            }
-          }
-        } else {
-          const contractSnapshot2 = await db.collection('contracts')
-            .where('entityId', '==', entityId)
-            .where('status', '==', 'Active')
-            .limit(1).get();
-          if (!contractSnapshot2.empty) {
-            const firstContract = contractSnapshot2.docs[0].data();
-            if (firstContract.contractType === 'station_cleaning' || firstContract.contractType === 'obhs') {
-              domain = firstContract.contractType;
-            }
+        const contractDoc = await db.collection('contracts').doc(contractId).get();
+        if (contractDoc.exists) {
+          const contractData = contractDoc.data();
+          if (contractData.contractType === 'station_cleaning' || contractData.contractType === 'obhs') {
+            domain = contractData.contractType;
           }
         }
       }

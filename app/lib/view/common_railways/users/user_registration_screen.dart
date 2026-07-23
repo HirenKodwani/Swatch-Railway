@@ -614,7 +614,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
               const SizedBox(height: 12),
 
 
-              if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor()) ...[
+              if (_selectedUserType == 'contractor') ...[
                 if (_isContractAutoAssigned && _selectedContractData != null) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -684,15 +684,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                 ],
               ],
 
-              if (_selectedUserType == 'contractor' && !_isContractorAdminOrSupervisor())
-                ApprovedEntityDropdown(
-                  onSelected: (name) {
-                    setState(() {
-                      _selectedCompany = name;
-                    });
-                    _loadEntityStations(name);
-                  },
-                ),
+
 
               if (_shouldShowStationSelection() && !_isContractorAdminOrSupervisor())
                 _buildStationDropdown(),
@@ -1350,8 +1342,8 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         division: _division?.trim().isEmpty ?? true ? null : _division?.trim(),
         depot: _depot?.trim().isEmpty ?? true ? null : _depot?.trim(),
         entityId: (_selectedCompany?.trim().isEmpty ?? true) ? null : _selectedCompany?.trim(),
-        contractId: _isContractorAdminOrSupervisor() ? _selectedContractId : null,
-        stations: _isContractorAdminOrSupervisor() ? _selectedContractStationIds : null,
+        contractId: _selectedUserType == 'contractor' ? _selectedContractId : null,
+        stations: _selectedUserType == 'contractor' ? _selectedContractStationIds : null,
         createdById: currentUser?.uid,
         worker_type: _workerType,
         trainId: _trainId,
