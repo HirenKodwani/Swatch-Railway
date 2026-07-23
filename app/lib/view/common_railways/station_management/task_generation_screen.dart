@@ -91,7 +91,13 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _assignedPlatformId = assignedPlatformId;
           _isPlatformLocked = false;
           _isStationLocked = stationLocked;
-          if (_stations.isNotEmpty) _selectedStation = _stations.first;
+          if (_stations.isNotEmpty) {
+            if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+              final match = _stations.where((s) => s.uid == user!.stationId).firstOrNull;
+              if (match != null) _selectedStation = match;
+            }
+            _selectedStation ??= _stations.first;
+          }
         });
         if (_selectedStation != null) {
           await _loadPlatforms(_selectedStation!.uid!);

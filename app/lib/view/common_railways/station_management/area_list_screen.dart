@@ -69,6 +69,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
       });
 
       if (_stations.isNotEmpty) {
+        if (_selectedStation == null && user?.stationId != null && user!.stationId!.isNotEmpty) {
+          final match = _stations.where((s) => s.uid == user!.stationId).firstOrNull;
+          if (match != null) _selectedStation = match;
+        }
         _selectedStation ??= _stations.first;
         await _loadPlatforms();
         await _loadAreas();

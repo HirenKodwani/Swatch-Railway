@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../model/station_models.dart';
 import '../../model/platform_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../repositories/platform_repository.dart';
 import '../../model/railway_worker_model.dart';
 import '../../model/station_run_model.dart';
@@ -113,7 +115,12 @@ class _StationCleaningCreateRunScreenState extends State<StationCleaningCreateRu
           }
         } else {
           if (_stations.isNotEmpty) {
-            _selectedStation = _stations.first;
+            final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+            if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+              final match = _stations.where((s) => s.uid == user!.stationId).firstOrNull;
+              if (match != null) _selectedStation = match;
+            }
+            _selectedStation ??= _stations.first;
             await _loadPlatforms(_selectedStation!.uid!);
           }
         }
