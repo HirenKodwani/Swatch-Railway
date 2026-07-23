@@ -276,11 +276,6 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
 
 
-
-                    );
-                  },
-                ),
-
               const SizedBox(height: 12),
 
               TextFormField(
