@@ -1298,7 +1298,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
         zone: _zone?.trim().isEmpty ?? true ? null : _zone?.trim(),
         division: _division?.trim().isEmpty ?? true ? null : _division?.trim(),
         depot: _depot?.trim().isEmpty ?? true ? null : _depot?.trim(),
-        entityId: _isContractorAdminOrSupervisor() ? null : (_selectedCompany?.trim().isEmpty ?? true ? null : _selectedCompany?.trim()),
+        entityId: (_selectedCompany?.trim().isEmpty ?? true) ? null : _selectedCompany?.trim(),
         contractId: _isContractorAdminOrSupervisor() ? _selectedContractId : null,
         stations: _isContractorAdminOrSupervisor() ? _selectedContractStationIds : null,
         createdById: currentUser?.uid,
