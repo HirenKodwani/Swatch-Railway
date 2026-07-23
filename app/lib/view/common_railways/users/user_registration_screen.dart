@@ -157,7 +157,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
       setState(() {
         _isContractAutoAssigned = true;
         _selectedCompany = currentUser.entityId;
-        _selectedContractId = currentUser.contractId;
+        _selectedContractId = contractData['uid'] as String? ?? currentUser.contractId;
         _selectedContractData = contractData;
         _selectedContractStationIds = contractStationIds;
         _selectedStationId = null;
