@@ -28,20 +28,6 @@ class UserService {
     }
 
     const roleUpper = role.toUpperCase();
-    if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
-      if (!division || !trainId) {
-        throw new ValidationError("Division and Train ID are mandatory for Contractor Supervisor.");
-      }
-      if (trainIds && trainIds.length > 1) {
-        throw new ValidationError("Contractor Supervisor can only be mapped to ONE train.");
-      }
-    }
-
-    if (roleUpper === 'RAILWAY SUPERVISOR') {
-      if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
-        throw new ValidationError("Division and at least one Train ID are mandatory for Railway Supervisor.");
-      }
-    }
 
     const isContractorAdminOrSupervisor = roleUpper === 'CONTRACTOR_ADMIN' || roleUpper === 'CONTRACTOR_SUPERVISOR';
     if (isContractorAdminOrSupervisor) {
@@ -181,6 +167,26 @@ class UserService {
       }
     }
 
+    if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
+      if (!division) {
+        throw new ValidationError("Division is mandatory for Contractor Supervisor.");
+      }
+      if (resolvedContractType !== 'station_cleaning') {
+        if (!trainId) {
+          throw new ValidationError("Train ID is mandatory for Contractor Supervisor on this contract type.");
+        }
+        if (trainIds && trainIds.length > 1) {
+          throw new ValidationError("Contractor Supervisor can only be mapped to ONE train.");
+        }
+      }
+    }
+
+    if (roleUpper === 'RAILWAY SUPERVISOR') {
+      if (!division || (!trainId && (!trainIds || trainIds.length === 0))) {
+        throw new ValidationError("Division and at least one Train ID are mandatory for Railway Supervisor.");
+      }
+    }
+
     let userRecord;
     try {
       userRecord = await admin.auth().createUser({ email: normalizedEmail, password, displayName: fullName, disabled: false });
@@ -255,8 +261,14 @@ class UserService {
     const finalTrainIds = trainIds || currentData.trainIds;
 
     if (finalRoleUpper === 'CTS' || finalRoleUpper === 'CONTRACTOR SUPERVISOR') {
-      if (!finalDivision || !finalTrainId) {
-        throw new ValidationError("Division and Train ID are mandatory for Contractor Supervisor.");
+      if (!finalDivision) {
+        throw new ValidationError("Division is mandatory for Contractor Supervisor.");
+      }
+      const finalContractId = contractId || currentData.contractId;
+      const finalContractType = currentData.contractType;
+      const isStationCleaning = finalContractType === 'station_cleaning';
+      if (!isStationCleaning && !finalTrainId) {
+        throw new ValidationError("Train ID is mandatory for Contractor Supervisor on this contract type.");
       }
       if (Array.isArray(finalTrainId) || (finalTrainIds && finalTrainIds.length > 1)) {
         throw new ValidationError("Contractor Supervisor can only be mapped to ONE train.");
