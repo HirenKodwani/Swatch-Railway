@@ -383,6 +383,41 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
     return _isContractorAdminOrSupervisor() && _selectedContractId != null;
   }
 
+  String _normalizeZoneFromContract(String? contractZone) {
+    if (contractZone == null || contractZone.isEmpty) return '';
+    if (DepotDatabase.zoneData.containsKey(contractZone)) return contractZone;
+    final lower = contractZone.toLowerCase();
+    for (final key in DepotDatabase.zoneData.keys) {
+      if (key.toLowerCase() == lower) return key;
+    }
+    final codeMatch = RegExp(r'\((\w+)\)$').firstMatch(contractZone);
+    if (codeMatch != null) {
+      final code = codeMatch.group(1)!.toLowerCase();
+      for (final key in DepotDatabase.zoneData.keys) {
+        if (key.toLowerCase().contains('($code)')) return key;
+      }
+    }
+    for (final key in DepotDatabase.zoneData.keys) {
+      if (key.toLowerCase().contains(contractZone.toLowerCase()) ||
+          contractZone.toLowerCase().contains(key.toLowerCase())) return key;
+    }
+    return contractZone;
+  }
+
+  String? _normalizeDivisionFromContract(String? zoneKey, String? contractDivision) {
+    if (zoneKey == null || zoneKey.isEmpty || contractDivision == null || contractDivision.isEmpty) {
+      return contractDivision;
+    }
+    final divisionsMap = DepotDatabase.zoneData[zoneKey]?.keys ?? {};
+    if (divisionsMap.isEmpty) return contractDivision;
+    if (divisionsMap.contains(contractDivision)) return contractDivision;
+    final lower = contractDivision.toLowerCase();
+    for (final div in divisionsMap) {
+      if (div.toLowerCase() == lower) return div;
+    }
+    return contractDivision;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -537,13 +572,24 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
                     entityId: _selectedCompany,
                     onSelected: (contractId, contractData) {
                       _stationNameController.clear();
+                      final rawZone = contractData['zone'] as String?;
+                      final rawDivision = contractData['division'] as String?;
+                      final normZone = _normalizeZoneFromContract(rawZone);
+                      final normDivision = _normalizeDivisionFromContract(normZone, rawDivision);
+                      final zoneDivisions = normZone.isNotEmpty
+                          ? (DepotDatabase.zoneData[normZone]?.keys.toList() ?? <String>[])
+                          : <String>[];
                       setState(() {
                         _selectedContractId = contractId;
                         _selectedContractData = contractData;
                         _selectedContractStationIds = [];
                         _selectedStationId = null;
-                        _zone = contractData['zone'];
-                        _division = contractData['division'];
+                        _zone = normZone;
+                        _division = normDivision;
+                        divisions = zoneDivisions;
+                        if (normZone.isNotEmpty && !zones.contains(normZone)) {
+                          zones = [...zones, normZone];
+                        }
                       });
                     },
                   ),
