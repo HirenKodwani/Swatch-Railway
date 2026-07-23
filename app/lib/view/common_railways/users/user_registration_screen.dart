@@ -335,6 +335,29 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   }
 
   Widget _buildContractStationDropdown() {
+    // If contract has stationIds, auto-assign and show read-only
+    if (_selectedContractData != null) {
+      final contractStationIds = (_selectedContractData!['stationIds'] as List?)?.cast<String>() ?? [];
+      final contractStationNames = (_selectedContractData!['stationNames'] as List?)?.cast<String>() ?? [];
+      if (contractStationIds.isNotEmpty) {
+        _selectedContractStationIds = contractStationIds;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Assigned Station', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Chip(
+                avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                label: Text(contractStationNames.isNotEmpty ? contractStationNames.first : contractStationIds.first),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+    // Fall back to manual text field
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(

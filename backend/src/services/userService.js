@@ -5,7 +5,7 @@ import { safeFormat } from '../utils/helpers.js';
 
 class UserService {
   async createUser(creatorData, userData) {
-    const { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
+    let { email, password, role, userType, fullName, designation, mobile, zone, division, depot, entityId, contractId, stations, trainId, trainIds, worker_type, stationId, platformId, areaId } = userData;
     let domain = userData.domain;
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const { uid: creatorId, name, fullName: creatorNameAuth, role: creatorRole } = creatorData;
@@ -57,7 +57,15 @@ class UserService {
         if (!stationName || typeof stationName !== 'string') continue;
         const trimmed = stationName.trim();
         if (!trimmed) continue;
-        // Try exact match first, then case-insensitive
+        // If it looks like a Firestore document ID (>=20 alphanum), check directly
+        if (/^[a-zA-Z0-9]{20,}$/.test(trimmed)) {
+          const directSnap = await db.collection('stations').doc(trimmed).get();
+          if (directSnap.exists) {
+            resolvedStations.push(trimmed);
+            continue;
+          }
+        }
+        // Try exact match on stationName
         let snap = await db.collection('stations')
           .where('stationName', '==', trimmed)
           .limit(1)
@@ -348,6 +356,14 @@ class UserService {
           if (!stationName || typeof stationName !== 'string') continue;
           const trimmed = stationName.trim();
           if (!trimmed) continue;
+          // If it looks like a Firestore document ID, check directly
+          if (/^[a-zA-Z0-9]{20,}$/.test(trimmed)) {
+            const directSnap = await db.collection('stations').doc(trimmed).get();
+            if (directSnap.exists) {
+              resolvedStations.push(trimmed);
+              continue;
+            }
+          }
           let snap = await db.collection('stations')
             .where('stationName', '==', trimmed)
             .limit(1)
