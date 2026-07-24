@@ -142,8 +142,6 @@ class _ScheduleFormState extends State<_ScheduleForm> {
   CleaningFrequency _frequency = CleaningFrequency.onceDaily;
   String _shift = 'Morning';
   final _entityNameCtrl = TextEditingController();
-  final _supervisorNameCtrl = TextEditingController();
-  final _supervisorIdCtrl = TextEditingController();
   final _startTimeCtrl = TextEditingController(text: '06:00');
   final _endTimeCtrl = TextEditingController(text: '14:00');
   final List<String> _selectedDays = [];
@@ -151,14 +149,28 @@ class _ScheduleFormState extends State<_ScheduleForm> {
   DateTime? _effectiveTo;
   bool _autoGenerate = true;
 
+  List<Map<String, dynamic>> _supervisors = [];
+  Map<String, dynamic>? _selectedSupervisor;
+
   final List<String> _shifts = ['Morning', 'Afternoon', 'Night'];
   final List<String> _weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   @override
+  void initState() {
+    super.initState();
+    _loadSupervisors();
+  }
+
+  Future<void> _loadSupervisors() async {
+    try {
+      final list = await ApiService.getSupervisors(module: 'station_cleaning');
+      if (mounted) setState(() => _supervisors = list);
+    } catch (_) {}
+  }
+
+  @override
   void dispose() {
     _entityNameCtrl.dispose();
-    _supervisorNameCtrl.dispose();
-    _supervisorIdCtrl.dispose();
     _startTimeCtrl.dispose();
     _endTimeCtrl.dispose();
     super.dispose();
@@ -213,8 +225,8 @@ class _ScheduleFormState extends State<_ScheduleForm> {
         'frequency': _frequency.name,
         'shift': _shift,
         'entityName': _entityNameCtrl.text.trim(),
-        'supervisorId': _supervisorIdCtrl.text.trim(),
-        'supervisorName': _supervisorNameCtrl.text.trim(),
+        'supervisorId': _selectedSupervisor?['uid'] ?? '',
+        'supervisorName': _selectedSupervisor?['fullName'] ?? '',
         'startTime': _startTimeCtrl.text.trim(),
         'endTime': _endTimeCtrl.text.trim(),
         'daysOfWeek': _selectedDays,
@@ -454,14 +466,16 @@ class _ScheduleFormState extends State<_ScheduleForm> {
                       decoration: const InputDecoration(labelText: 'Entity / Contractor Name', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _supervisorNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Supervisor Name', border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _supervisorIdCtrl,
-                      decoration: const InputDecoration(labelText: 'Supervisor User ID (optional)', border: OutlineInputBorder()),
+                    DropdownButtonFormField<Map<String, dynamic>>(
+                      value: _selectedSupervisor,
+                      decoration: const InputDecoration(labelText: 'Supervisor', border: OutlineInputBorder()),
+                      isExpanded: true,
+                      items: _supervisors.map((s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(s['fullName'] ?? 'Unknown'),
+                      )).toList()
+                        ..insert(0, const DropdownMenuItem(value: null, child: Text('Select Supervisor'))),
+                      onChanged: (val) => setState(() => _selectedSupervisor = val),
                     ),
                   ],
                 ),

@@ -924,13 +924,14 @@ class UserService {
     const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
     
     const isMaster = requesterLevel >= 60;
+    const isContractor = requesterData.userType === 'contractor';
 
     let query = db.collection('users')
       .where('status', '==', 'APPROVED');
 
     if (module) {
       query = query.where('domain', '==', module);
-    } else if ((requesterData.userType === 'contractor' || requesterData.userType === 'contractor') && requesterData.domain) {
+    } else if (isContractor && requesterData.domain) {
       query = query.where('domain', '==', requesterData.domain);
     }
 
@@ -942,6 +943,9 @@ class UserService {
         query = query.where('division', '==', division);
       }
       console.log(`(GetSupervisors) Master access: Fetching zone=${zone || 'ALL'} division=${division || 'ALL'}`);
+    } else if (isContractor && requesterData.entityId) {
+      query = query.where('entityId', '==', requesterData.entityId);
+      console.log(`(GetSupervisors) Contractor access: entityId=${requesterData.entityId}`);
     } else {
       if (!zone) {
         throw new ValidationError("Your user profile is missing Zone.");
@@ -967,7 +971,7 @@ class UserService {
       return { count: 0, supervisors: [] };
     }
 
-    const allowedRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER'];
+    const allowedRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER', 'CONTRACTOR_SUPERVISOR'];
     const supervisorList = [];
 
     snapshot.forEach(doc => {
