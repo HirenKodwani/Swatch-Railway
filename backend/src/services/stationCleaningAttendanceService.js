@@ -9,9 +9,10 @@ class StationCleaningAttendanceService {
       if (!allowedFields.includes(key)) throw new ValidationError(`Invalid field: '${key}'`);
     }
     const { runInstanceId, stationId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId, livenessChallenge } = body;
-    if (!runInstanceId || !attendanceType || !imageUrl || !deviceTimestamp) {
-      throw new ValidationError('runInstanceId, attendanceType, imageUrl, and deviceTimestamp are required.');
+    if (!attendanceType || !imageUrl || !deviceTimestamp) {
+      throw new ValidationError('attendanceType, imageUrl, and deviceTimestamp are required.');
     }
+    const effectiveRunId = runInstanceId || `self_${userData.uid}_${new Date().toISOString().split('T')[0]}`;
     if (!['start', 'mid', 'end'].includes(attendanceType)) {
       throw new ValidationError("attendanceType must be 'start', 'mid', or 'end'");
     }
@@ -67,7 +68,7 @@ class StationCleaningAttendanceService {
       }
     });
 
-    let attendanceDocId = `${runInstanceId}_${workerId}`;
+    let attendanceDocId = `${effectiveRunId}_${workerId}`;
     let attendanceRef = db.collection('station_cleaning_attendance').doc(attendanceDocId);
     let attendanceDoc = await attendanceRef.get();
     
@@ -88,7 +89,7 @@ class StationCleaningAttendanceService {
     if (!attendanceDoc.exists) {
       if (attendanceType !== 'start') throw new ValidationError("You must submit 'start' attendance first.");
       await attendanceRef.set({
-        uid: attendanceDocId, runInstanceId, stationId: stationId || null, workerId, workerName: finalWorkerName,
+        uid: attendanceDocId, runInstanceId: effectiveRunId, stationId: stationId || null, workerId, workerName: finalWorkerName,
         date: todayIST,
         mobileNumber: mobileNumber || null, deviceId: deviceId || null,
         isStartMarked: true, isMidMarked: false, isEndMarked: false,

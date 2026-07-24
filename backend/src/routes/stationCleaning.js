@@ -39,6 +39,7 @@ router.get('/api/station-schedule/list/:stationId', verifyToken, requirePermissi
 router.get('/api/station-schedule/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_SCHEDULES), requireStationAccess, requirePlatformAccess, requireAreaAccess, stationCleaning.getSchedule);
 router.put('/api/station-schedule/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_SCHEDULES), requireStationAccess, requirePlatformAccess, requireAreaAccess, stationCleaning.updateSchedule);
 router.delete('/api/station-schedule/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_SCHEDULES), requireStationAccess, requirePlatformAccess, requireAreaAccess, stationCleaning.deleteSchedule);
+router.post('/api/station-schedule/generate-tasks', verifyToken, requirePermission(PERMISSIONS.MANAGE_SCHEDULES), requireStationAccess, requirePlatformAccess, requireAreaAccess, stationCleaning.generateTasksFromSchedule);
 
 // ─── Station Runs ─────────────────────────────────────────────────────────────
 router.post('/api/station-runs', verifyToken, requirePermission(PERMISSIONS.MANAGE_RUNS), requireStationAccess, requirePlatformAccess, stationCleaning.createStationRun);
@@ -136,5 +137,8 @@ router.post('/api/station-cleaning/submissions', verifyToken, requirePermission(
 router.get('/api/station-cleaning/submissions/my', verifyToken, requirePermission(PERMISSIONS.VIEW_SUBMISSIONS), stationCleaning.listMySubmissions);
 router.get('/api/station-cleaning/submissions/list', verifyToken, requirePermission(PERMISSIONS.VIEW_SUBMISSIONS), stationCleaning.listAllSubmissions);
 router.put('/api/station-cleaning/submissions/:uid/review', verifyToken, requirePermission(PERMISSIONS.APPROVE_TASK), stationCleaning.reviewSubmission);
+
+// ─── Shift Summary (end-of-shift photo evidence) ──────────────────────────
+router.post('/api/station-cleaning/shift-summary', verifyToken, requirePermission(PERMISSIONS.SUBMIT_TASKS), stationCleaning.submitShiftSummary);
 
 export default router;

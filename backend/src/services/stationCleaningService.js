@@ -318,17 +318,31 @@ class StationCleaningService {
 
   // ─── Schedules ──────────────────────────────────────────────────────────────
   async createSchedule(body) {
-    const { stationId, scheduleName } = body;
+    const { stationId } = body;
     if (!stationId) throw new ValidationError('stationId is required');
     const ref = db.collection('stationSchedules').doc();
     const data = {
-      uid: ref.id, stationId,
-      scheduleName: scheduleName || 'Schedule',
-      shiftType: body.shiftType || 'morning',
+      uid: ref.id,
+      stationId,
+      scheduleName: body.scheduleName || 'Schedule',
+      areaId: body.areaId || '',
+      zoneId: body.zoneId || '',
+      frequency: body.frequency || 'daily',
+      shift: body.shift || body.shiftType || 'morning',
+      shiftType: body.shift || body.shiftType || 'morning',
+      entityId: body.entityId || '',
+      entityName: body.entityName || '',
+      supervisorId: body.supervisorId || '',
+      supervisorName: body.supervisorName || '',
       startTime: body.startTime || '06:00',
       endTime: body.endTime || '14:00',
+      daysOfWeek: body.daysOfWeek || [],
+      estimatedHours: body.estimatedHours || null,
+      effectiveFrom: body.effectiveFrom || null,
+      effectiveTo: body.effectiveTo || null,
       status: 'active',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     await ref.set(data);
     return { message: 'Schedule created', uid: ref.id, data };
@@ -362,6 +376,213 @@ class StationCleaningService {
     if (!doc.exists) throw new NotFoundError('Schedule not found');
     await ref.update({ status: 'inactive', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Schedule deleted', uid };
+  }
+
+  async generateTasksFromSchedule(data) {
+    const { scheduleId, date, generateForDays } = data;
+    if (!scheduleId) throw new ValidationError('scheduleId is required');
+    const scheduleDoc = await db.collection('stationSchedules').doc(scheduleId).get();
+    if (!scheduleDoc.exists) throw new NotFoundError('Schedule not found');
+    const schedule = scheduleDoc.data();
+
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const startTime = schedule.startTime || '06:00';
+    const endTime = schedule.endTime || '14:00';
+    const frequency = schedule.frequency || 'daily';
+
+    let areaName = schedule.areaName || '';
+    if (!areaName && schedule.areaId) {
+      try {
+        const areaDoc = await db.collection('stationAreas').doc(schedule.areaId).get();
+        if (areaDoc.exists) {
+          areaName = areaDoc.data().name || areaDoc.data().areaName || '';
+        }
+      } catch (_) {}
+    }
+    schedule.areaName = areaName;
+
+    const taskTimes = this._calculateTaskTimes(frequency, startTime, endTime);
+
+    const numDays = Math.max(1, generateForDays || 1);
+    const daysToGenerate = [];
+    const start = new Date(targetDate + 'T00:00:00');
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      daysToGenerate.push(d.toISOString().split('T')[0]);
+    }
+
+    const existingKeys = new Set();
+    if (daysToGenerate.length > 0) {
+      try {
+        const existingSnap = await db.collection('cleaningTasks')
+          .where('scheduleId', '==', scheduleId)
+          .where('date', '>=', daysToGenerate[0])
+          .where('date', '<=', daysToGenerate[daysToGenerate.length - 1])
+          .select('date', 'scheduledTime')
+          .get();
+        existingSnap.forEach(doc => {
+          const d = doc.data();
+          existingKeys.add(`${d.date}|${d.scheduledTime}`);
+        });
+      } catch (indexErr) {
+        const allSnap = await db.collection('cleaningTasks')
+          .where('scheduleId', '==', scheduleId)
+          .select('date', 'scheduledTime')
+          .get();
+        allSnap.forEach(doc => {
+          const d = doc.data();
+          if (d.date >= daysToGenerate[0] && d.date <= daysToGenerate[daysToGenerate.length - 1]) {
+            existingKeys.add(`${d.date}|${d.scheduledTime}`);
+          }
+        });
+      }
+    }
+
+    let totalCount = 0;
+    const allTaskIds = [];
+
+    for (const dayStr of daysToGenerate) {
+      const batch = db.batch();
+      let batchCount = 0;
+
+      for (const timeSlot of taskTimes) {
+        const key = `${dayStr}|${timeSlot}`;
+        if (existingKeys.has(key)) continue;
+
+        const taskRef = db.collection('cleaningTasks').doc();
+        const task = {
+          uid: taskRef.id,
+          stationId: schedule.stationId,
+          stationName: schedule.stationName || '',
+          areaId: schedule.areaId || '',
+          areaName: schedule.areaName || '',
+          zoneId: schedule.zoneId || '',
+          shift: schedule.shift || schedule.shiftType || 'morning',
+          frequency,
+          date: dayStr,
+          scheduledDate: dayStr,
+          scheduledTime: timeSlot,
+          supervisorId: schedule.supervisorId || null,
+          supervisorName: schedule.supervisorName || '',
+          scheduleId,
+          entityId: schedule.entityId || '',
+          entityName: schedule.entityName || '',
+          activityType: 'station_cleaning',
+          status: 'pending',
+          workerId: null,
+          workerName: null,
+          priority: 3,
+          startedAt: null, completedAt: null,
+          approvedAt: null, rejectedAt: null,
+          beforePhoto: null, afterPhoto: null,
+          gpsLat: null, gpsLng: null,
+          supervisorNotes: null, rejectionReason: null,
+          resubmittedAt: null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: new Date().toISOString()
+        };
+        batch.set(taskRef, task);
+        allTaskIds.push(taskRef.id);
+        batchCount++;
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+        totalCount += batchCount;
+      }
+    }
+
+    return { message: `Generated ${totalCount} tasks for ${daysToGenerate.length} day(s)`, count: totalCount, taskIds: allTaskIds };
+  }
+
+  _calculateTaskTimes(frequency, startTime, endTime) {
+    const [startH, startM] = (startTime || '06:00').split(':').map(Number);
+    const [endH, endM] = (endTime || '14:00').split(':').map(Number);
+    const startMinutes = startH * 60 + (startM || 0);
+    const endMinutes = endH * 60 + (endM || 0);
+    const durationMinutes = endMinutes - startMinutes;
+
+    if (durationMinutes <= 0) return [startTime || '08:00'];
+
+    if (frequency === 'hourly_mopping') {
+      const slots = [];
+      for (let m = 300; m < 1380; m += 60) {
+        slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+      }
+      return slots;
+    }
+
+    const intervalMap = {
+      every_15_min: 15, every15min: 15, every_15min: 15,
+      every_30_min: 30, every30min: 30, every_30min: 30,
+      hourly: 60, every_1_hour: 60,
+      every_2_hour: 120, every2h: 120, every_2h: 120,
+      every_3_hour: 180,
+      every_4_hour: 240, every4h: 240, every_4h: 240,
+      every_6_hour: 360, every6h: 360, every_6h: 360,
+    };
+
+    const interval = intervalMap[frequency];
+    if (interval) {
+      const slots = [];
+      for (let m = startMinutes; m < endMinutes; m += interval) {
+        slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+      }
+      return slots;
+    }
+
+    switch (frequency) {
+      case 'twice_daily':
+      case 'twice_daily_shift':
+      case 'two_times_daily': {
+        const mid1 = startMinutes + Math.floor(durationMinutes * 0.33);
+        const mid2 = startMinutes + Math.floor(durationMinutes * 0.66);
+        return [
+          `${String(Math.floor(mid1 / 60)).padStart(2, '0')}:${String(mid1 % 60).padStart(2, '0')}`,
+          `${String(Math.floor(mid2 / 60)).padStart(2, '0')}:${String(mid2 % 60).padStart(2, '0')}`
+        ];
+      }
+      case 'three_times_daily': {
+        const slots = [];
+        for (let i = 1; i <= 3; i++) {
+          const m = startMinutes + Math.floor(durationMinutes * i / 4);
+          slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+        }
+        return slots;
+      }
+      case 'four_times_daily': {
+        const slots = [];
+        for (let i = 1; i <= 4; i++) {
+          const m = startMinutes + Math.floor(durationMinutes * i / 5);
+          slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+        }
+        return slots;
+      }
+      case 'six_times_daily':
+      case 'once_every_4h': {
+        const allSlots = [];
+        for (let m = 0; m < 1440; m += 240) {
+          if (m >= startMinutes && m < endMinutes) {
+            allSlots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+          }
+        }
+        return allSlots.length > 0 ? allSlots : [startTime || '08:00'];
+      }
+      case 'once_daily':
+      case 'once_per_day':
+      case 'daily':
+        return [startTime || '08:00'];
+      case 'twice_weekly':
+      case 'twice_monthly':
+      case 'once_weekly':
+      case 'once_monthly':
+      case 'weekly':
+      case 'monthly':
+        return [startTime || '08:00'];
+      default:
+        return [startTime || '08:00'];
+    }
   }
 
   _shiftDefaultTime(shift) {
@@ -1415,6 +1636,33 @@ class StationCleaningService {
     };
     await ref.set(data);
     return { message: 'Execution plan created', uid: ref.id, data };
+  }
+
+  async submitShiftSummary(data) {
+    const { supervisorId, supervisorName, stationId, stationName, date, shift, areas } = data;
+    if (!supervisorId || !stationId || !date || !areas || !Array.isArray(areas) || areas.length === 0) {
+      throw new ValidationError('supervisorId, stationId, date, and areas array are required');
+    }
+    const ref = db.collection('stationShiftSummaries').doc();
+    const record = {
+      uid: ref.id,
+      supervisorId,
+      supervisorName: supervisorName || '',
+      stationId,
+      stationName: stationName || '',
+      date,
+      shift: shift || '',
+      areas: areas.map(a => ({
+        areaId: a.areaId || '',
+        areaName: a.areaName || '',
+        photoUrl: a.photoUrl || '',
+        scheduledTime: a.scheduledTime || '',
+        taskId: a.taskId || null,
+      })),
+      submittedAt: new Date().toISOString(),
+    };
+    await ref.set(record);
+    return { message: 'Shift summary submitted', uid: ref.id, count: areas.length };
   }
 }
 

@@ -106,6 +106,11 @@ export const deleteSchedule = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const generateTasksFromSchedule = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.generateTasksFromSchedule(req.body);
+  res.status(201).json({ success: true, ...result });
+});
+
 export const createStationRun = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.createStationRun(req.body, req.user);
   res.status(201).json({ success: true, data: result.data || result, message: result.message, tasksCreated: result.tasksCreated || 0 });
@@ -391,4 +396,9 @@ export const listAllSubmissions = asyncHandler(async (req, res) => {
 export const reviewSubmission = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.reviewSubmission(req.params.uid, req.body, req.user);
   res.status(200).json(result);
+});
+
+export const submitShiftSummary = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.submitShiftSummary(req.body);
+  res.status(201).json({ success: true, ...result });
 });

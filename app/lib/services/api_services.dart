@@ -3928,6 +3928,36 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> submitShiftSummary(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning/shift-summary'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to submit shift summary');
+    } catch (e) {
+      throw Exception('Error submitting shift summary: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> generateTasksFromSchedule(Map<String, dynamic> data) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-schedule/generate-tasks'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+      throw Exception('Failed to generate tasks from schedule');
+    } catch (e) {
+      throw Exception('Error generating tasks: $e');
+    }
+  }
+
   static Future<Map<String, dynamic>> createStationCleaningForm(Map<String, dynamic> data) async {
     try {
       final token = await getToken();

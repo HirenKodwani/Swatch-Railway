@@ -1,6 +1,6 @@
 enum StationCategory { a1, a, b, c, d }
 enum StationType { terminal, junction, regular, depot }
-enum CleaningFrequency { daily, weekly, monthly, special, festival, vipVisit, emergency }
+enum CleaningFrequency { daily, weekly, monthly, special, festival, vipVisit, emergency, every15min, every30min, hourly, every2h, every4h, every6h, twiceDaily, threeTimesDaily, fourTimesDaily, sixTimesDaily, onceDaily, twiceWeekly, onceWeekly, twiceMonthly, onceMonthly, hourlyMopping }
 enum StationFormStatus { draft, submitted, approved, scored, locked, rejected }
 
 class Station {
@@ -290,6 +290,8 @@ class StationCleaningSchedule {
   final List<String> daysOfWeek;
   final bool active;
   final DateTime createdAt;
+  final DateTime? effectiveFrom;
+  final DateTime? effectiveTo;
 
   StationCleaningSchedule({
     this.uid,
@@ -307,6 +309,8 @@ class StationCleaningSchedule {
     this.daysOfWeek = const [],
     this.active = true,
     DateTime? createdAt,
+    this.effectiveFrom,
+    this.effectiveTo,
   }) : createdAt = createdAt ?? DateTime.now();
 
   String get frequencyLabel {
@@ -318,6 +322,22 @@ class StationCleaningSchedule {
       case CleaningFrequency.festival: return 'Festival';
       case CleaningFrequency.vipVisit: return 'VIP Visit';
       case CleaningFrequency.emergency: return 'Emergency';
+      case CleaningFrequency.every15min: return 'Every 15 min';
+      case CleaningFrequency.every30min: return 'Every 30 min';
+      case CleaningFrequency.hourly: return 'Hourly';
+      case CleaningFrequency.every2h: return 'Every 2 hrs';
+      case CleaningFrequency.every4h: return 'Every 4 hrs';
+      case CleaningFrequency.every6h: return 'Every 6 hrs';
+      case CleaningFrequency.twiceDaily: return 'Twice Daily';
+      case CleaningFrequency.threeTimesDaily: return 'Three Times Daily';
+      case CleaningFrequency.fourTimesDaily: return 'Four Times Daily';
+      case CleaningFrequency.sixTimesDaily: return 'Six Times Daily';
+      case CleaningFrequency.onceDaily: return 'Once Daily';
+      case CleaningFrequency.twiceWeekly: return 'Twice Weekly';
+      case CleaningFrequency.onceWeekly: return 'Once Weekly';
+      case CleaningFrequency.twiceMonthly: return 'Twice Monthly';
+      case CleaningFrequency.onceMonthly: return 'Once Monthly';
+      case CleaningFrequency.hourlyMopping: return 'Hourly Mopping';
     }
   }
 
@@ -337,6 +357,8 @@ class StationCleaningSchedule {
     'daysOfWeek': daysOfWeek,
     'active': active,
     'createdAt': createdAt.toIso8601String(),
+    if (effectiveFrom != null) 'effectiveFrom': effectiveFrom!.toIso8601String(),
+    if (effectiveTo != null) 'effectiveTo': effectiveTo!.toIso8601String(),
   };
 
   factory StationCleaningSchedule.fromJson(Map<String, dynamic> json) => StationCleaningSchedule(
@@ -355,6 +377,8 @@ class StationCleaningSchedule {
     daysOfWeek: List<String>.from(json['daysOfWeek'] ?? []),
     active: json['active'] ?? true,
     createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
+    effectiveFrom: json['effectiveFrom'] != null ? DateTime.tryParse(json['effectiveFrom']) : null,
+    effectiveTo: json['effectiveTo'] != null ? DateTime.tryParse(json['effectiveTo']) : null,
   );
 }
 
