@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/model/station_models.dart';
-import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/providers/auth_provider.dart';
-import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'area_form_screen.dart';
-import 'platform_list_screen.dart';
 
 class AreaListScreen extends StatefulWidget {
   final String? stationId;
@@ -23,15 +20,10 @@ class AreaListScreen extends StatefulWidget {
 class _AreaListScreenState extends State<AreaListScreen> {
   List<Station> _stations = [];
   List<StationArea> _areas = [];
-  List<StationArea> _allStationAreas = [];
   Station? _selectedStation;
-  List<Platform> _platforms = [];
-  String? _selectedPlatformId;
   bool _isLoadingStations = true;
-  bool _isLoadingPlatforms = false;
   bool _isLoadingAreas = false;
   String? _error;
-  String _assignedPlatformName = '';
 
   @override
   void initState() {
@@ -75,25 +67,12 @@ class _AreaListScreenState extends State<AreaListScreen> {
           if (match != null) _selectedStation = match;
         }
         _selectedStation ??= _stations.first;
-        await _loadPlatforms();
         await _loadAreas();
       }
     } catch (e) {
       _error = e.toString();
     } finally {
       if (mounted) setState(() => _isLoadingStations = false);
-    }
-  }
-
-  Future<void> _loadPlatforms() async {
-    if (_selectedStation == null) return;
-    setState(() => _isLoadingPlatforms = true);
-    try {
-      _platforms = await PlatformRepository.getByStation(_selectedStation!.uid ?? '');
-    } catch (_) {
-      // platforms may not exist yet
-    } finally {
-      if (mounted) setState(() => _isLoadingPlatforms = false);
     }
   }
 
@@ -104,33 +83,10 @@ class _AreaListScreenState extends State<AreaListScreen> {
       final result = await StationCleaningRepository.listAreas(_selectedStation!.uid ?? _selectedStation!.stationCode);
       final rawList = (result['areas'] as List<dynamic>?) ?? [];
       final fetched = rawList.map((a) => StationArea.fromJson(a is Map<String, dynamic> ? a : {})).toList();
-      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-      final role = user?.role ?? '';
-
-      // user.areaId stores the assigned platform document ID for Area Master
-      final assignedPlatformId = user?.areaId;
-
-      // Find platform name
-      String platformName = '';
-      if (assignedPlatformId != null && assignedPlatformId.isNotEmpty) {
-        try {
-          final platformDoc = await PlatformRepository.getById(assignedPlatformId);
-          platformName = platformDoc.displayName;
-        } catch (_) {}
-      }
-
-      List<StationArea> displayAreas;
-      if (_selectedPlatformId != null) {
-        displayAreas = fetched.where((a) => a.platformId == _selectedPlatformId).toList();
-      } else {
-        displayAreas = fetched;
-      }
 
       if (mounted) {
         setState(() {
-          _allStationAreas = fetched;
-          _areas = displayAreas;
-          _assignedPlatformName = platformName;
+          _areas = fetched;
         });
       }
     } catch (e) {
@@ -141,19 +97,12 @@ class _AreaListScreenState extends State<AreaListScreen> {
   }
 
   Future<void> _openForm({Map<String, dynamic>? existing}) async {
-    final currentPlatformId = Provider.of<AuthProvider>(context, listen: false).currentUser?.platformId ?? _selectedPlatformId;
-    final selectedPlatformObj = _platforms.where((p) => p.uid == currentPlatformId).firstOrNull;
-
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
           builder: (_) => AreaFormScreen(
             stationId: _selectedStation!.uid ?? _selectedStation!.stationCode,
             existingArea: existing,
-            platformId: currentPlatformId,
-            platformName: _assignedPlatformName.isNotEmpty ? _assignedPlatformName : selectedPlatformObj?.displayName,
-            platforms: _platforms,
-            allStationAreas: _allStationAreas,
           ),
       ),
     );
@@ -194,26 +143,6 @@ class _AreaListScreenState extends State<AreaListScreen> {
         title: const Text('Area List', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kRailwayBlue,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          if (_selectedStation != null)
-            IconButton(
-              icon: const Icon(Icons.view_quilt),
-              tooltip: 'Manage Platforms',
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PlatformListScreen(
-                      stationId: _selectedStation!.uid ?? _selectedStation!.stationCode,
-                      stationName: _selectedStation!.stationName,
-                    ),
-                  ),
-                );
-                await _loadPlatforms();
-                _loadAreas();
-              },
-            ),
-        ],
       ),
       body: _isLoadingStations
           ? const Center(child: CircularProgressIndicator())
@@ -254,30 +183,6 @@ class _AreaListScreenState extends State<AreaListScreen> {
                         },
                       ),
                     ),
-                    if (_platforms.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        color: Colors.white,
-                        child: DropdownButtonFormField<String?>(
-                          value: _platforms.any((p) => p.uid == _selectedPlatformId)
-                              ? _selectedPlatformId
-                              : null,
-                          decoration: const InputDecoration(
-                            labelText: 'Platform (optional)',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.view_quilt),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: null, child: Text('All Platforms')),
-                            ..._platforms.map((p) => DropdownMenuItem(value: p.uid, child: Text(p.displayName))),
-                          ],
-                          onChanged: (v) {
-                            setState(() => _selectedPlatformId = v);
-                            _loadAreas();
-                          },
-                        ),
-                      ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: _isLoadingAreas
@@ -302,17 +207,6 @@ class _AreaListScreenState extends State<AreaListScreen> {
                                     itemCount: _areas.length,
                                     itemBuilder: (context, index) {
                                       final a = _areas[index];
-                                      String? areaPlatformName;
-                                      if (a.platformId != null) {
-                                        final parentArea = _allStationAreas.where((sa) => sa.uid == a.platformId).firstOrNull;
-                                        if (parentArea != null) {
-                                          areaPlatformName = parentArea.name;
-                                        }
-                                        if (areaPlatformName == null && _platforms.isNotEmpty) {
-                                          final p = _platforms.where((pl) => pl.uid == a.platformId).firstOrNull;
-                                          areaPlatformName = p?.displayName;
-                                        }
-                                      }
                                       return Card(
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         child: ListTile(
@@ -320,24 +214,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
                                             backgroundColor: kRailwayBlue.withOpacity(0.1),
                                             child: Text('${a.order}', style: TextStyle(color: kRailwayBlue, fontWeight: FontWeight.bold)),
                                           ),
-                                          title: Row(
-                                            children: [
-                                              Expanded(child: Text(a.name, style: const TextStyle(fontWeight: FontWeight.bold))),
-                                              if (areaPlatformName != null)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color: kRailwayBlue.withOpacity(0.1),
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    border: Border.all(color: kRailwayBlue.withOpacity(0.3)),
-                                                  ),
-                                                  child: Text(
-                                                    areaPlatformName,
-                                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kRailwayBlue),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
+                                          title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                                           subtitle: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             mainAxisSize: MainAxisSize.min,
