@@ -752,7 +752,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
                             Text( entityDetails?['companyName'] ?? 'N/A',
                                 style: TextStyle(fontSize: 13, color: Colors.black54)),
                             SizedBox(height: 2),
-                            Text(entityDetails?['registeredAddress'] ?? 'N/A',
+                            Text('${_formatContractType(user?.contractType ?? '')} | ${user?.division ?? "N/A"}',
                                 style: TextStyle(fontSize: 12, color: Colors.black45)),
                           ],
                         ),
@@ -1389,4 +1389,20 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     );
   }
 
+  String _formatContractType(String type) {
+    switch (type) {
+      case 'station_cleaning':
+        return 'Station Cleaning';
+      case 'coach_cleaning':
+        return 'Coach Cleaning';
+      case 'premises_cleaning':
+        return 'Premises Cleaning';
+      case 'cts':
+        return 'CTS';
+      case 'obhs':
+        return 'OBHS';
+      default:
+        return type;
+    }
+  }
 }

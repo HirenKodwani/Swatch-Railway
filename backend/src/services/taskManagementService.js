@@ -348,8 +348,9 @@ class TaskManagementService {
 
   async getSupervisorTasks(supervisorId, date, statusFilter) {
     if (!supervisorId) throw new ValidationError('supervisorId is required');
-    let q = db.collection('cleaningTasks').where('supervisorId', '==', supervisorId);
-    const snapshot = await q.orderBy('updatedAt', 'desc').limit(200).get();
+    const snapshot = await db.collection('cleaningTasks')
+      .where('supervisorId', '==', supervisorId)
+      .get();
     let tasks = [];
     snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
     if (date) {

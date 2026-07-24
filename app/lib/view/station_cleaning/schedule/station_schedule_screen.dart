@@ -98,8 +98,8 @@ class _StationScheduleScreenState extends State<StationScheduleScreen> with Tick
                 backgroundColor: kRailwayBlue.withOpacity(0.15),
                 child: Icon(Icons.schedule, color: kRailwayBlue),
               ),
-              title: Text('Area: ${s.areaId}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${s.frequencyLabel} | ${s.shift} | ${s.startTime}-${s.endTime}\nDays: ${s.daysOfWeek.isEmpty ? "All" : s.daysOfWeek.join(", ")}'),
+              title: Text(s.areaName.isNotEmpty ? s.areaName : 'Area: ${s.areaId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('${s.frequencyLabel} | ${s.shift} | ${s.startTime}-${s.endTime}\nEntity: ${s.entityName.isNotEmpty ? s.entityName : s.entityId}\nDays: ${s.daysOfWeek.isEmpty ? "All" : s.daysOfWeek.join(", ")}'),
               isThreeLine: true,
             ),
           );

@@ -277,7 +277,10 @@ class StationContractorMapping {
 class StationCleaningSchedule {
   String? uid;
   final String stationId;
+  final String stationName;
+  final String scheduleName;
   final String areaId;
+  final String areaName;
   final String zoneId;
   final CleaningFrequency frequency;
   final String shift;
@@ -296,7 +299,10 @@ class StationCleaningSchedule {
   StationCleaningSchedule({
     this.uid,
     required this.stationId,
+    this.stationName = '',
+    this.scheduleName = 'Schedule',
     this.areaId = '',
+    this.areaName = '',
     this.zoneId = '',
     this.frequency = CleaningFrequency.daily,
     this.shift = 'Morning',
@@ -344,7 +350,10 @@ class StationCleaningSchedule {
   Map<String, dynamic> toJson() => {
     if (uid != null) 'uid': uid,
     'stationId': stationId,
+    'stationName': stationName,
+    'scheduleName': scheduleName,
     'areaId': areaId,
+    'areaName': areaName,
     'zoneId': zoneId,
     'frequency': frequency.name,
     'shift': shift,
@@ -364,7 +373,10 @@ class StationCleaningSchedule {
   factory StationCleaningSchedule.fromJson(Map<String, dynamic> json) => StationCleaningSchedule(
     uid: json['uid'],
     stationId: json['stationId'] ?? '',
+    stationName: json['stationName'] ?? '',
+    scheduleName: json['scheduleName'] ?? 'Schedule',
     areaId: json['areaId'] ?? '',
+    areaName: json['areaName'] ?? '',
     zoneId: json['zoneId'] ?? '',
     frequency: CleaningFrequency.values.firstWhere((e) => e.name == json['frequency'], orElse: () => CleaningFrequency.daily),
     shift: json['shift'] ?? 'Morning',
