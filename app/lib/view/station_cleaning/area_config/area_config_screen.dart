@@ -1,12 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
-import 'package:crm_train/repositories/station_cleaning_repository.dart';
+import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/helper/api_error_handler.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
-double _calcTendered(double basicAreaSqFt, String frequencyType, int frequencyTimes) {
+double _calcTendered(double basicAreaSqFt, String frequencyType, int boqTimesPerPeriod) {
   final area = basicAreaSqFt;
-  final times = frequencyTimes;
+  final times = boqTimesPerPeriod;
   switch (frequencyType.toLowerCase()) {
     case 'monthly':
       return (area * times) / 30;
@@ -74,19 +78,36 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
   Future<void> _loadAreas() async {
     setState(() => _isLoading = true);
     try {
-      final result = await StationCleaningRepository.listAreas(widget.stationId);
-      final list = (result['areas'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
-      List<Map<String, dynamic>> filtered = list;
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) throw Exception('AUTH_ERROR');
+
+      final queryParams = <String, String>{'stationId': widget.stationId};
       if (_selectedPlatform?.uid != null) {
-        filtered = filtered.where((a) => a['platformId'] == _selectedPlatform!.uid).toList();
+        queryParams['platformId'] = _selectedPlatform!.uid!;
       } else if (widget.platformId != null) {
-        filtered = filtered.where((a) => a['platformId'] == widget.platformId).toList();
+        queryParams['platformId'] = widget.platformId!;
       }
-      if (mounted) {
-        setState(() {
-          _areas = filtered;
-          _isLoading = false;
-        });
+
+      final uri = Uri.parse('${ApiService.baseUrl}/api/areas').replace(queryParameters: queryParams);
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final list = body['areas'] as List<dynamic>? ?? [];
+        if (mounted) {
+          setState(() {
+            _areas = list.cast<Map<String, dynamic>>();
+            _isLoading = false;
+          });
+        }
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('AUTH_ERROR');
+      } else {
+        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
       }
     } catch (e) {
       if (mounted) {
@@ -149,7 +170,7 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
 
     final nameCtrl = TextEditingController(text: area?['areaName'] ?? '');
     final basicCtrl = TextEditingController(text: (area?['basicAreaSqFt'] as num?)?.toString() ?? '');
-    final timesCtrl = TextEditingController(text: ((area?['frequencyTimes'] as num?)?.toInt() ?? 1).toString());
+    final timesCtrl = TextEditingController(text: ((area?['boqTimesPerPeriod'] as num?)?.toInt() ?? 1).toString());
 
     String selectedMainArea = area?['mainArea'] as String? ?? '';
     String frequencyType = area?['frequencyType'] as String? ?? 'daily';
@@ -350,22 +371,30 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                     'mainArea': mainArea,
                     'basicAreaSqFt': double.tryParse(basicCtrl.text) ?? 0,
                     'frequencyType': frequencyType,
-                    'frequencyTimes': int.tryParse(timesCtrl.text) ?? 1,
+                    'boqTimesPerPeriod': int.tryParse(timesCtrl.text) ?? 1,
                   };
 
                   try {
-                    if (isEditing) {
-                      await StationCleaningRepository.updateArea(areaId, data);
+                    final prefs = await SharedPreferences.getInstance();
+                    final token = prefs.getString('token');
+                    if (token == null) throw Exception('AUTH_ERROR');
+
+                    final url = isEditing
+                        ? '${ApiService.baseUrl}/api/areas/$areaId/configure'
+                        : '${ApiService.baseUrl}/api/areas';
+                    final response = isEditing
+                        ? await http.put(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data))
+                        : await http.post(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data));
+
+                    if (response.statusCode == 200 || response.statusCode == 201) {
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _loadAreas();
                     } else {
-                      await StationCleaningRepository.createArea(data);
+                      throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
                     }
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    _loadAreas();
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e')),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                     }
                   }
                 },
@@ -385,7 +414,7 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
     final totalTendered = _totalTenderedArea;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Area Config - ${widget.stationName}')),
+      appBar: AppBar(title: Text('Areas - ${widget.stationName}')),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () => _showConfigDialog(),
@@ -500,13 +529,13 @@ class _AreaGroupTile extends StatelessWidget {
         children: areas.map((area) {
           final basic = area['basicAreaSqFt'] as num?;
           final freqType = area['frequencyType'] as String?;
-          final freqTimes = area['frequencyTimes'] as num?;
+          final boqTimes = area['boqTimesPerPeriod'] as num?;
           final tendered = area['tenderedAreaPerDay'] as num?;
           final hasBoq = basic != null || freqType != null;
 
           String freqLabel;
-          if (freqType != null && freqTimes != null) {
-            freqLabel = '$freqType ${freqTimes}x';
+          if (freqType != null && boqTimes != null) {
+            freqLabel = '$freqType ${boqTimes}x';
           } else {
             freqLabel = area['cleaningFrequency'] as String? ?? '-';
           }
