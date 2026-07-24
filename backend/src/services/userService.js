@@ -394,8 +394,9 @@ class UserService {
   }
 
   async approveUser(approverData, uid) {
-    const { uid: approverId, name, fullName, role } = approverData;
+    const { uid: approverId, name, fullName, role, entityId } = approverData;
     const approverName = fullName || name || role || 'Master Admin';
+    const approverRole = (role || '').toUpperCase();
 
     if (!uid) {
       throw new ValidationError("User ID is required.");
@@ -409,6 +410,16 @@ class UserService {
 
     const userData = doc.data();
     const userName = userData.fullName || "User";
+    const targetRole = (userData.role || '').toUpperCase();
+
+    if (approverRole === 'CONTRACTOR_ADMIN') {
+      if (targetRole !== 'CONTRACTOR_SUPERVISOR') {
+        throw new ForbiddenError('Contractor Admin can only approve Contractor Supervisor users.');
+      }
+      if (entityId && userData.entityId && entityId !== userData.entityId) {
+        throw new ForbiddenError('You can only approve users under your own entity.');
+      }
+    }
 
     await userDocRef.update({
       status: 'APPROVED',
@@ -447,8 +458,9 @@ class UserService {
   }
 
   async rejectUser(rejectorData, uid) {
-    const { uid: adminId, name, fullName, role } = rejectorData;
+    const { uid: adminId, name, fullName, role, entityId } = rejectorData;
     const adminName = fullName || name || role || 'Master Admin';
+    const rejectorRole = (role || '').toUpperCase();
 
     if (!uid) {
       throw new ValidationError("User ID is required.");
@@ -462,6 +474,16 @@ class UserService {
 
     const userData = doc.data();
     const userName = userData.fullName || "User";
+    const targetRole = (userData.role || '').toUpperCase();
+
+    if (rejectorRole === 'CONTRACTOR_ADMIN') {
+      if (targetRole !== 'CONTRACTOR_SUPERVISOR') {
+        throw new ForbiddenError('Contractor Admin can only reject Contractor Supervisor users.');
+      }
+      if (entityId && userData.entityId && entityId !== userData.entityId) {
+        throw new ForbiddenError('You can only reject users under your own entity.');
+      }
+    }
 
     await userDocRef.update({
       status: 'REJECTED',

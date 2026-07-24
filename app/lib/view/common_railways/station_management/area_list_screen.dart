@@ -176,9 +176,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
                         onChanged: (v) async {
                           setState(() {
                             _selectedStation = v;
-                            _selectedPlatformId = null;
                           });
-                          await _loadPlatforms();
                           _loadAreas();
                         },
                       ),
