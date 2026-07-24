@@ -1326,6 +1326,30 @@ class ApiService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getContractorSupervisors() async {
+    try {
+      final token = await getToken();
+      final uri = Uri.parse('$baseUrl/api/users/contractor-supervisors');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List supervisors = data['supervisors'] ?? [];
+        return supervisors.cast<Map<String, dynamic>>();
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'Failed to fetch contractor supervisors');
+      }
+    } catch (e) {
+      throw Exception('Error fetching contractor supervisors: $e');
+    }
+  }
+
   Future<CoachFormsResponse?> getSubmittedCoachForms() async {
     try {
       final token = await getToken();

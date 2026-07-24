@@ -163,9 +163,15 @@ class _ScheduleFormState extends State<_ScheduleForm> {
 
   Future<void> _loadSupervisors() async {
     try {
-      final list = await ApiService.getSupervisors(module: 'station_cleaning');
+      final list = await ApiService.getContractorSupervisors();
       if (mounted) setState(() => _supervisors = list);
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load supervisors: $e'), backgroundColor: kErrorRed),
+        );
+      }
+    }
   }
 
   @override

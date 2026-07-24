@@ -924,14 +924,13 @@ class UserService {
     const requesterLevel = ROLE_HIERARCHY[userRole] || 0;
     
     const isMaster = requesterLevel >= 60;
-    const isContractor = requesterData.userType === 'contractor';
 
     let query = db.collection('users')
       .where('status', '==', 'APPROVED');
 
     if (module) {
       query = query.where('domain', '==', module);
-    } else if (isContractor && requesterData.domain) {
+    } else if (requesterData.domain) {
       query = query.where('domain', '==', requesterData.domain);
     }
 
@@ -943,9 +942,6 @@ class UserService {
         query = query.where('division', '==', division);
       }
       console.log(`(GetSupervisors) Master access: Fetching zone=${zone || 'ALL'} division=${division || 'ALL'}`);
-    } else if (isContractor && requesterData.entityId) {
-      query = query.where('entityId', '==', requesterData.entityId);
-      console.log(`(GetSupervisors) Contractor access: entityId=${requesterData.entityId}`);
     } else {
       if (!zone) {
         throw new ValidationError("Your user profile is missing Zone.");
@@ -971,7 +967,7 @@ class UserService {
       return { count: 0, supervisors: [] };
     }
 
-    const allowedRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER', 'CONTRACTOR_SUPERVISOR'];
+    const allowedRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER'];
     const supervisorList = [];
 
     snapshot.forEach(doc => {
@@ -1163,6 +1159,29 @@ class UserService {
     };
     await db.collection('complaints').doc(complaintId).set(complaint);
     return { success: true, message: 'Complaint submitted successfully', complaintId };
+  }
+
+  async getContractorSupervisors(requesterData) {
+    const entityId = requesterData.entityId;
+    if (!entityId) throw new ValidationError("Your profile is missing entityId");
+    const snapshot = await db.collection('users')
+      .where('entityId', '==', entityId)
+      .where('status', '==', 'APPROVED')
+      .limit(200)
+      .get();
+    const supervisors = [];
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      const role = (d.role || '').toUpperCase().replace(/\s+/g, '_');
+      if (role !== 'CONTRACTOR_SUPERVISOR') return;
+      supervisors.push({
+        uid: doc.id,
+        fullName: d.fullName || '',
+        email: d.email || '',
+        mobile: d.mobile || '',
+      });
+    });
+    return { supervisors };
   }
 }
 
