@@ -27,6 +27,28 @@ String _num(dynamic v) {
   return n.toStringAsFixed(1);
 }
 
+final _boqMainAreas = (() {
+  final set = <String>{};
+  for (final item in boqData) {
+    set.add(item.mainArea);
+  }
+  final list = set.toList()..sort((a, b) {
+    final sa = int.tryParse(a.split(' ').first) ?? 99;
+    final sb = int.tryParse(b.split(' ').first) ?? 99;
+    return sa.compareTo(sb);
+  });
+  return list;
+})();
+
+Map<String, List<BoqItem>> get _boqGrouped {
+  final map = <String, List<BoqItem>>{};
+  for (final item in boqData) {
+    map.putIfAbsent(item.mainArea, () => []);
+    map[item.mainArea]!.add(item);
+  }
+  return map;
+}
+
 class AreaConfigScreen extends StatefulWidget {
   final String stationId;
   final String stationName;
@@ -145,22 +167,108 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
     return total;
   }
 
+  void _showBoqPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollCtrl) => Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kRailwayBlue,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.description, color: Colors.white),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('BOQ - MSH Station Cleaning', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
+                  IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.all(8),
+                children: [
+                  for (final main in _boqMainAreas) ...[
+                    _BoqSectionTile(
+                      mainArea: main,
+                      items: _boqGrouped[main]!,
+                      onSelect: (item) {
+                        Navigator.pop(ctx);
+                        _showConfigDialog(prefill: item);
+                      },
+                      onSelectAll: (items) async {
+                        Navigator.pop(ctx);
+                        int created = 0;
+                        for (final item in items) {
+                          try {
+                            await StationCleaningRepository.createArea({
+                              'areaName': item.subArea,
+                              'stationId': widget.stationId,
+                              'platformId': _selectedPlatform?.uid ?? widget.platformId,
+                              'mainArea': item.mainArea,
+                              'basicAreaSqFt': item.basicAreaSqFt,
+                              'frequencyType': item.frequencyType,
+                              'boqTimesPerPeriod': item.boqTimesPerPeriod,
+                              'tenderedAreaPerDay': item.tenderedAreaPerDay,
+                            });
+                            created++;
+                          } catch (_) {}
+                        }
+                        _loadAreas();
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$created areas created from BOQ'), backgroundColor: kSuccessGreen),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showConfigDialog({Map<String, dynamic>? area, BoqItem? prefill}) async {
     final isEditing = area != null;
     final areaId = area?['uid'] ?? area?['id'] ?? '';
 
-    final nameCtrl = TextEditingController(text: prefill?.subArea ?? area?['areaName'] ?? '');
-    final basicCtrl = TextEditingController(text: prefill != null ? prefill.basicAreaSqFt.toString() : (area?['basicAreaSqFt'] as num?)?.toString() ?? '');
-    final timesCtrl = TextEditingController(text: prefill != null ? prefill.boqTimesPerPeriod.toString() : ((area?['boqTimesPerPeriod'] as num?)?.toInt() ?? 1).toString());
-
     String selectedMainArea = prefill?.mainArea ?? area?['mainArea'] as String? ?? '';
+    String selectedSubArea = prefill?.subArea ?? area?['areaName'] as String? ?? '';
+    double basicAreaSqFt = prefill?.basicAreaSqFt ?? (area?['basicAreaSqFt'] as num?)?.toDouble() ?? 0;
     String frequencyType = prefill?.frequencyType ?? area?['frequencyType'] as String? ?? 'daily';
-    bool showCustomMain = false;
-    final customMainCtrl = TextEditingController(text: '');
+    int boqTimesPerPeriod = prefill?.boqTimesPerPeriod ?? ((area?['boqTimesPerPeriod'] as num?)?.toInt() ?? 1);
+    double tenderedAreaPerDay = prefill?.tenderedAreaPerDay ?? (area?['tenderedAreaPerDay'] as num?)?.toDouble() ?? 0;
 
-    if (selectedMainArea.isNotEmpty && !_existingMainAreas.contains(selectedMainArea)) {
-      showCustomMain = true;
+    final basicCtrl = TextEditingController(text: basicAreaSqFt > 0 ? basicAreaSqFt.toString() : '');
+    final timesCtrl = TextEditingController(text: boqTimesPerPeriod.toString());
+
+    bool useCustomMain = false;
+    final customMainCtrl = TextEditingController(text: '');
+    bool useCustomSub = false;
+    final customSubCtrl = TextEditingController(text: '');
+
+    if (selectedMainArea.isNotEmpty && !_boqMainAreas.contains(selectedMainArea)) {
+      useCustomMain = true;
       customMainCtrl.text = selectedMainArea;
+    }
+    if (selectedSubArea.isNotEmpty && selectedMainArea.isNotEmpty && _boqGrouped[selectedMainArea]?.any((i) => i.subArea == selectedSubArea) != true) {
+      useCustomSub = true;
+      customSubCtrl.text = selectedSubArea;
     }
 
     Platform? dialogPlatform = area != null
@@ -186,19 +294,6 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _showBoqPicker();
-                    },
-                    icon: const Icon(Icons.description, size: 18),
-                    label: const Text('Select from BOQ'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: kRailwayBlue,
-                      side: const BorderSide(color: kRailwayBlue),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   if (_platforms.isNotEmpty) ...[
                     DropdownButtonFormField<Platform>(
                       value: dialogPlatform,
@@ -220,37 +315,39 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (!showCustomMain)
+                  if (!useCustomMain)
                     DropdownButtonFormField<String>(
-                      value: selectedMainArea.isNotEmpty && _existingMainAreas.contains(selectedMainArea)
-                          ? selectedMainArea
-                          : null,
+                      value: selectedMainArea.isNotEmpty && _boqMainAreas.contains(selectedMainArea) ? selectedMainArea : null,
                       decoration: const InputDecoration(
-                        labelText: 'Main Area',
+                        labelText: 'Main Area (from BOQ)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.category),
                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                       isExpanded: true,
                       items: [
-                        ..._existingMainAreas.map((m) => DropdownMenuItem(value: m, child: Text(m))),
-                        const DropdownMenuItem(
-                          value: '__add_new__',
-                          child: Text('+ Add new', style: TextStyle(color: Colors.blue)),
-                        ),
+                        ..._boqMainAreas.map((m) => DropdownMenuItem(value: m, child: Text(m, overflow: TextOverflow.ellipsis))),
+                        const DropdownMenuItem(value: '__custom__', child: Text('+ Custom', style: TextStyle(color: Colors.blue))),
                       ],
                       onChanged: (v) {
-                        if (v == '__add_new__') {
+                        if (v == '__custom__') {
                           setDialogState(() {
-                            showCustomMain = true;
+                            useCustomMain = true;
                             selectedMainArea = '';
+                            selectedSubArea = '';
                           });
                         } else {
-                          setDialogState(() => selectedMainArea = v!);
+                          setDialogState(() {
+                            selectedMainArea = v!;
+                            selectedSubArea = '';
+                            basicCtrl.clear();
+                            timesCtrl.text = '1';
+                            frequencyType = 'daily';
+                          });
                         }
                       },
                     ),
-                  if (showCustomMain)
+                  if (useCustomMain)
                     TextField(
                       controller: customMainCtrl,
                       decoration: InputDecoration(
@@ -260,23 +357,59 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: () => setDialogState(() {
-                            showCustomMain = false;
+                            useCustomMain = false;
                             customMainCtrl.clear();
-                            selectedMainArea = _existingMainAreas.isNotEmpty ? _existingMainAreas.first : '';
+                            selectedMainArea = _boqMainAreas.isNotEmpty ? _boqMainAreas.first : '';
                           }),
                         ),
                       ),
                       onChanged: (v) => selectedMainArea = v,
                     ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Sub-area Name',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.place),
+                  if (selectedMainArea.isNotEmpty && _boqGrouped.containsKey(selectedMainArea) && !useCustomMain && !useCustomSub)
+                    DropdownButtonFormField<String>(
+                      value: selectedSubArea.isNotEmpty && _boqGrouped[selectedMainArea]!.any((i) => i.subArea == selectedSubArea) ? selectedSubArea : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Sub-area',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.place),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      isExpanded: true,
+                      items: [
+                        ..._boqGrouped[selectedMainArea]!.map((i) => DropdownMenuItem(value: i.subArea, child: Text(i.subArea, overflow: TextOverflow.ellipsis))),
+                        const DropdownMenuItem(value: '__custom_sub__', child: Text('+ Custom', style: TextStyle(color: Colors.blue))),
+                      ],
+                      onChanged: (v) {
+                        if (v == '__custom_sub__') {
+                          setDialogState(() => useCustomSub = true);
+                        } else {
+                          final item = _boqGrouped[selectedMainArea]!.firstWhere((i) => i.subArea == v);
+                          setDialogState(() {
+                            selectedSubArea = v!;
+                            basicCtrl.text = item.basicAreaSqFt.toString();
+                            timesCtrl.text = item.boqTimesPerPeriod.toString();
+                            frequencyType = item.frequencyType;
+                          });
+                        }
+                      },
                     ),
-                  ),
+                  if (useCustomSub || (selectedMainArea.isNotEmpty && !_boqGrouped.containsKey(selectedMainArea)))
+                    TextField(
+                      controller: customSubCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Sub-area Name',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.place),
+                      ),
+                      onChanged: (v) => selectedSubArea = v,
+                    ),
+                  if (!useCustomSub && !useCustomMain && selectedMainArea.isNotEmpty && _boqGrouped.containsKey(selectedMainArea) && selectedSubArea.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(_boqGrouped[selectedMainArea]!.firstWhere((i) => i.subArea == selectedSubArea).frequencyDescription,
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic)),
+                    ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: basicCtrl,
@@ -329,10 +462,7 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                         const SizedBox(width: 8),
                         Text(
                           'Tendered Area/day: ${_num(tendered)} sq.ft.',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ],
                     ),
@@ -344,22 +474,19 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: () async {
-                  final mainArea = showCustomMain ? customMainCtrl.text : selectedMainArea;
-                  if (nameCtrl.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Sub-area name is required')),
-                    );
+                  final mainArea = useCustomMain ? customMainCtrl.text : selectedMainArea;
+                  final subArea = useCustomSub ? customSubCtrl.text : selectedSubArea;
+                  if (subArea.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sub-area name is required')));
                     return;
                   }
-                  if (!showCustomMain && mainArea.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please select or add a main area')),
-                    );
+                  if (mainArea.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select or enter a main area')));
                     return;
                   }
 
                   final data = {
-                    'areaName': nameCtrl.text.trim(),
+                    'areaName': subArea.trim(),
                     'stationId': widget.stationId,
                     'platformId': dialogPlatform?.uid,
                     'mainArea': mainArea,
@@ -398,92 +525,6 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
     final grouped = _groupedAreas;
     final totalBasic = _totalBasicArea;
     final totalTendered = _totalTenderedArea;
-
-  void _showBoqPicker() {
-    final mainAreas = <String>{};
-    for (final item in boqData) {
-      mainAreas.add(item.mainArea);
-    }
-    final sortedMains = mainAreas.toList()..sort((a, b) {
-      final sa = int.tryParse(a.split(' ').first) ?? 99;
-      final sb = int.tryParse(b.split(' ').first) ?? 99;
-      return sa.compareTo(sb);
-    });
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (_, scrollCtrl) => Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: kRailwayBlue,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.description, color: Colors.white),
-                  const SizedBox(width: 8),
-                  const Expanded(child: Text('BOQ - MSH Station Cleaning', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
-                  IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx)),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                controller: scrollCtrl,
-                padding: const EdgeInsets.all(8),
-                children: [
-                  for (final main in sortedMains) ...[
-                    _BoqSectionTile(
-                      mainArea: main,
-                      items: boqData.where((i) => i.mainArea == main).toList(),
-                      onSelect: (item) {
-                        Navigator.pop(ctx);
-                        _showConfigDialog(prefill: item);
-                      },
-                      onSelectAll: (items) async {
-                        Navigator.pop(ctx);
-                        int created = 0;
-                        for (final item in items) {
-                          try {
-                            await StationCleaningRepository.createArea({
-                              'areaName': item.subArea,
-                              'stationId': widget.stationId,
-                              'platformId': _selectedPlatform?.uid ?? widget.platformId,
-                              'mainArea': item.mainArea,
-                              'basicAreaSqFt': item.basicAreaSqFt,
-                              'frequencyType': item.frequencyType,
-                              'boqTimesPerPeriod': item.boqTimesPerPeriod,
-                              'tenderedAreaPerDay': item.tenderedAreaPerDay,
-                            });
-                            created++;
-                          } catch (_) {}
-                        }
-                        _loadAreas();
-                        if (ctx.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$created areas created from BOQ'), backgroundColor: kSuccessGreen),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: 80),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
     return Scaffold(
       appBar: AppBar(
@@ -564,12 +605,10 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${_areas.length} areas',
-                                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('${_areas.length} areas', style: const TextStyle(fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 4),
                                   Text('Basic area: ${_num(totalBasic)} sq.ft.'),
-                                  Text('Tendered/day: ${_num(totalTendered)} sq.ft.',
-                                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  Text('Tendered/day: ${_num(totalTendered)} sq.ft.', style: const TextStyle(fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             ),
