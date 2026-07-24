@@ -15,6 +15,7 @@ router.all('*', verifyToken, requireContractType('station_cleaning'));
 router.post('/api/station-area/create', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), requireStationAccess, requireAreaAccess, stationCleaning.createStationArea);
 router.get('/api/station-area/list/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), requireStationAccess, requireAreaAccess, stationCleaning.listStationAreas);
 router.get('/api/station-area/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), requireStationAccess, requireAreaAccess, stationCleaning.getStationArea);
+router.get('/api/station-area/summary/:stationId', verifyToken, requirePermission(PERMISSIONS.VIEW_AREAS), requireStationAccess, requireAreaAccess, stationCleaning.getStationAreaSummary);
 router.put('/api/station-area/update/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), requireStationAccess, requireAreaAccess, stationCleaning.updateStationArea);
 router.delete('/api/station-area/delete/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_AREAS), requireStationAccess, requireAreaAccess, stationCleaning.deleteStationArea);
 
@@ -122,5 +123,18 @@ router.post('/api/station-cleaning/attendance/exceptions/action', verifyToken, s
 
 // ─── Daily Log ──────────────────────────────────────────────────────────────
 router.post('/api/station-cleaning/daily-logs', verifyToken, stationCleaning.submitDailyLog);
+
+// ─── Supervisor Workers ─────────────────────────────────────────────────────
+router.post('/api/station-cleaning/workers/create', verifyToken, requirePermission(PERMISSIONS.MANAGE_WORKFORCE), stationCleaning.createWorker);
+router.get('/api/station-cleaning/workers/list', verifyToken, requirePermission(PERMISSIONS.VIEW_WORKFORCE), stationCleaning.listWorkers);
+router.get('/api/station-cleaning/workers/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_WORKFORCE), stationCleaning.getWorker);
+router.put('/api/station-cleaning/workers/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_WORKFORCE), stationCleaning.updateWorker);
+router.delete('/api/station-cleaning/workers/:uid', verifyToken, requirePermission(PERMISSIONS.MANAGE_WORKFORCE), stationCleaning.deleteWorker);
+
+// ─── Cleaning Submissions (proof of work) ──────────────────────────────────
+router.post('/api/station-cleaning/submissions', verifyToken, requirePermission(PERMISSIONS.SUBMIT_TASKS), stationCleaning.createSubmission);
+router.get('/api/station-cleaning/submissions/my', verifyToken, requirePermission(PERMISSIONS.VIEW_SUBMISSIONS), stationCleaning.listMySubmissions);
+router.get('/api/station-cleaning/submissions/list', verifyToken, requirePermission(PERMISSIONS.VIEW_SUBMISSIONS), stationCleaning.listAllSubmissions);
+router.put('/api/station-cleaning/submissions/:uid/review', verifyToken, requirePermission(PERMISSIONS.APPROVE_TASK), stationCleaning.reviewSubmission);
 
 export default router;

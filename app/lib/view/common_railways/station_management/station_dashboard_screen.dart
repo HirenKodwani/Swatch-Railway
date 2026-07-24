@@ -120,6 +120,11 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
     });
   }
 
+  bool _isContractorRole(String role) {
+    final r = role.toUpperCase().replaceAll(' ', '_');
+    return r == 'CONTRACTOR_ADMIN' || r == 'CONTRACTOR_MASTER' || r == 'CONTRACTOR_SUPERVISOR';
+  }
+
   Future<void> _loadStations() async {
     setState(() { isStationsLoading = true; stationsError = null; });
     try {
@@ -128,9 +133,10 @@ class _StationDashboardScreenState extends State<StationDashboardScreen>
       final data = await ApiService.getStations();
       if (mounted) {
         List<Station> all = data;
-        if (role == 'Railway Supervisor') {
+        final roleUpper = role.toUpperCase().replaceAll(' ', '_');
+        if (roleUpper == 'RAILWAY_SUPERVISOR') {
           all = all.where((s) => s.division == user?.division).toList();
-        } else if (role == 'Contractor Admin' || role == 'Contractor' || role == 'Contractor Master') {
+        } else if (_isContractorRole(role)) {
           final userStationIds = <String>{};
           if (user?.stationId != null && user!.stationId!.isNotEmpty) {
             userStationIds.add(user.stationId!);

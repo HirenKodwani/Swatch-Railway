@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/view/common_railways/widgets/date_range_picker.dart';
 import 'package:crm_train/view/station_cleaning/cleaning_form/station_cleaning_form_list_screen.dart';
 import 'package:flutter/material.dart';
@@ -2209,26 +2211,41 @@ class _ContractorReportScreenState extends State<ContractorReportScreen>
               ),
             )
           else
-            ...stations.map((stationId) => Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: const Icon(Icons.bar_chart, color: kRailwayBlue),
-                    title: Text(stationId),
-                    subtitle: const Text('View station cleaning report'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => StationCleaningFormListScreen(
-                            stationId: stationId,
-                            stationName: stationId,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                )),
+            FutureBuilder<List<Station>>(
+              future: ApiService.getStations(),
+              builder: (ctx, snapshot) {
+                final allStations = snapshot.data ?? [];
+                return Column(
+                  children: stations.map((sid) {
+                    final station = allStations.cast<Station?>().firstWhere(
+                      (s) => s?.uid == sid || s?.stationCode == sid || s?.stationName == sid,
+                      orElse: () => null,
+                    );
+                    final displayName = station?.stationName ?? sid;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: const Icon(Icons.bar_chart, color: kRailwayBlue),
+                        title: Text(displayName),
+                        subtitle: const Text('View station cleaning report'),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => StationCleaningFormListScreen(
+                                stationId: sid,
+                                stationName: displayName,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
         ],
       ),
     );

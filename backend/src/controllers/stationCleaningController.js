@@ -26,6 +26,11 @@ export const getStationArea = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const getStationAreaSummary = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getStationAreaSummary(req.params.stationId);
+  res.status(200).json(result);
+});
+
 export const createStationZone = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.createStationZone(req.body);
   res.status(201).json(result);
@@ -339,4 +344,51 @@ export const listAreaTaskFrequencies = asyncHandler(async (req, res) => {
 export const submitDailyLog = asyncHandler(async (req, res) => {
   const result = await stationCleaningService.submitDailyLog(req.body, req.user);
   res.status(201).json({ success: true, ...result });
+});
+
+// ─── Supervisor Workers ────────────────────────────────────────────────────
+export const createWorker = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.createWorker(req.body, req.user);
+  res.status(201).json(result);
+});
+
+export const updateWorker = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.updateWorker(req.params.uid, req.body, req.user);
+  res.status(200).json(result);
+});
+
+export const deleteWorker = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.deleteWorker(req.params.uid, req.user);
+  res.status(200).json(result);
+});
+
+export const listWorkers = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.listWorkers(req.query, req.user);
+  res.status(200).json(result);
+});
+
+export const getWorker = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getWorker(req.params.uid);
+  res.status(200).json(result);
+});
+
+// ─── Cleaning Submissions ────────────────────────────────────────────────
+export const createSubmission = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.createSubmission(req.body, req.user);
+  res.status(201).json(result);
+});
+
+export const listMySubmissions = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.listMySubmissions(req.query, req.user);
+  res.status(200).json(result);
+});
+
+export const listAllSubmissions = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.listAllSubmissions(req.query, req.user);
+  res.status(200).json(result);
+});
+
+export const reviewSubmission = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.reviewSubmission(req.params.uid, req.body, req.user);
+  res.status(200).json(result);
 });

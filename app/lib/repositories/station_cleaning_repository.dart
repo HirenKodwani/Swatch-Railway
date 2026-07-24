@@ -94,6 +94,14 @@ class StationCleaningRepository {
     );
   }
 
+  static Future<Map<String, dynamic>> getAreaSummary(String stationId) async {
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-area/summary/$stationId',
+      parser: (d) => d,
+    );
+  }
+
   static Future<Map<String, dynamic>> getArea(String uid) async {
     return await _apiCall(
       method: 'GET',
@@ -733,6 +741,98 @@ class StationCleaningRepository {
       method: 'POST',
       path: '/api/station-cleaning/attendance/exceptions/action',
       body: {'exceptionId': exceptionId, 'action': action, if (adminRemark != null) 'adminRemark': adminRemark},
+      parser: (d) => d,
+    );
+  }
+
+  // ─── SUPERVISOR WORKERS ─────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> createWorker(Map<String, dynamic> data) async {
+    return await _apiCall(
+      method: 'POST',
+      path: '/api/station-cleaning/workers/create',
+      body: data,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> listWorkers({String? stationId, String? supervisorId}) async {
+    final params = <String, String>{};
+    if (stationId != null) params['stationId'] = stationId;
+    if (supervisorId != null) params['supervisorId'] = supervisorId;
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-cleaning/workers/list',
+      queryParams: params.isNotEmpty ? params : null,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> getWorker(String uid) async {
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-cleaning/workers/$uid',
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> updateWorker(String uid, Map<String, dynamic> data) async {
+    return await _apiCall(
+      method: 'PUT',
+      path: '/api/station-cleaning/workers/$uid',
+      body: data,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> deleteWorker(String uid) async {
+    return await _apiCall(
+      method: 'DELETE',
+      path: '/api/station-cleaning/workers/$uid',
+      parser: (d) => d,
+    );
+  }
+
+  // ─── CLEANING SUBMISSIONS ───────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> createSubmission(Map<String, dynamic> data) async {
+    return await _apiCall(
+      method: 'POST',
+      path: '/api/station-cleaning/submissions',
+      body: data,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> listMySubmissions({String? date}) async {
+    final params = <String, String>{};
+    if (date != null) params['date'] = date;
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-cleaning/submissions/my',
+      queryParams: params.isNotEmpty ? params : null,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> listAllSubmissions({String? stationId, String? status, String? supervisorId}) async {
+    final params = <String, String>{};
+    if (stationId != null) params['stationId'] = stationId;
+    if (status != null) params['status'] = status;
+    if (supervisorId != null) params['supervisorId'] = supervisorId;
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/station-cleaning/submissions/list',
+      queryParams: params.isNotEmpty ? params : null,
+      parser: (d) => d,
+    );
+  }
+
+  static Future<Map<String, dynamic>> reviewSubmission(String uid, Map<String, dynamic> data) async {
+    return await _apiCall(
+      method: 'PUT',
+      path: '/api/station-cleaning/submissions/$uid/review',
+      body: data,
       parser: (d) => d,
     );
   }

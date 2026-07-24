@@ -1,12 +1,29 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
-import 'package:crm_train/services/api_services.dart';
-import 'package:crm_train/helper/api_error_handler.dart';
+import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
+
+double _calcTendered(double basicAreaSqFt, String frequencyType, int frequencyTimes) {
+  final area = basicAreaSqFt;
+  final times = frequencyTimes;
+  switch (frequencyType.toLowerCase()) {
+    case 'monthly':
+      return (area * times) / 30;
+    case 'weekly':
+      return (area * times) / 7;
+    case 'daily':
+    default:
+      return area * times;
+  }
+}
+
+String _num(dynamic v) {
+  if (v == null) return '-';
+  final n = (v is num) ? v : double.tryParse(v.toString()) ?? 0;
+  if (n == n.roundToDouble()) return n.toInt().toString();
+  return n.toStringAsFixed(1);
+}
 
 class AreaConfigScreen extends StatefulWidget {
   final String stationId;
@@ -57,161 +74,318 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
   Future<void> _loadAreas() async {
     setState(() => _isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) throw Exception('AUTH_ERROR');
-
-      final queryParams = <String, String>{'stationId': widget.stationId};
+      final result = await StationCleaningRepository.listAreas(widget.stationId);
+      final list = (result['areas'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+      List<Map<String, dynamic>> filtered = list;
       if (_selectedPlatform?.uid != null) {
-        queryParams['platformId'] = _selectedPlatform!.uid!;
+        filtered = filtered.where((a) => a['platformId'] == _selectedPlatform!.uid).toList();
       } else if (widget.platformId != null) {
-        queryParams['platformId'] = widget.platformId!;
+        filtered = filtered.where((a) => a['platformId'] == widget.platformId).toList();
       }
-
-      final uri = Uri.parse('${ApiService.baseUrl}/api/areas').replace(queryParameters: queryParams);
-
-      final response = await http.get(
-        uri,
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final list = body['data'] as List<dynamic>? ?? body['areas'] as List<dynamic>? ?? [];
+      if (mounted) {
         setState(() {
-          _areas = list.cast<Map<String, dynamic>>();
+          _areas = filtered;
           _isLoading = false;
         });
-      } else if (response.statusCode == 401 || response.statusCode == 403) {
-        throw Exception('AUTH_ERROR');
-      } else {
-        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString().contains('AUTH_ERROR') ? 'Session expired' : e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString().contains('AUTH_ERROR') ? 'Session expired' : e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
+  List<String> get _existingMainAreas {
+    final set = <String>{};
+    for (final a in _areas) {
+      final m = a['mainArea'] as String?;
+      if (m != null && m.isNotEmpty) set.add(m);
+    }
+    final sorted = set.toList()..sort();
+    return sorted;
+  }
+
+  Map<String, List<Map<String, dynamic>>> get _groupedAreas {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final area in _areas) {
+      final main = (area['mainArea'] as String?)?.isNotEmpty == true ? area['mainArea'] as String : 'Uncategorized';
+      grouped.putIfAbsent(main, () => []);
+      grouped[main]!.add(area);
+    }
+    final keys = grouped.keys.toList()..sort((a, b) {
+      if (a == 'Uncategorized') return 1;
+      if (b == 'Uncategorized') return -1;
+      return a.compareTo(b);
+    });
+    final sortedGrouped = <String, List<Map<String, dynamic>>>{};
+    for (final k in keys) {
+      sortedGrouped[k] = grouped[k]!;
+    }
+    return sortedGrouped;
+  }
+
+  double get _totalBasicArea {
+    double total = 0;
+    for (final a in _areas) {
+      total += (a['basicAreaSqFt'] as num?)?.toDouble() ?? 0;
+    }
+    return total;
+  }
+
+  double get _totalTenderedArea {
+    double total = 0;
+    for (final a in _areas) {
+      total += (a['tenderedAreaPerDay'] as num?)?.toDouble() ?? 0;
+    }
+    return total;
+  }
+
   Future<void> _showConfigDialog({Map<String, dynamic>? area}) async {
+    final isEditing = area != null;
+    final areaId = area?['uid'] ?? area?['id'] ?? '';
+
     final nameCtrl = TextEditingController(text: area?['areaName'] ?? '');
-    final codeCtrl = TextEditingController(text: area?['areaCode'] ?? '');
-    final freqCtrl = TextEditingController(text: area?['cleaningFrequency'] ?? area?['frequency'] ?? 'daily');
-    final shiftCtrl = TextEditingController(text: area?['defaultShift'] ?? 'morning');
-    final workersCtrl = TextEditingController(text: (area?['defaultWorkers'] ?? 1).toString());
-    final priorityCtrl = TextEditingController(text: (area?['priority'] ?? 3).toString());
-    List<String> times = (area?['frequencyTimes'] as List<dynamic>?)?.cast<String>() ?? ['08:00'];
-    bool isEditing = area != null;
-    String areaId = area?['uid'] ?? area?['id'] ?? '';
-    Platform? dialogSelectedPlatform = area != null
-        ? _platforms.where((p) => p.uid == (area['platformId'] ?? area['platform'])).firstOrNull
+    final basicCtrl = TextEditingController(text: (area?['basicAreaSqFt'] as num?)?.toString() ?? '');
+    final timesCtrl = TextEditingController(text: ((area?['frequencyTimes'] as num?)?.toInt() ?? 1).toString());
+
+    String selectedMainArea = area?['mainArea'] as String? ?? '';
+    String frequencyType = area?['frequencyType'] as String? ?? 'daily';
+    bool showCustomMain = false;
+    final customMainCtrl = TextEditingController(text: '');
+
+    if (selectedMainArea.isNotEmpty && !_existingMainAreas.contains(selectedMainArea)) {
+      showCustomMain = true;
+      customMainCtrl.text = selectedMainArea;
+    }
+
+    Platform? dialogPlatform = area != null
+        ? _platforms.where((p) => p.uid == (area['platformId'])).firstOrNull
         : _selectedPlatform;
+
+    double calcTendered() {
+      final basic = double.tryParse(basicCtrl.text) ?? 0;
+      final times = int.tryParse(timesCtrl.text) ?? 1;
+      return _calcTendered(basic, frequencyType, times);
+    }
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(isEditing ? 'Configure Area' : 'Add Area'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_platforms.isNotEmpty) ...[
-                  DropdownButtonFormField<Platform>(
-                    value: dialogSelectedPlatform,
-                    decoration: const InputDecoration(
-                      labelText: 'Platform',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.view_quilt),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        builder: (ctx, setDialogState) {
+          final tendered = calcTendered();
+
+          return AlertDialog(
+            title: Text(isEditing ? 'Edit Area' : 'Add Area'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_platforms.isNotEmpty) ...[
+                    DropdownButtonFormField<Platform>(
+                      value: dialogPlatform,
+                      decoration: const InputDecoration(
+                        labelText: 'Platform',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.view_quilt),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      isExpanded: true,
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('No Platform')),
+                        ..._platforms.map((p) => DropdownMenuItem(
+                          value: p,
+                          child: Text(p.displayName, overflow: TextOverflow.ellipsis),
+                        )),
+                      ],
+                      onChanged: (v) => setDialogState(() => dialogPlatform = v),
                     ),
-                    isExpanded: true,
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('No Platform')),
-                      ..._platforms.map((p) => DropdownMenuItem(
-                        value: p,
-                        child: Text(p.displayName, overflow: TextOverflow.ellipsis),
-                      )),
-                    ],
-                    onChanged: (v) => setDialogState(() => dialogSelectedPlatform = v),
+                    const SizedBox(height: 12),
+                  ],
+                  if (!showCustomMain)
+                    DropdownButtonFormField<String>(
+                      value: selectedMainArea.isNotEmpty && _existingMainAreas.contains(selectedMainArea)
+                          ? selectedMainArea
+                          : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Main Area',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.category),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      isExpanded: true,
+                      items: [
+                        ..._existingMainAreas.map((m) => DropdownMenuItem(value: m, child: Text(m))),
+                        const DropdownMenuItem(
+                          value: '__add_new__',
+                          child: Text('+ Add new', style: TextStyle(color: Colors.blue)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == '__add_new__') {
+                          setDialogState(() {
+                            showCustomMain = true;
+                            selectedMainArea = '';
+                          });
+                        } else {
+                          setDialogState(() => selectedMainArea = v!);
+                        }
+                      },
+                    ),
+                  if (showCustomMain)
+                    TextField(
+                      controller: customMainCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Main Area (custom)',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.category),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setDialogState(() {
+                            showCustomMain = false;
+                            customMainCtrl.clear();
+                            selectedMainArea = _existingMainAreas.isNotEmpty ? _existingMainAreas.first : '';
+                          }),
+                        ),
+                      ),
+                      onChanged: (v) => selectedMainArea = v,
+                    ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Sub-area Name',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.place),
+                    ),
                   ),
                   const SizedBox(height: 12),
+                  TextField(
+                    controller: basicCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Basic Area (sq.ft.)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.square_foot),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: frequencyType,
+                    decoration: const InputDecoration(
+                      labelText: 'Frequency Type',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.repeat),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                      DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                      DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                    ],
+                    onChanged: (v) => setDialogState(() => frequencyType = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: timesCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Times per Period',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.format_list_numbered),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kRailwayBlue.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: kRailwayBlue.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calculate, color: kRailwayBlue),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Tendered Area/day: ${_num(tendered)} sq.ft.',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Area Name')),
-                TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Area Code', hintText: 'e.g. PF1-WAIT')),
-                TextField(controller: freqCtrl, decoration: const InputDecoration(labelText: 'Frequency'),),
-                Text('Frequency Times:'),
-                Wrap(
-                  spacing: 4,
-                  children: times.map((t) => Chip(
-                    label: Text(t),
-                    onDeleted: () { setDialogState(() => times.remove(t)); },
-                  )).toList(),
-                ),
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Add Time (HH:MM)'),
-                  onSubmitted: (v) { if (v.isNotEmpty) setDialogState(() => times.add(v)); },
-                ),
-                TextField(controller: shiftCtrl, decoration: const InputDecoration(labelText: 'Default Shift')),
-                TextField(controller: workersCtrl, decoration: const InputDecoration(labelText: 'Default Workers'), keyboardType: TextInputType.number),
-                TextField(controller: priorityCtrl, decoration: const InputDecoration(labelText: 'Priority (1-5)'), keyboardType: TextInputType.number),
-              ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final data = {
-                  'areaName': nameCtrl.text,
-                  'areaCode': codeCtrl.text,
-                  'stationId': widget.stationId,
-                  'platformId': dialogSelectedPlatform?.uid,
-                  'cleaningFrequency': freqCtrl.text,
-                  'frequencyTimes': times,
-                  'defaultShift': shiftCtrl.text,
-                  'defaultWorkers': int.tryParse(workersCtrl.text) ?? 1,
-                  'priority': int.tryParse(priorityCtrl.text) ?? 3,
-                };
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  final mainArea = showCustomMain ? customMainCtrl.text : selectedMainArea;
+                  if (nameCtrl.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Sub-area name is required')),
+                    );
+                    return;
+                  }
+                  if (!showCustomMain && mainArea.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select or add a main area')),
+                    );
+                    return;
+                  }
 
-                try {
-                  final prefs = await SharedPreferences.getInstance();
-                  final token = prefs.getString('token');
-                  if (token == null) throw Exception('AUTH_ERROR');
+                  final data = {
+                    'areaName': nameCtrl.text.trim(),
+                    'stationId': widget.stationId,
+                    'platformId': dialogPlatform?.uid,
+                    'mainArea': mainArea,
+                    'basicAreaSqFt': double.tryParse(basicCtrl.text) ?? 0,
+                    'frequencyType': frequencyType,
+                    'frequencyTimes': int.tryParse(timesCtrl.text) ?? 1,
+                  };
 
-                  final url = isEditing
-                      ? '${ApiService.baseUrl}/api/areas/$areaId/configure'
-                      : '${ApiService.baseUrl}/api/areas';
-                  final response = isEditing
-                      ? await http.put(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data))
-                      : await http.post(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data));
-
-                  if (response.statusCode == 200 || response.statusCode == 201) {
-                    Navigator.pop(ctx);
+                  try {
+                    if (isEditing) {
+                      await StationCleaningRepository.updateArea(areaId, data);
+                    } else {
+                      await StationCleaningRepository.createArea(data);
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
                     _loadAreas();
-                  } else {
-                    throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
                   }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                  }
-                }
-              },
-              child: Text(isEditing ? 'Update' : 'Create'),
-            ),
-          ],
-        ),
+                },
+                child: Text(isEditing ? 'Update' : 'Create'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final grouped = _groupedAreas;
+    final totalBasic = _totalBasicArea;
+    final totalTendered = _totalTenderedArea;
+
     return Scaffold(
-      appBar: AppBar(title: Text('Areas - ${widget.stationName}')),
+      appBar: AppBar(title: Text('Area Config - ${widget.stationName}')),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () => _showConfigDialog(),
@@ -254,79 +428,101 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                           ? const Center(child: Text('No areas configured'))
                           : RefreshIndicator(
                               onRefresh: _loadAreas,
-                              child: ListView.builder(
-                                itemCount: _areas.length,
-                                itemBuilder: (ctx, i) {
-                                  final area = _areas[i];
-                                  final freq = area['cleaningFrequency'] ?? area['frequency'] ?? 'daily';
-                                  final times = (area['frequencyTimes'] as List<dynamic>?)?.join(', ') ?? '08:00';
-                                  final platform = _platforms.where((p) => p.uid == (area['platformId'] ?? area['platform'])).firstOrNull;
-                                  return Card(
-                                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                    child: ListTile(
-                                      title: Row(
-                                        children: [
-                                          Expanded(child: Text(area['areaName'] ?? area['name'] ?? 'Unnamed Area')),
-                                          if (platform != null)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: kRailwayBlue.withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: kRailwayBlue.withOpacity(0.3)),
-                                              ),
-                                              child: Text(
-                                                platform.displayName,
-                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kRailwayBlue),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      subtitle: Text('Code: ${area['areaCode'] ?? '-'} | Freq: $freq ($times) | Shift: ${area['defaultShift'] ?? 'morning'}'),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit, size: 20),
-                                            onPressed: () => _showConfigDialog(area: area),
-                                          ),
-                                          if (area['qrCode'] != null)
-                                            IconButton(
-                                              icon: const Icon(Icons.qr_code, size: 20),
-                                              onPressed: () => _showQRCode(area['qrCode']),
-                                            ),
-                                        ],
-                                      ),
-                                      onTap: () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Area: ${area['areaName'] ?? area['name']} | Frequency: $freq | Workers: ${area['defaultWorkers'] ?? 1}')),
-                                        );
-                                      },
+                              child: ListView(
+                                children: [
+                                  for (final entry in grouped.entries)
+                                    _AreaGroupTile(
+                                      mainArea: entry.key,
+                                      areas: entry.value,
+                                      onEdit: (a) => _showConfigDialog(area: a),
                                     ),
-                                  );
-                                },
+                                  const SizedBox(height: 8),
+                                ],
                               ),
                             ),
                     ),
+                    if (_areas.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: kRailwayBlue.withOpacity(0.08),
+                          border: Border(top: BorderSide(color: kRailwayBlue.withOpacity(0.3))),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${_areas.length} areas',
+                                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text('Basic area: ${_num(totalBasic)} sq.ft.'),
+                                  Text('Tendered/day: ${_num(totalTendered)} sq.ft.',
+                                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              onPressed: _loadAreas,
+                              tooltip: 'Refresh',
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
     );
   }
+}
 
-  void _showQRCode(String qrCode) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Area QR Code'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.qr_code, size: 200),
-            const SizedBox(height: 16),
-            SelectableText(qrCode, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+class _AreaGroupTile extends StatelessWidget {
+  final String mainArea;
+  final List<Map<String, dynamic>> areas;
+  final void Function(Map<String, dynamic> area) onEdit;
+
+  const _AreaGroupTile({
+    required this.mainArea,
+    required this.areas,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ExpansionTile(
+        initiallyExpanded: mainArea != 'Uncategorized',
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(mainArea, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text('${areas.length} area${areas.length == 1 ? '' : 's'}'),
+        children: areas.map((area) {
+          final basic = area['basicAreaSqFt'] as num?;
+          final freqType = area['frequencyType'] as String?;
+          final freqTimes = area['frequencyTimes'] as num?;
+          final tendered = area['tenderedAreaPerDay'] as num?;
+          final hasBoq = basic != null || freqType != null;
+
+          String freqLabel;
+          if (freqType != null && freqTimes != null) {
+            freqLabel = '$freqType ${freqTimes}x';
+          } else {
+            freqLabel = area['cleaningFrequency'] as String? ?? '-';
+          }
+
+          return ListTile(
+            dense: true,
+            title: Text(area['areaName'] ?? 'Unnamed'),
+            subtitle: hasBoq
+                ? Text('Basic: ${_num(basic)} sq.ft. | Freq: $freqLabel | Tendered: ${_num(tendered)}/day')
+                : Text('Freq: $freqLabel | Code: ${area['areaCode'] ?? '-'}'),
+            trailing: IconButton(
+              icon: const Icon(Icons.edit, size: 20),
+              onPressed: () => onEdit(area),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
