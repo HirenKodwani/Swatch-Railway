@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:crm_train/model/platform_model.dart';
+import 'package:crm_train/model/boq_data.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/helper/api_error_handler.dart';
@@ -144,16 +145,16 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
     return total;
   }
 
-  Future<void> _showConfigDialog({Map<String, dynamic>? area}) async {
+  Future<void> _showConfigDialog({Map<String, dynamic>? area, BoqItem? prefill}) async {
     final isEditing = area != null;
     final areaId = area?['uid'] ?? area?['id'] ?? '';
 
-    final nameCtrl = TextEditingController(text: area?['areaName'] ?? '');
-    final basicCtrl = TextEditingController(text: (area?['basicAreaSqFt'] as num?)?.toString() ?? '');
-    final timesCtrl = TextEditingController(text: ((area?['boqTimesPerPeriod'] as num?)?.toInt() ?? 1).toString());
+    final nameCtrl = TextEditingController(text: prefill?.subArea ?? area?['areaName'] ?? '');
+    final basicCtrl = TextEditingController(text: prefill != null ? prefill.basicAreaSqFt.toString() : (area?['basicAreaSqFt'] as num?)?.toString() ?? '');
+    final timesCtrl = TextEditingController(text: prefill != null ? prefill.boqTimesPerPeriod.toString() : ((area?['boqTimesPerPeriod'] as num?)?.toInt() ?? 1).toString());
 
-    String selectedMainArea = area?['mainArea'] as String? ?? '';
-    String frequencyType = area?['frequencyType'] as String? ?? 'daily';
+    String selectedMainArea = prefill?.mainArea ?? area?['mainArea'] as String? ?? '';
+    String frequencyType = prefill?.frequencyType ?? area?['frequencyType'] as String? ?? 'daily';
     bool showCustomMain = false;
     final customMainCtrl = TextEditingController(text: '');
 
@@ -185,6 +186,19 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showBoqPicker();
+                    },
+                    icon: const Icon(Icons.description, size: 18),
+                    label: const Text('Select from BOQ'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kRailwayBlue,
+                      side: const BorderSide(color: kRailwayBlue),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   if (_platforms.isNotEmpty) ...[
                     DropdownButtonFormField<Platform>(
                       value: dialogPlatform,
@@ -385,8 +399,103 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
     final totalBasic = _totalBasicArea;
     final totalTendered = _totalTenderedArea;
 
+  void _showBoqPicker() {
+    final mainAreas = <String>{};
+    for (final item in boqData) {
+      mainAreas.add(item.mainArea);
+    }
+    final sortedMains = mainAreas.toList()..sort((a, b) {
+      final sa = int.tryParse(a.split(' ').first) ?? 99;
+      final sb = int.tryParse(b.split(' ').first) ?? 99;
+      return sa.compareTo(sb);
+    });
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollCtrl) => Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kRailwayBlue,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.description, color: Colors.white),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('BOQ - MSH Station Cleaning', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
+                  IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.all(8),
+                children: [
+                  for (final main in sortedMains) ...[
+                    _BoqSectionTile(
+                      mainArea: main,
+                      items: boqData.where((i) => i.mainArea == main).toList(),
+                      onSelect: (item) {
+                        Navigator.pop(ctx);
+                        _showConfigDialog(prefill: item);
+                      },
+                      onSelectAll: (items) async {
+                        Navigator.pop(ctx);
+                        int created = 0;
+                        for (final item in items) {
+                          try {
+                            await StationCleaningRepository.createArea({
+                              'areaName': item.subArea,
+                              'stationId': widget.stationId,
+                              'platformId': _selectedPlatform?.uid ?? widget.platformId,
+                              'mainArea': item.mainArea,
+                              'basicAreaSqFt': item.basicAreaSqFt,
+                              'frequencyType': item.frequencyType,
+                              'boqTimesPerPeriod': item.boqTimesPerPeriod,
+                              'tenderedAreaPerDay': item.tenderedAreaPerDay,
+                            });
+                            created++;
+                          } catch (_) {}
+                        }
+                        _loadAreas();
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$created areas created from BOQ'), backgroundColor: kSuccessGreen),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
     return Scaffold(
-      appBar: AppBar(title: Text('Areas - ${widget.stationName}')),
+      appBar: AppBar(
+        title: Text('Areas - ${widget.stationName}'),
+        actions: [
+          TextButton.icon(
+            onPressed: _showBoqPicker,
+            icon: const Icon(Icons.description, color: Colors.white),
+            label: const Text('BOQ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () => _showConfigDialog(),
@@ -524,6 +633,65 @@ class _AreaGroupTile extends StatelessWidget {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _BoqSectionTile extends StatelessWidget {
+  final String mainArea;
+  final List<BoqItem> items;
+  final void Function(BoqItem item) onSelect;
+  final void Function(List<BoqItem> items) onSelectAll;
+
+  const _BoqSectionTile({
+    required this.mainArea,
+    required this.items,
+    required this.onSelect,
+    required this.onSelectAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    double totalBasic = 0;
+    double totalTendered = 0;
+    for (final i in items) {
+      totalBasic += i.basicAreaSqFt;
+      totalTendered += i.tenderedAreaPerDay;
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: ExpansionTile(
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        title: Text('$mainArea (${items.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text('Basic: ${_num(totalBasic)} sq.ft. | Tendered/day: ${_num(totalTendered)} sq.ft.'),
+        children: [
+          ...items.map((item) => ListTile(
+            dense: true,
+            title: Text(item.subArea, style: const TextStyle(fontSize: 13)),
+            subtitle: Text('Basic: ${_num(item.basicAreaSqFt)} sq.ft. | Freq: ${item.frequencyType} ${item.boqTimesPerPeriod}x | Tendered: ${_num(item.tenderedAreaPerDay)}/day',
+                style: const TextStyle(fontSize: 11)),
+            trailing: IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20, color: kRailwayBlue),
+              tooltip: 'Add this area',
+              onPressed: () => onSelect(item),
+            ),
+          )),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => onSelectAll(items),
+                icon: const Icon(Icons.add_circle, size: 16),
+                label: Text('Add All (${items.length})'),
+                style: OutlinedButton.styleFrom(foregroundColor: kRailwayBlue),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
