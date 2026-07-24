@@ -4,7 +4,7 @@ import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
-import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'area_form_screen.dart';
 import 'platform_list_screen.dart';
@@ -100,7 +100,9 @@ class _AreaListScreenState extends State<AreaListScreen> {
     if (_selectedStation == null) return;
     setState(() => _isLoadingAreas = true);
     try {
-      final fetched = await ApiService.getStationAreas(_selectedStation!.uid ?? _selectedStation!.stationCode);
+      final result = await StationCleaningRepository.listAreas(_selectedStation!.uid ?? _selectedStation!.stationCode);
+      final rawList = (result['areas'] as List<dynamic>?) ?? [];
+      final fetched = rawList.map((a) => StationArea.fromJson(a is Map<String, dynamic> ? a : {})).toList();
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
 
@@ -171,7 +173,7 @@ class _AreaListScreenState extends State<AreaListScreen> {
     );
     if (confirmed != true) return;
     try {
-      await ApiService.deleteStationArea(area.uid!);
+      await StationCleaningRepository.deleteArea(area.uid!);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Area deleted'), backgroundColor: kSuccessGreen));
         _loadAreas();
@@ -339,7 +341,17 @@ class _AreaListScreenState extends State<AreaListScreen> {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Text(a.description.isNotEmpty ? a.description : 'No description'),
+                                              if (a.mainArea != null && a.mainArea!.isNotEmpty)
+                                                Text('Main: ${a.mainArea}', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12)),
+                                              if (a.basicAreaSqFt != null && a.basicAreaSqFt! > 0)
+                                                Text('Basic: ${a.basicAreaSqFt!.toStringAsFixed(a.basicAreaSqFt == a.basicAreaSqFt!.roundToDouble() ? 0 : 1)} sq.ft.'),
+                                              if (a.frequencyType != null)
+                                                Text('Freq: ${a.frequencyType} ${a.boqTimesPerPeriod ?? 1}x'),
+                                              if (a.tenderedAreaPerDay != null && a.tenderedAreaPerDay! > 0)
+                                                Text('Tendered/day: ${a.tenderedAreaPerDay!.toStringAsFixed(a.tenderedAreaPerDay == a.tenderedAreaPerDay!.roundToDouble() ? 0 : 1)} sq.ft.',
+                                                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                                              if (a.description.isNotEmpty && a.mainArea == null)
+                                                Text(a.description),
                                             ],
                                           ),
                                           trailing: Row(

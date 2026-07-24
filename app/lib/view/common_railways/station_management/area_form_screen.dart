@@ -2,16 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/model/station_models.dart';
+import 'package:crm_train/model/boq_data.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/utills/app_colors.dart';
+import 'package:crm_train/repositories/station_cleaning_repository.dart';
 
-const List<String> _areaTypes = [
-  'Toilet/Bathroom', 'Waiting Room', 'Concourse', 'FOB/Stairs', 'Lift/Escalator',
-  'Office', 'Water Booth', 'Track-side Rag Picking Area',
-  'Circulating Area', 'Approach Road', 'Garden',
-  'Goods Platform/Goods Line', 'Drain', 'Other',
-];
+final _boqMainAreas = (() {
+  final set = <String>{};
+  for (final item in boqData) {
+    set.add(item.mainArea);
+  }
+  final list = set.toList()..sort((a, b) {
+    final sa = int.tryParse(a.split(' ').first) ?? 99;
+    final sb = int.tryParse(b.split(' ').first) ?? 99;
+    return sa.compareTo(sb);
+  });
+  return list;
+})();
+
+Map<String, List<BoqItem>> get _boqGrouped {
+  final map = <String, List<BoqItem>>{};
+  for (final item in boqData) {
+    map.putIfAbsent(item.mainArea, () => []);
+    map[item.mainArea]!.add(item);
+  }
+  return map;
+}
+
+double _calcTendered(double basicAreaSqFt, String frequencyType, int boqTimesPerPeriod) {
+  final area = basicAreaSqFt;
+  final times = boqTimesPerPeriod;
+  switch (frequencyType.toLowerCase()) {
+    case 'monthly': return (area * times) / 30;
+    case 'weekly': return (area * times) / 7;
+    case 'daily':
+    default: return area * times;
+  }
+}
 
 class AreaFormScreen extends StatefulWidget {
   final String stationId;
@@ -29,13 +57,19 @@ class AreaFormScreen extends StatefulWidget {
 class _AreaFormScreenState extends State<AreaFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  bool _useCustomMain = false;
+  bool _useCustomSub = false;
 
+  final _customMainCtrl = TextEditingController();
+  final _customSubCtrl = TextEditingController();
+  final _basicCtrl = TextEditingController();
+  final _timesCtrl = TextEditingController(text: '1');
   final _descCtrl = TextEditingController();
   final _orderCtrl = TextEditingController(text: '0');
-  final _customAreaCtrl = TextEditingController();
-  final _singleNameCtrl = TextEditingController(); // For edit mode
-  
-  final List<String> _selectedAreas = [];
+
+  String _selectedMainArea = '';
+  String _selectedSubArea = '';
+  String _frequencyType = 'daily';
   bool _active = true;
   String? _selectedPlatformId;
 
@@ -44,99 +78,93 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
     super.initState();
     final e = widget.existingArea;
     if (e != null) {
-      _singleNameCtrl.text = e['name'] ?? e['areaName'] ?? '';
+      _selectedMainArea = e['mainArea'] as String? ?? '';
+      _selectedSubArea = e['areaName'] as String? ?? e['name'] as String? ?? '';
+      _frequencyType = e['frequencyType'] as String? ?? 'daily';
+      _basicCtrl.text = (e['basicAreaSqFt'] as num?)?.toString() ?? '';
+      _timesCtrl.text = ((e['boqTimesPerPeriod'] as num?)?.toInt() ?? 1).toString();
       _descCtrl.text = e['description'] ?? '';
       _orderCtrl.text = '${e['order'] ?? 0}';
       _active = e['active'] ?? true;
+
+      if (_selectedMainArea.isNotEmpty && !_boqMainAreas.contains(_selectedMainArea)) {
+        _useCustomMain = true;
+        _customMainCtrl.text = _selectedMainArea;
+      }
+      if (_selectedMainArea.isNotEmpty && _boqGrouped[_selectedMainArea]?.any((i) => i.subArea == _selectedSubArea) != true) {
+        _useCustomSub = true;
+        _customSubCtrl.text = _selectedSubArea;
+      }
     }
-    // Pre-select platform from widget
     if (widget.platforms != null && widget.platformId != null) {
       final matched = widget.platforms!.where((p) => p.uid == widget.platformId).firstOrNull;
       _selectedPlatformId = matched?.uid;
     }
-    if (_selectedPlatformId == null && widget.platforms != null && widget.platforms!.isNotEmpty) {
-      _selectedPlatformId = widget.platforms!.first.uid;
-    }
+    _selectedPlatformId ??= (widget.platforms != null && widget.platforms!.isNotEmpty) ? widget.platforms!.first.uid : widget.platformId;
   }
 
   @override
   void dispose() {
+    _customMainCtrl.dispose();
+    _customSubCtrl.dispose();
+    _basicCtrl.dispose();
+    _timesCtrl.dispose();
     _descCtrl.dispose();
     _orderCtrl.dispose();
-    _customAreaCtrl.dispose();
-    _singleNameCtrl.dispose();
     super.dispose();
   }
 
+  double _calcTenderedArea() {
+    final basic = double.tryParse(_basicCtrl.text) ?? 0;
+    final times = int.tryParse(_timesCtrl.text) ?? 1;
+    return _calcTendered(basic, _frequencyType, times);
+  }
+
   Future<void> _save() async {
-    final isEdit = widget.existingArea != null;
-    if (isEdit) {
-      if (!_formKey.currentState!.validate()) return;
-    } else {
-      if (_selectedAreas.isEmpty && _customAreaCtrl.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select or enter at least one area'), backgroundColor: kErrorRed),
-        );
-        return;
-      }
+    if (!_formKey.currentState!.validate()) return;
+
+    final mainArea = _useCustomMain ? _customMainCtrl.text.trim() : _selectedMainArea;
+    final subArea = _useCustomSub ? _customSubCtrl.text.trim() : _selectedSubArea;
+    if (mainArea.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Main area is required'), backgroundColor: kErrorRed));
+      return;
+    }
+    if (subArea.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sub-area name is required'), backgroundColor: kErrorRed));
+      return;
     }
 
     setState(() => _isSaving = true);
     try {
-      if (isEdit) {
-        final data = {
-          'stationId': widget.stationId,
-          'name': _singleNameCtrl.text.trim(),
-          'areaName': _singleNameCtrl.text.trim(),
-          'areaType': _singleNameCtrl.text.trim(),
-          'description': _descCtrl.text.trim(),
-          'order': int.tryParse(_orderCtrl.text) ?? 0,
-          'active': _active,
-          'platformId': _selectedPlatformId ?? widget.platformId ?? widget.existingArea!['platformId'],
-        };
-        final uid = widget.existingArea!['uid'] ?? widget.existingArea!['id'];
-        await ApiService.updateStationArea(uid, data);
-      } else {
-        // Collect all areas to create
-        final List<String> areasToCreate = List.from(_selectedAreas);
-        if (_customAreaCtrl.text.trim().isNotEmpty) {
-          final customList = _customAreaCtrl.text
-              .split(',')
-              .map((s) => s.trim())
-              .where((s) => s.isNotEmpty);
-          areasToCreate.addAll(customList);
-        }
+      final data = {
+        'stationId': widget.stationId,
+        'areaName': subArea,
+        'mainArea': mainArea,
+        'basicAreaSqFt': double.tryParse(_basicCtrl.text) ?? 0,
+        'frequencyType': _frequencyType,
+        'boqTimesPerPeriod': int.tryParse(_timesCtrl.text) ?? 1,
+        'description': _descCtrl.text.trim(),
+        'order': int.tryParse(_orderCtrl.text) ?? 0,
+        'active': _active,
+        'platformId': _selectedPlatformId ?? widget.platformId,
+      };
 
-        // Create each area in a loop
-        for (final areaName in areasToCreate) {
-          final data = {
-            'stationId': widget.stationId,
-            'name': areaName,
-            'areaName': areaName,
-            'areaType': areaName,
-            'description': _descCtrl.text.trim(),
-            'order': int.tryParse(_orderCtrl.text) ?? 0,
-            'active': _active,
-            'platformId': _selectedPlatformId ?? widget.platformId,
-          };
-          await ApiService.createStationArea(data);
-        }
+      if (widget.existingArea != null) {
+        final uid = widget.existingArea!['uid'] ?? widget.existingArea!['id'];
+        await StationCleaningRepository.updateArea(uid, data);
+      } else {
+        await StationCleaningRepository.createArea(data);
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isEdit ? 'Area updated' : 'Areas created successfully'),
-            backgroundColor: kSuccessGreen,
-          ),
+          SnackBar(content: Text(widget.existingArea != null ? 'Area updated' : 'Area created'), backgroundColor: kSuccessGreen),
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -146,6 +174,8 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existingArea != null;
+    final tendered = _calcTenderedArea();
+
     return Scaffold(
       appBar: AppBar(
         title: Text('${isEdit ? 'Edit' : 'Add'} Area', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -159,16 +189,13 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(isEdit ? 'Edit Area Details' : 'Select Areas to Create', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
+              Text(isEdit ? 'Edit Area Details' : 'Add Area', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
               if (widget.platforms != null && widget.platforms!.isNotEmpty) ...[
                 DropdownButtonFormField<String?>(
-                  value: widget.platforms!.any((p) => p.uid == _selectedPlatformId)
-                      ? _selectedPlatformId
-                      : null,
+                  value: widget.platforms!.any((p) => p.uid == _selectedPlatformId) ? _selectedPlatformId : null,
                   decoration: const InputDecoration(
-                    labelText: 'Platform',
-                    border: OutlineInputBorder(),
+                    labelText: 'Platform', border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.view_quilt),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
@@ -176,95 +203,168 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                   onChanged: (v) => setState(() => _selectedPlatformId = v),
                 ),
                 const SizedBox(height: 12),
-              ] else if (widget.platformName != null && widget.platformName!.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: kRailwayBlue.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: kRailwayBlue.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.layers, color: kRailwayBlue, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Adding areas under: ${widget.platformName}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: kRailwayBlue, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
               ],
-              
-              if (isEdit) ...[
-                TextFormField(
-                  controller: _singleNameCtrl,
+              if (!_useCustomMain)
+                DropdownButtonFormField<String>(
+                  value: _selectedMainArea.isNotEmpty && _boqMainAreas.contains(_selectedMainArea) ? _selectedMainArea : null,
                   decoration: const InputDecoration(
-                    labelText: 'Area Name *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.map),
+                    labelText: 'Main Area', border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.category),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-              ] else ...[
-                const Text('Choose from predefined areas:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: _areaTypes.where((a) {
-                    final currentPlatformId = _selectedPlatformId ?? widget.platformId;
-                    if (widget.allStationAreas != null) {
-                      final exists = widget.allStationAreas!.any((sa) =>
-                          sa.platformId == currentPlatformId &&
-                          sa.name.toLowerCase() == a.toLowerCase());
-                      return !exists;
+                  isExpanded: true,
+                  items: [
+                    ..._boqMainAreas.map((m) => DropdownMenuItem(value: m, child: Text(m, overflow: TextOverflow.ellipsis))),
+                    const DropdownMenuItem(value: '__custom__', child: Text('+ Custom', style: TextStyle(color: Colors.blue))),
+                  ],
+                  onChanged: (v) {
+                    if (v == '__custom__') {
+                      setState(() {
+                        _useCustomMain = true;
+                        _selectedMainArea = '';
+                        _selectedSubArea = '';
+                      });
+                    } else {
+                      setState(() {
+                        _selectedMainArea = v!;
+                        _selectedSubArea = '';
+                        _basicCtrl.clear();
+                        _timesCtrl.text = '1';
+                        _frequencyType = 'daily';
+                      });
                     }
-                    return true;
-                  }).map((a) {
-                    final isSelected = _selectedAreas.contains(a);
-                    return FilterChip(
-                      label: Text(a, style: const TextStyle(fontSize: 11)),
-                      selected: isSelected,
-                      onSelected: (v) {
-                        setState(() {
-                          if (v) {
-                            _selectedAreas.add(a);
-                          } else {
-                            _selectedAreas.remove(a);
-                          }
-                        });
-                      },
-                      selectedColor: kRailwayBlue.withOpacity(0.2),
-                      checkmarkColor: kRailwayBlue,
-                      labelStyle: TextStyle(color: isSelected ? kRailwayBlue : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-                    );
-                  }).toList(),
+                  },
                 ),
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _customAreaCtrl,
+              if (_useCustomMain)
+                TextField(
+                  controller: _customMainCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Main Area (custom)', border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.category),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(() {
+                        _useCustomMain = false;
+                        _customMainCtrl.clear();
+                        _selectedMainArea = _boqMainAreas.isNotEmpty ? _boqMainAreas.first : '';
+                      }),
+                    ),
+                  ),
+                  onChanged: (v) => _selectedMainArea = v,
+                ),
+              const SizedBox(height: 12),
+              if (_selectedMainArea.isNotEmpty && _boqGrouped.containsKey(_selectedMainArea) && !_useCustomMain && !_useCustomSub)
+                DropdownButtonFormField<String>(
+                  value: _selectedSubArea.isNotEmpty && _boqGrouped[_selectedMainArea]!.any((i) => i.subArea == _selectedSubArea) ? _selectedSubArea : null,
                   decoration: const InputDecoration(
-                    labelText: 'Add Custom Areas (comma-separated)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.add_box),
-                    hintText: 'e.g. Platform 4, Waiting Hall B',
+                    labelText: 'Sub-area', border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.place),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  isExpanded: true,
+                  items: [
+                    ..._boqGrouped[_selectedMainArea]!.map((i) => DropdownMenuItem(value: i.subArea, child: Text(i.subArea, overflow: TextOverflow.ellipsis))),
+                    const DropdownMenuItem(value: '__custom_sub__', child: Text('+ Custom', style: TextStyle(color: Colors.blue))),
+                  ],
+                  onChanged: (v) {
+                    if (v == '__custom_sub__') {
+                      setState(() => _useCustomSub = true);
+                    } else {
+                      final item = _boqGrouped[_selectedMainArea]!.firstWhere((i) => i.subArea == v);
+                      setState(() {
+                        _selectedSubArea = v!;
+                        _basicCtrl.text = item.basicAreaSqFt.toString();
+                        _timesCtrl.text = item.boqTimesPerPeriod.toString();
+                        _frequencyType = item.frequencyType;
+                      });
+                    }
+                  },
+                ),
+              if (_useCustomSub || (_selectedMainArea.isNotEmpty && !_boqGrouped.containsKey(_selectedMainArea)))
+                TextField(
+                  controller: _customSubCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Sub-area Name', border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.place),
+                  ),
+                  onChanged: (v) => _selectedSubArea = v,
+                ),
+              if (!_useCustomSub && !_useCustomMain && _selectedMainArea.isNotEmpty && _boqGrouped.containsKey(_selectedMainArea) && _selectedSubArea.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    _boqGrouped[_selectedMainArea]!.firstWhere((i) => i.subArea == _selectedSubArea).frequencyDescription,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
                   ),
                 ),
-              ],
-              
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _descCtrl,
-                decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder(), prefixIcon: Icon(Icons.description)),
-                maxLines: 3,
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _basicCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Basic Area (sq.ft.)', border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.square_foot),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _frequencyType,
+                      decoration: const InputDecoration(
+                        labelText: 'Frequency', border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.repeat),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                        DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                        DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                      ],
+                      onChanged: (v) => setState(() => _frequencyType = v!),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
-              TextFormField(
+              TextField(
+                controller: _timesCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Times per Period', border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.format_list_numbered),
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kRailwayBlue.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: kRailwayBlue.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calculate, color: kRailwayBlue),
+                    const SizedBox(width: 8),
+                    Text('Tendered/day: ${tendered.toStringAsFixed(tendered == tendered.roundToDouble() ? 0 : 1)} sq.ft.',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _descCtrl,
+                decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder(), prefixIcon: Icon(Icons.description)),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              TextField(
                 controller: _orderCtrl,
                 decoration: const InputDecoration(labelText: 'Display Order', border: OutlineInputBorder(), prefixIcon: Icon(Icons.sort)),
                 keyboardType: TextInputType.number,
@@ -284,7 +384,7 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                   child: _isSaving
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text(isEdit ? 'Update Area' : 'Save Areas'),
+                      : Text(isEdit ? 'Update Area' : 'Create Area'),
                 ),
               ),
             ],
