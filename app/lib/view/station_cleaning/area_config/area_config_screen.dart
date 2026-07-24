@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crm_train/model/platform_model.dart';
 import 'package:crm_train/repositories/platform_repository.dart';
-import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/helper/api_error_handler.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
@@ -78,41 +75,24 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
   Future<void> _loadAreas() async {
     setState(() => _isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) throw Exception('AUTH_ERROR');
-
-      final queryParams = <String, String>{'stationId': widget.stationId};
+      final result = await StationCleaningRepository.listAreas(widget.stationId);
+      final list = (result['areas'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+      List<Map<String, dynamic>> filtered = list;
       if (_selectedPlatform?.uid != null) {
-        queryParams['platformId'] = _selectedPlatform!.uid!;
+        filtered = filtered.where((a) => a['platformId'] == _selectedPlatform!.uid).toList();
       } else if (widget.platformId != null) {
-        queryParams['platformId'] = widget.platformId!;
+        filtered = filtered.where((a) => a['platformId'] == widget.platformId).toList();
       }
-
-      final uri = Uri.parse('${ApiService.baseUrl}/api/areas').replace(queryParameters: queryParams);
-      final response = await http.get(
-        uri,
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final list = body['areas'] as List<dynamic>? ?? [];
-        if (mounted) {
-          setState(() {
-            _areas = list.cast<Map<String, dynamic>>();
-            _isLoading = false;
-          });
-        }
-      } else if (response.statusCode == 401 || response.statusCode == 403) {
-        throw Exception('AUTH_ERROR');
-      } else {
-        throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+      if (mounted) {
+        setState(() {
+          _areas = filtered;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().contains('AUTH_ERROR') ? 'Session expired' : e.toString();
+          _error = e.toString().contains('AUTH_ERROR') ? 'Session expired' : ApiErrorHandler.getErrorMessage(e, null);
           _isLoading = false;
         });
       }
@@ -375,26 +355,18 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                   };
 
                   try {
-                    final prefs = await SharedPreferences.getInstance();
-                    final token = prefs.getString('token');
-                    if (token == null) throw Exception('AUTH_ERROR');
-
-                    final url = isEditing
-                        ? '${ApiService.baseUrl}/api/areas/$areaId/configure'
-                        : '${ApiService.baseUrl}/api/areas';
-                    final response = isEditing
-                        ? await http.put(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data))
-                        : await http.post(Uri.parse(url), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode(data));
-
-                    if (response.statusCode == 200 || response.statusCode == 201) {
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      _loadAreas();
+                    if (isEditing) {
+                      await StationCleaningRepository.updateArea(areaId, data);
                     } else {
-                      throw Exception(ApiErrorHandler.getErrorMessage(response.body, response.statusCode));
+                      await StationCleaningRepository.createArea(data);
                     }
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _loadAreas();
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
+                      );
                     }
                   }
                 },

@@ -89,10 +89,10 @@ class StationCleaningService {
     const mainArea = body.mainArea || '';
     const basicAreaSqFt = parseFloat(body.basicAreaSqFt) || 0;
     const frequencyType = body.frequencyType || 'daily';
-    const frequencyTimes = parseInt(body.frequencyTimes) || 1;
+    const boqTimesPerPeriod = parseInt(body.boqTimesPerPeriod ?? body.frequencyTimes) || 1;
     const tenderedAreaPerDay = body.tenderedAreaPerDay !== undefined
       ? parseFloat(body.tenderedAreaPerDay)
-      : this._calcTenderedArea(basicAreaSqFt, frequencyType, frequencyTimes);
+      : this._calcTenderedArea(basicAreaSqFt, frequencyType, boqTimesPerPeriod);
 
     const data = {
       uid: ref.id, stationId,
@@ -101,7 +101,7 @@ class StationCleaningService {
       mainArea,
       basicAreaSqFt,
       frequencyType,
-      frequencyTimes,
+      boqTimesPerPeriod,
       tenderedAreaPerDay,
       cleaningFrequency: body.cleaningFrequency || 'daily',
       priority: body.priority || 3,
@@ -123,9 +123,9 @@ class StationCleaningService {
 
     const basicAreaSqFt = body.basicAreaSqFt !== undefined ? parseFloat(body.basicAreaSqFt) : (existing.basicAreaSqFt || 0);
     const frequencyType = body.frequencyType || existing.frequencyType || 'daily';
-    const frequencyTimes = body.frequencyTimes !== undefined ? parseInt(body.frequencyTimes) : (existing.frequencyTimes || 1);
-    if (body.basicAreaSqFt !== undefined || body.frequencyType !== undefined || body.frequencyTimes !== undefined) {
-      updates.tenderedAreaPerDay = this._calcTenderedArea(basicAreaSqFt, frequencyType, frequencyTimes);
+    const boqTimesPerPeriod = body.boqTimesPerPeriod !== undefined ? parseInt(body.boqTimesPerPeriod) : (existing.boqTimesPerPeriod || 1);
+    if (body.basicAreaSqFt !== undefined || body.frequencyType !== undefined || body.boqTimesPerPeriod !== undefined) {
+      updates.tenderedAreaPerDay = this._calcTenderedArea(basicAreaSqFt, frequencyType, boqTimesPerPeriod);
     }
 
     await ref.update(updates);
