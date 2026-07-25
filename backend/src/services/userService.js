@@ -895,6 +895,7 @@ class UserService {
       const role = (data.role || '').toLowerCase().replace(/_/g, ' ');
       if (!validRoles.includes(role)) return;
       if (requesterDomain && data.domain && data.domain !== requesterDomain) return;
+      if (requesterData.userType === 'contractor' && role.includes('railway supervisor')) return;
       workersList.push({
         uid: data.uid || doc.id,
         fullName: data.fullName || '',
