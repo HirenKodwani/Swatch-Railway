@@ -86,11 +86,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final seen = <String>{};
       final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
 
-      // Also load supervisors (from the same workers list, filtered by role)
-      final supervisorKeywords = ['supervisor', 'admin', 'master'];
+      // Load only Contractor Supervisors (approved, real users)
       final supList = uniqueWorkers.where((w) {
-        final role = w.role.toLowerCase();
-        return supervisorKeywords.any((k) => role.contains(k));
+        final role = w.role.toLowerCase().replaceAll('_', ' ');
+        return role.contains('contractor supervisor') && w.status == 'APPROVED';
       }).toList();
 
       if (mounted) {
