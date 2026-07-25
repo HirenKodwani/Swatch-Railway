@@ -364,13 +364,25 @@ class TaskManagementService {
   }
 
   async bulkGenerate(data, user) {
-    const { areaIds, date, workerId, workerIds, zoneIds } = data;
+    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
     const targetDate = date || new Date().toISOString().split('T')[0];
     let total = 0;
     const allTaskIds = [];
+
+    // Resolve the supervisor if provided
+    let assignedSupervisorId = null;
+    let assignedSupervisorName = '';
+    if (supervisorId) {
+      const supDoc = await db.collection('users').doc(supervisorId).get();
+      if (supDoc.exists) {
+        const supData = supDoc.data();
+        assignedSupervisorId = supervisorId;
+        assignedSupervisorName = supData.fullName || supData.name || '';
+      }
+    }
 
     let assignedWorker = null;
     let assignedWorkers = [];
@@ -458,7 +470,8 @@ class TaskManagementService {
               zoneName: zoneInfo ? zoneInfo.name : null,
               workerId: w.uid,
               workerName: w.fullName || w.name || 'Unknown',
-              supervisorId: areaData.supervisorId || null,
+              supervisorId: assignedSupervisorId || areaData.supervisorId || null,
+              supervisorName: assignedSupervisorName || areaData.supervisorName || '',
               assignmentId: null,
               activityType: areaData.areaType || 'Cleaning',
               frequency: cleaningFrequency,
@@ -499,7 +512,8 @@ class TaskManagementService {
               zoneName: zoneInfo ? zoneInfo.name : null,
               workerId: assignedWorker.uid,
               workerName: assignedWorker.fullName || assignedWorker.name || 'Unknown',
-              supervisorId: areaData.supervisorId || null,
+              supervisorId: assignedSupervisorId || areaData.supervisorId || null,
+              supervisorName: assignedSupervisorName || areaData.supervisorName || '',
               assignmentId: null,
               activityType: areaData.areaType || 'Cleaning',
               frequency: cleaningFrequency,
@@ -542,7 +556,8 @@ class TaskManagementService {
                 zoneName: zoneInfo ? zoneInfo.name : null,
                 workerId: assignment.workerId,
                 workerName: assignment.workerName,
-                supervisorId: areaData.supervisorId || null,
+                supervisorId: assignedSupervisorId || areaData.supervisorId || null,
+              supervisorName: assignedSupervisorName || areaData.supervisorName || '',
                 assignmentId: assignment.uid,
                 activityType: areaData.areaType || 'Cleaning',
                 frequency: cleaningFrequency,

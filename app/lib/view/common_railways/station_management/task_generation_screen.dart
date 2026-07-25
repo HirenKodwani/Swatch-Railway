@@ -30,12 +30,14 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   List<Platform> _platforms = [];
   List<StationArea> _allAreas = [];
   List<RailwayWorkerModel> _workers = [];
+  List<RailwayWorkerModel> _supervisors = [];
 
   Station? _selectedStation;
   Platform? _selectedPlatform; // Null means "All Platforms"
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'Morning';
   String _selectedFrequency = 'daily';
+  RailwayWorkerModel? _selectedSupervisor;
 
   String? _assignedPlatformId;
   bool _isStationLocked = false;
@@ -84,10 +86,18 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final seen = <String>{};
       final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
 
+      // Also load supervisors (from the same workers list, filtered by role)
+      final supervisorKeywords = ['supervisor', 'admin', 'master'];
+      final supList = uniqueWorkers.where((w) {
+        final role = w.role.toLowerCase();
+        return supervisorKeywords.any((k) => role.contains(k));
+      }).toList();
+
       if (mounted) {
         setState(() {
           _stations = filtered;
           _workers = uniqueWorkers;
+          _supervisors = supList;
           _assignedPlatformId = assignedPlatformId;
           _isPlatformLocked = false;
           _isStationLocked = stationLocked;
@@ -352,6 +362,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         areaIds: areaIds,
         date: todayStr,
         workerIds: workerIds,
+        supervisorId: _selectedSupervisor?.uid,
       );
 
       if (mounted) {
@@ -481,6 +492,30 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               if (v != null) {
                                 setState(() => _selectedFrequency = v);
                               }
+                            },
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Supervisor Assignment
+                          DropdownButtonFormField<RailwayWorkerModel>(
+                            value: _selectedSupervisor,
+                            decoration: const InputDecoration(
+                              labelText: 'Assign to Supervisor (optional)',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.supervisor_account),
+                            ),
+                            items: [
+                              const DropdownMenuItem<RailwayWorkerModel>(
+                                value: null,
+                                child: Text('None'),
+                              ),
+                              ..._supervisors.map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(s.fullName),
+                              )),
+                            ],
+                            onChanged: (v) {
+                              setState(() => _selectedSupervisor = v);
                             },
                           ),
 
