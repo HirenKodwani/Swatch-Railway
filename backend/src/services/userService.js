@@ -884,12 +884,12 @@ class UserService {
 
     const snapshot = await query.get();
 
-    const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff'];
+    const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff', 'supervisor', 'railway supervisor', 'contractor supervisor'];
     const workersList = [];
     snapshot.forEach(doc => {
       const data = doc.data();
       if (doc.id === requesterData.uid) return;
-      const role = (data.role || '').toLowerCase();
+      const role = (data.role || '').toLowerCase().replace(/_/g, ' ');
       if (!validRoles.includes(role)) return;
       workersList.push({
         uid: data.uid || doc.id,
@@ -907,6 +907,36 @@ class UserService {
         domain: data.domain || ''
       });
     });
+
+    // Also fetch workers from supervisorWorkers collection (created via station cleaning module)
+    try {
+      const supSnapshot = await db.collection('supervisorWorkers')
+        .where('isActive', '==', true)
+        .limit(300)
+        .get();
+      supSnapshot.forEach(doc => {
+        const data = doc.data();
+        const uid = data.uid || doc.id;
+        if (workersList.some(w => w.uid === uid)) return;
+        workersList.push({
+          uid,
+          fullName: data.fullName || '',
+          email: data.email || data.phone || '',
+          mobile: data.phone || '',
+          role: 'worker',
+          designation: 'Worker',
+          status: 'APPROVED',
+          userType: 'worker',
+          stationId: data.stationId || '',
+          depot: '',
+          zone: '',
+          division: '',
+          domain: ''
+        });
+      });
+    } catch (e) {
+      console.error('Error fetching supervisorWorkers:', e.message);
+    }
 
     return { count: workersList.length, workers: workersList };
   }
