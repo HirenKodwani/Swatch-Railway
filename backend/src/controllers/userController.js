@@ -57,7 +57,7 @@ export const getWorkers = asyncHandler(async (req, res) => {
 });
 
 export const getContractorSupervisors = asyncHandler(async (req, res) => {
-  const result = await userService.getContractorSupervisors(req.user);
+  const result = await userService.getContractorSupervisors(req.user, req.query);
   res.status(200).json(result);
 });
 

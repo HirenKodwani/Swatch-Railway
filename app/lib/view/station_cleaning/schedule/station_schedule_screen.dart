@@ -163,7 +163,7 @@ class _ScheduleFormState extends State<_ScheduleForm> {
 
   Future<void> _loadSupervisors() async {
     try {
-      final list = await ApiService.getContractorSupervisors();
+      final list = await ApiService.getContractorSupervisors(stationId: widget.stationId);
       if (mounted) setState(() => _supervisors = list);
     } catch (e) {
       if (mounted) {

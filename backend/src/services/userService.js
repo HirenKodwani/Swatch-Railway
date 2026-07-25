@@ -1161,9 +1161,10 @@ class UserService {
     return { success: true, message: 'Complaint submitted successfully', complaintId };
   }
 
-  async getContractorSupervisors(requesterData) {
+  async getContractorSupervisors(requesterData, queryParams = {}) {
     const entityId = requesterData.entityId;
     if (!entityId) throw new ValidationError("Your profile is missing entityId");
+    const { stationId } = queryParams;
     const snapshot = await db.collection('users')
       .where('entityId', '==', entityId)
       .where('status', '==', 'APPROVED')
@@ -1174,11 +1175,16 @@ class UserService {
       const d = doc.data();
       const role = (d.role || '').toUpperCase().replace(/\s+/g, '_');
       if (role !== 'CONTRACTOR_SUPERVISOR') return;
+      const userStations = d.stations || [];
+      if (stationId && !userStations.includes(stationId)) return;
       supervisors.push({
         uid: doc.id,
         fullName: d.fullName || '',
         email: d.email || '',
         mobile: d.mobile || '',
+        stations: userStations,
+        contractId: d.contractId || null,
+        contractType: d.contractType || null,
       });
     });
     return { supervisors };

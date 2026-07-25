@@ -1326,10 +1326,13 @@ class ApiService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getContractorSupervisors() async {
+  static Future<List<Map<String, dynamic>>> getContractorSupervisors({String? stationId}) async {
     try {
       final token = await getToken();
-      final uri = Uri.parse('$baseUrl/api/users/contractor-supervisors');
+      final params = <String, String>{};
+      if (stationId != null) params['stationId'] = stationId;
+      final uri = Uri.parse('$baseUrl/api/users/contractor-supervisors')
+          .replace(queryParameters: params.isNotEmpty ? params : null);
       final response = await http.get(
         uri,
         headers: {
