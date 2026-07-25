@@ -879,10 +879,13 @@ class UserService {
     if (filters.domain) {
       query = query.where('domain', '==', filters.domain);
     } else if (requesterData.userType === 'contractor' && requesterData.domain) {
-      query = query.where('domain', '==', requesterData.domain);
+      // Do NOT filter Firestore by domain — many supervisors have no domain set.
+      // We apply the domain filter in code below so empty-domain users are included.
     }
 
     const snapshot = await query.get();
+
+    const requesterDomain = (requesterData.userType === 'contractor' && requesterData.domain) ? requesterData.domain : null;
 
     const validRoles = ['worker', 'railway worker', 'janitor', 'attendant', 'contractor worker', 'obhs staff', 'staff', 'supervisor', 'railway supervisor', 'contractor supervisor'];
     const workersList = [];
@@ -891,6 +894,7 @@ class UserService {
       if (doc.id === requesterData.uid) return;
       const role = (data.role || '').toLowerCase().replace(/_/g, ' ');
       if (!validRoles.includes(role)) return;
+      if (requesterDomain && data.domain && data.domain !== requesterDomain) return;
       workersList.push({
         uid: data.uid || doc.id,
         fullName: data.fullName || '',
