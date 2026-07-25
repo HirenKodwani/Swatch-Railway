@@ -287,10 +287,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         _areaWorkerAssignments.remove(areaId);
       } else {
         _selectedAreaIds.add(areaId);
-        // Default assign empty list of workers so they must choose
         _areaWorkerAssignments[areaId] = [];
-        // Proactively show worker dialog
-        _showWorkerSelectionForArea(area);
       }
     });
   }
@@ -313,17 +310,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       if (area == null) continue;
       final platformName = _getPlatformName(area.platformId);
 
-      List<RailwayWorkerModel> workersToAssign = _areaWorkerAssignments[areaId] ?? [];
-
-      if (workersToAssign.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Please assign at least one worker for area: ${area.name}'),
-            backgroundColor: kErrorRed,
-          ),
-        );
-        return;
-      }
+      final workersToAssign = _areaWorkerAssignments[areaId] ?? [];
 
       for (final worker in workersToAssign) {
         platformAssignments.add(StationPlatformAssignment(
