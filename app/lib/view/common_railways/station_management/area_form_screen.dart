@@ -665,7 +665,35 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: (_isSaving || _selections.isEmpty) ? null : _save,
+                      onPressed: _isSaving ? null : () {
+                        if (_selections.isEmpty && _pendingSubAreas.isNotEmpty && _pendingMainArea.isNotEmpty) {
+                          _addPendingToSelections();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (_selections.isNotEmpty) _save();
+                          });
+                          return;
+                        }
+                        if (_selections.isEmpty) {
+                          if (_pendingMainArea.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Select a Main Area from the BOQ list first'),
+                              backgroundColor: kErrorRed,
+                            ));
+                          } else if (_pendingSubAreas.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Tap "Tap to select sub-areas" to pick areas to add'),
+                              backgroundColor: kErrorRed,
+                            ));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Click "Add to List" button above first, then save'),
+                              backgroundColor: kErrorRed,
+                            ));
+                          }
+                          return;
+                        }
+                        _save();
+                      },
                       style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                       child: _isSaving
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
