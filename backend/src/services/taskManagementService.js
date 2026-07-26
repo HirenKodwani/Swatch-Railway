@@ -182,9 +182,13 @@ class TaskManagementService {
     } else if (endDate) {
       q = q.where('date', '<=', endDate);
     }
-    if (!stationId && user && !['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes((user.role || '').toUpperCase())) {
+    if (user && !['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes((user.role || '').toUpperCase())) {
       const userStations = user.stations || (user.stationId ? [user.stationId] : []);
-      if (userStations.length === 1) {
+      if (stationId) {
+        if (userStations.length > 0 && !userStations.includes(stationId)) {
+          throw new ForbiddenError('You can only access tasks for your assigned stations');
+        }
+      } else if (userStations.length === 1) {
         q = q.where('stationId', '==', userStations[0]);
       } else if (userStations.length > 1) {
         q = q.where('stationId', 'in', userStations);

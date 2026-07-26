@@ -1328,7 +1328,9 @@ class StationCleaningService {
     const supDoc = await db.collection('users').doc(supervisorId).get();
     if (!supDoc.exists) throw new NotFoundError('Supervisor not found');
     const supervisor = supDoc.data();
-    const stationIds = supervisor.stationId ? [supervisor.stationId] : [];
+    const stationIds = supervisor.stations && supervisor.stations.length > 0
+      ? supervisor.stations
+      : supervisor.stationId ? [supervisor.stationId] : [];
     let tasks = [];
     if (stationIds.length > 0) {
       const s = await db.collection('cleaningTasks').where('scheduledDate', '==', targetDate).get();
