@@ -43,6 +43,7 @@ import '../../station_cleaning/shift_summary_screen.dart';
 import '../../station_cleaning/evidence/evidence_upload_screen.dart';
 import '../../station_cleaning/reporting/report_list_screen.dart';
 import '../../station_cleaning/schedule/station_schedule_screen.dart';
+import '../../station_cleaning/dashboard/supervisor_dashboard_screen.dart';
 
 class ContractorMasterDashboard extends StatefulWidget {
   final String? contractType;
