@@ -214,6 +214,10 @@ class ContractService {
       const contractorEntityId = requesterData.entityId;
       if (!contractorEntityId) throw new ValidationError("Entity linkage missing.");
       firestoreQuery = firestoreQuery.where('entityId', '==', contractorEntityId);
+      const restrictedRoles = ['contractor supervisor', 'contractor worker', 'worker'];
+      if (restrictedRoles.includes(userRole) && requesterData.contractId) {
+        firestoreQuery = firestoreQuery.where('uid', '==', requesterData.contractId);
+      }
     }
 
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
@@ -269,8 +273,15 @@ class ContractService {
     const doc = await docRef.get();
     if (!doc.exists) throw new NotFoundError("Contract not found.");
     const data = doc.data();
-    if (requesterData?.userType === 'contractor' && requesterData?.entityId && data.entityId !== requesterData.entityId) {
-      throw new ForbiddenError('You can only access your own company contracts');
+    if (requesterData?.userType === 'contractor') {
+      if (requesterData?.entityId && data.entityId !== requesterData.entityId) {
+        throw new ForbiddenError('You can only access your own company contracts');
+      }
+      const role = (requesterData?.role || '').toUpperCase().replace(/\s+/g, '_');
+      const restrictedRoles = ['CONTRACTOR_SUPERVISOR', 'CONTRACTOR_WORKER', 'WORKER'];
+      if (restrictedRoles.includes(role) && requesterData?.contractId && data.uid !== requesterData.contractId) {
+        throw new ForbiddenError('You can only access your assigned contract');
+      }
     }
     return data;
   }
@@ -289,9 +300,14 @@ class ContractService {
 
     let query = db.collection('contracts').where('status', '==', 'Active');
 
-    const effectiveEntityId = queryEntityId || entityId;
-    if (effectiveEntityId) {
-      query = query.where('entityId', '==', effectiveEntityId);
+    const restrictedRoles = ['contractor supervisor', 'contractor worker', 'worker'];
+    if (restrictedRoles.includes(userRole) && requesterData.contractId) {
+      query = query.where('uid', '==', requesterData.contractId);
+    } else {
+      const effectiveEntityId = queryEntityId || entityId;
+      if (effectiveEntityId) {
+        query = query.where('entityId', '==', effectiveEntityId);
+      }
     }
 
     const effectiveContractType = queryContractType || (userType === 'contractor' ? domain : null);
