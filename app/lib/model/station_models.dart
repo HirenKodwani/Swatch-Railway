@@ -114,6 +114,7 @@ class StationArea {
   final String? frequencyType;
   final int? boqTimesPerPeriod;
   final double? tenderedAreaPerDay;
+  final String? cleaningFrequency;
 
   StationArea({
     this.uid,
@@ -128,6 +129,7 @@ class StationArea {
     this.frequencyType,
     this.boqTimesPerPeriod,
     this.tenderedAreaPerDay,
+    this.cleaningFrequency,
   });
 
   Map<String, dynamic> toJson() => {
@@ -144,6 +146,7 @@ class StationArea {
     if (frequencyType != null) 'frequencyType': frequencyType,
     if (boqTimesPerPeriod != null) 'boqTimesPerPeriod': boqTimesPerPeriod,
     if (tenderedAreaPerDay != null) 'tenderedAreaPerDay': tenderedAreaPerDay,
+    if (cleaningFrequency != null) 'cleaningFrequency': cleaningFrequency,
   };
 
   factory StationArea.fromJson(Map<String, dynamic> json) => StationArea(
@@ -159,6 +162,7 @@ class StationArea {
     frequencyType: json['frequencyType'] as String?,
     boqTimesPerPeriod: (json['boqTimesPerPeriod'] as num?)?.toInt(),
     tenderedAreaPerDay: (json['tenderedAreaPerDay'] as num?)?.toDouble(),
+    cleaningFrequency: json['cleaningFrequency'] as String?,
   );
 
   @override

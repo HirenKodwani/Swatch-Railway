@@ -83,7 +83,9 @@ class TaskManagementService {
       case '2hrs': return ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
       case '4hrs': return ['06:00', '10:00', '14:00', '18:00', '22:00'];
       case 'daily': return ['08:00'];
+      case 'twice_daily': return ['06:00', '18:00'];
       case 'shift_wise': return ['06:00', '14:00', '22:00'];
+      case 'four_times_daily': return ['06:00', '10:00', '14:00', '18:00'];
       case 'week_wise': return ['08:00'];
       case 'fortnightly': return ['08:00'];
       case 'monthly': return ['08:00'];
@@ -405,7 +407,7 @@ class TaskManagementService {
   }
 
   async bulkGenerate(data, user) {
-    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId } = data;
+    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
@@ -470,7 +472,7 @@ class TaskManagementService {
         areaDoc = await db.collection('stationAreas').doc(areaId).get();
       }
       const areaData = areaDoc.exists ? areaDoc.data() : {};
-      const cleaningFrequency = areaData.cleaningFrequency || areaData.frequency || 'daily';
+      const cleaningFrequency = frequency || areaData.cleaningFrequency || areaData.frequency || 'daily';
       const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
       const baseAreaName = areaData.areaName || areaData.name || '';
       const areaCode = areaData.areaCode || '';

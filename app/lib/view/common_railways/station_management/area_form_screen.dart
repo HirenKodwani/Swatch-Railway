@@ -309,14 +309,16 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
         matched = _boqGrouped[sel.mainArea]!.where((i) => i.subArea == sel.subArea).firstOrNull;
       }
 
+      final _boqTimes = matched?.boqTimesPerPeriod ?? 1;
       final data = {
         'stationId': widget.stationId,
         'areaName': sel.subArea,
         'mainArea': sel.mainArea,
         'basicAreaSqFt': matched?.basicAreaSqFt ?? 0,
         'frequencyType': matched?.frequencyType ?? 'daily',
-        'boqTimesPerPeriod': matched?.boqTimesPerPeriod ?? 1,
+        'boqTimesPerPeriod': _boqTimes,
         'tenderedAreaPerDay': matched?.tenderedAreaPerDay ?? 0,
+        'cleaningFrequency': _boqTimesToFrequency(_boqTimes),
         'description': _descCtrl.text.trim(),
         'order': int.tryParse(_orderCtrl.text) ?? 0,
         'active': _active,
@@ -717,6 +719,15 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
         ],
       ),
     );
+  }
+
+  String _boqTimesToFrequency(int times) {
+    if (times <= 1) return 'daily';
+    if (times == 2) return 'twice_daily';
+    if (times == 3) return 'shift_wise';
+    if (times == 4) return 'four_times_daily';
+    if (times <= 6) return '4hrs';
+    return 'hourly';
   }
 
   Widget _sectionHeader(IconData icon, String label) {

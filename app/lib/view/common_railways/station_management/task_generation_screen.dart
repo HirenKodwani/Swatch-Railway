@@ -36,7 +36,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   Platform? _selectedPlatform; // Null means "All Platforms"
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'Morning';
-  String _selectedFrequency = 'daily';
   RailwayWorkerModel? _selectedSupervisor;
 
   String? _assignedPlatformId;
@@ -463,23 +462,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                             items: ['Morning', 'Afternoon', 'Evening', 'Night'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                             onChanged: (v) {
                               if (v != null) setState(() => _selectedShift = v);
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Frequency Dropdown
-                          DropdownButtonFormField<String>(
-                            value: _selectedFrequency,
-                            decoration: const InputDecoration(labelText: 'Frequency', border: OutlineInputBorder(), prefixIcon: Icon(Icons.repeat)),
-                            items: const [
-                              DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                              DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                              DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                            ],
-                            onChanged: (v) {
-                              if (v != null) {
-                                setState(() => _selectedFrequency = v);
-                              }
                             },
                           ),
                           const SizedBox(height: 12),
