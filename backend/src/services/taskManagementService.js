@@ -577,7 +577,7 @@ class TaskManagementService {
             batchCount++;
           }
         }
-      } else if (workersSnap) {
+      } else if (workersSnap && workersSnap.size > 0) {
         workersSnap.forEach(workerDoc => {
           const assignment = workerDoc.data();
           for (const scheduledTime of frequencyTimes) {
@@ -622,6 +622,48 @@ class TaskManagementService {
             }
           }
         });
+      } else if (assignedSupervisorId) {
+        for (const scheduledTime of frequencyTimes) {
+          for (const zoneInfo of targetZones) {
+            const dupKey = `${areaId}|${assignedSupervisorId}|${scheduledTime}`;
+            if (existingTaskKeys.has(dupKey)) continue;
+            const taskRef = db.collection('cleaningTasks').doc();
+            const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
+            const task = {
+              uid: taskRef.id,
+              stationId: areaData.stationId || '',
+              platformId: areaData.platformId || null,
+              areaId,
+              areaName: displayAreaName,
+              areaCode,
+              zoneId: zoneInfo ? zoneInfo.uid : null,
+              zoneName: zoneInfo ? zoneInfo.name : null,
+              workerId: assignedSupervisorId,
+              workerName: assignedSupervisorName || 'Supervisor',
+              supervisorId: assignedSupervisorId,
+              supervisorName: assignedSupervisorName || '',
+              assignmentId: null,
+              activityType: areaData.areaType || 'Cleaning',
+              frequency: cleaningFrequency,
+              date: targetDate,
+              scheduledDate: targetDate,
+              scheduledTime,
+              priority: areaData.priority || 3,
+              shift: data.shift || areaData.defaultShift || 'morning',
+              status: 'pending',
+              startedAt: null, completedAt: null,
+              approvedAt: null, rejectedAt: null,
+              beforePhoto: null, afterPhoto: null,
+              gpsLat: null, gpsLng: null,
+              supervisorNotes: null, rejectionReason: null,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: new Date().toISOString()
+            };
+            batch.set(taskRef, task);
+            allTaskIds.push(taskRef.id);
+            batchCount++;
+          }
+        }
       }
 
       if (batchCount > 0) {

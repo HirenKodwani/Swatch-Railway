@@ -34,7 +34,8 @@ class _MainAreaSelection {
 class AreaFormScreen extends StatefulWidget {
   final String stationId;
   final Map<String, dynamic>? existingArea;
-  const AreaFormScreen({super.key, required this.stationId, this.existingArea});
+  final List<Map<String, String>>? boqPrefill;
+  const AreaFormScreen({super.key, required this.stationId, this.existingArea, this.boqPrefill});
 
   @override
   State<AreaFormScreen> createState() => _AreaFormScreenState();
@@ -72,6 +73,16 @@ class _AreaFormScreenState extends State<AreaFormScreen> {
       _descCtrl.text = e['description'] ?? '';
       _orderCtrl.text = '${e['order'] ?? 0}';
       _active = e['active'] ?? true;
+    }
+    final pref = widget.boqPrefill;
+    if (pref != null) {
+      for (final p in pref) {
+        final ma = p['mainArea'] ?? '';
+        final sa = p['subArea'] ?? '';
+        if (ma.isNotEmpty && sa.isNotEmpty) {
+          _selections.add(_MainAreaSelection(mainArea: ma, subArea: sa));
+        }
+      }
     }
     _loadExistingAreas();
   }

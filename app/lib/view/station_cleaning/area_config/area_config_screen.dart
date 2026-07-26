@@ -5,6 +5,7 @@ import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/helper/api_error_handler.dart';
 import 'package:crm_train/utills/app_colors.dart';
+import 'package:crm_train/view/common_railways/station_management/area_form_screen.dart';
 
 double _calcTendered(double basicAreaSqFt, String frequencyType, int boqTimesPerPeriod) {
   final area = basicAreaSqFt;
@@ -204,11 +205,20 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                       items: _boqGrouped[main]!,
                       onSelect: (item) {
                         Navigator.pop(ctx);
-                        _showConfigDialog(prefill: item);
+                        Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AreaFormScreen(
+                              stationId: widget.stationId,
+                              boqPrefill: [{'mainArea': item.mainArea, 'subArea': item.subArea}],
+                            ),
+                          ),
+                        ).then((_) => _loadAreas());
                       },
                       onSelectAll: (items) async {
                         Navigator.pop(ctx);
                         int created = 0;
+                        final errors = <String>[];
                         for (final item in items) {
                           try {
                             await StationCleaningRepository.createArea({
@@ -222,13 +232,22 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
                               'tenderedAreaPerDay': item.tenderedAreaPerDay,
                             });
                             created++;
-                          } catch (_) {}
+                          } catch (e) {
+                            errors.add('${item.subArea}: $e');
+                          }
                         }
                         _loadAreas();
-                        if (ctx.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$created areas created from BOQ'), backgroundColor: kSuccessGreen),
-                          );
+                        if (context.mounted) {
+                          final msg = 'Created $created area${created == 1 ? '' : 's'}';
+                          if (errors.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(msg), backgroundColor: kSuccessGreen),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('$msg, ${errors.length} failed'), backgroundColor: Colors.orange),
+                            );
+                          }
                         }
                       },
                     ),
@@ -539,7 +558,15 @@ class _AreaConfigScreenState extends State<AreaConfigScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
-        onPressed: () => _showConfigDialog(),
+        onPressed: () async {
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AreaFormScreen(stationId: widget.stationId),
+            ),
+          );
+          if (result == true) _loadAreas();
+        },
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
