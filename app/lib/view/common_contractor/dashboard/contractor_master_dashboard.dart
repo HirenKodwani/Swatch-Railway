@@ -37,6 +37,12 @@ import '../../common_railways/station_management/task_approval_screen.dart';
 import '../../common_railways/station_management/machine_master_list_screen.dart';
 import '../../common_railways/station_management/material_list_screen.dart';
 import '../../common_railways/station_management/area_performance_dashboard.dart';
+import '../../station_cleaning/supervisor_task_screen.dart';
+import '../../station_cleaning/workers/worker_management_screen.dart';
+import '../../station_cleaning/shift_summary_screen.dart';
+import '../../station_cleaning/evidence/evidence_upload_screen.dart';
+import '../../station_cleaning/reporting/report_list_screen.dart';
+import '../../station_cleaning/schedule/station_schedule_screen.dart';
 
 class ContractorMasterDashboard extends StatefulWidget {
   final String? contractType;
@@ -344,7 +350,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
       {
         "icon": Icons.cleaning_services_rounded,
         "title": "Station Cleaning",
-        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Contractor Supervisor"],
+        "roles": ["Contractor Master", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"],
         "contractTypes": ["station_cleaning"],
         "children": [
           {"title": "Dashboard", "route": "sc_dashboard"},
@@ -353,6 +359,20 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
           {"title": "Task Approval", "route": "sc_approval"},
           {"title": "Machines", "route": "sc_machines"},
           {"title": "Materials", "route": "sc_materials"},
+        ]
+      },
+      {
+        "icon": Icons.assignment,
+        "title": "My Tasks",
+        "roles": ["Contractor Supervisor"],
+        "contractTypes": ["station_cleaning"],
+        "children": [
+          {"title": "Dashboard", "route": "sc_supervisor_dashboard"},
+          {"title": "My Tasks", "route": "sc_supervisor_tasks"},
+          {"title": "Workers", "route": "sc_supervisor_workers"},
+          {"title": "Schedule", "route": "sc_supervisor_schedule"},
+          {"title": "Shift Summary", "route": "sc_supervisor_shift_summary"},
+          {"title": "Reports", "route": "sc_supervisor_reports"},
         ]
       },
       {
@@ -423,6 +443,21 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     }).where((item) => !item.containsKey('children') || (item['children'] as List).isNotEmpty).toList();
   }
 
+  void _navigateWithStation(BuildContext context, Widget Function(String stationId, String stationName) screenBuilder, dynamic user) async {
+    String stationId = user?.stationId ?? '';
+    String stationName = '';
+    if (stationId.isNotEmpty && stationName.isEmpty) {
+      try {
+        final stations = await ApiService.getStations(active: true);
+        final match = stations.where((s) => s.uid == stationId).firstOrNull;
+        if (match != null) stationName = match.stationName;
+      } catch (_) {}
+    }
+    if (mounted) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => screenBuilder(stationId, stationName)));
+    }
+  }
+
   void _handleSidebarNavigation(String? route, BuildContext context, String? userRole) {
     if (route == null) {
       Navigator.pop(context); // Close drawer
@@ -430,6 +465,8 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     }
 
     Navigator.pop(context); // Always close drawer on selection
+
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
 
     switch (route) {
       case "users":
@@ -520,6 +557,49 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
         break;
       case "complaints":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminComplaintsScreen()));
+        break;
+      case "sc_supervisor_dashboard":
+        _navigateWithStation(context, (stationId, stationName) => SupervisorDashboardScreen(
+          stationId: stationId,
+          stationName: stationName,
+        ), user);
+        break;
+      case "sc_supervisor_tasks":
+        _navigateWithStation(context, (stationId, stationName) => SupervisorTaskScreen(
+          stationId: stationId,
+          stationName: stationName,
+          supervisorId: user?.uid ?? '',
+          supervisorName: user?.fullName ?? '',
+        ), user);
+        break;
+      case "sc_supervisor_workers":
+        _navigateWithStation(context, (stationId, stationName) => WorkerManagementScreen(
+          stationId: stationId,
+          stationName: stationName,
+        ), user);
+        break;
+      case "sc_supervisor_schedule":
+        _navigateWithStation(context, (stationId, stationName) => StationScheduleScreen(
+          stationId: stationId,
+          stationName: stationName,
+        ), user);
+        break;
+      case "sc_supervisor_shift_summary":
+        _navigateWithStation(context, (stationId, stationName) => ShiftSummaryScreen(
+          stationId: stationId,
+          stationName: stationName,
+          supervisorId: user?.uid ?? '',
+          supervisorName: user?.fullName ?? '',
+          shift: 'Morning',
+          date: DateTime.now().toIso8601String().split('T')[0],
+          areas: const [],
+        ), user);
+        break;
+      case "sc_supervisor_reports":
+        _navigateWithStation(context, (stationId, stationName) => ReportListScreen(
+          stationId: stationId,
+          stationName: stationName,
+        ), user);
         break;
       default:
         break;
