@@ -1322,18 +1322,29 @@ class StationCleaningService {
     };
   }
 
-  async getSupervisorDashboard(supervisorId, query = {}) {
+  async getSupervisorDashboard(supervisorId, query = {}, user) {
     const { date } = query;
     const targetDate = date || new Date().toISOString().split('T')[0];
     const supDoc = await db.collection('users').doc(supervisorId).get();
     if (!supDoc.exists) throw new NotFoundError('Supervisor not found');
     const supervisor = supDoc.data();
+    if (user && !this._isMasterOrAdmin(user)) {
+      const userStations = user?.stations || (user?.stationId ? [user.stationId] : []);
+      const supStations = supervisor.stations?.length ? supervisor.stations : supervisor.stationId ? [supervisor.stationId] : [];
+      const overlap = supStations.filter(s => userStations.includes(s));
+      if (overlap.length === 0 && (user.uid !== supervisorId || userStations.length === 0)) {
+        throw new ForbiddenError('You can only access data for your assigned stations');
+      }
+    }
     const stationIds = supervisor.stations && supervisor.stations.length > 0
       ? supervisor.stations
       : supervisor.stationId ? [supervisor.stationId] : [];
     let tasks = [];
     if (stationIds.length > 0) {
-      const s = await db.collection('cleaningTasks').where('scheduledDate', '==', targetDate).get();
+      const s = await db.collection('cleaningTasks')
+        .where('supervisorId', '==', supervisorId)
+        .where('scheduledDate', '==', targetDate)
+        .get();
       tasks = s.docs.map(d => d.data()).filter(t => stationIds.includes(t.stationId));
     }
     const total = tasks.length;

@@ -306,7 +306,7 @@ export const getWorkerDashboard = asyncHandler(async (req, res) => {
 });
 
 export const getSupervisorDashboard = asyncHandler(async (req, res) => {
-  res.json(await stationCleaningService.getSupervisorDashboard(req.params.supervisorId, req.query));
+  res.json(await stationCleaningService.getSupervisorDashboard(req.params.supervisorId, req.query, req.user));
 });
 
 export const generateDailyReport = asyncHandler(async (req, res) => {
