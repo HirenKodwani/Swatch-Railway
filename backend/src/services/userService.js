@@ -892,6 +892,7 @@ class UserService {
       const role = (data.role || '').toLowerCase().replace(/_/g, ' ');
       if (!validRoles.includes(role)) return;
       if (requesterData.userType === 'contractor' && role.includes('railway supervisor')) return;
+      if (requesterData.userType === 'contractor' && requesterData.contractId && data.contractId && data.contractId !== requesterData.contractId) return;
       workersList.push({
         uid: data.uid || doc.id,
         fullName: data.fullName || '',
@@ -911,10 +912,12 @@ class UserService {
 
     // Also fetch workers from supervisorWorkers collection (created via station cleaning module)
     try {
-      const supSnapshot = await db.collection('supervisorWorkers')
-        .where('isActive', '==', true)
-        .limit(300)
-        .get();
+      let supQuery = db.collection('supervisorWorkers')
+        .where('isActive', '==', true);
+      if (requesterData.userType === 'contractor' && requesterData.contractId) {
+        supQuery = supQuery.where('contractId', '==', requesterData.contractId);
+      }
+      const supSnapshot = await supQuery.limit(300).get();
       supSnapshot.forEach(doc => {
         const data = doc.data();
         const uid = data.uid || doc.id;

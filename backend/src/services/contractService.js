@@ -1,5 +1,5 @@
 import { db } from '../database/index.js';
-import { NotFoundError, ConflictError, ValidationError } from '../errors/index.js';
+import { NotFoundError, ConflictError, ValidationError, ForbiddenError } from '../errors/index.js';
 
 class ContractService {
   async createContract(creatorData, body) {
@@ -263,12 +263,16 @@ class ContractService {
     return { message: 'Contract rejected successfully', uid, status: 'REJECTED' };
   }
 
-  async getContractByUid(uid) {
+  async getContractByUid(uid, requesterData) {
     if (!uid) throw new ValidationError("Contract ID (UID) is required.");
     const docRef = db.collection('contracts').doc(uid);
     const doc = await docRef.get();
     if (!doc.exists) throw new NotFoundError("Contract not found.");
-    return doc.data();
+    const data = doc.data();
+    if (requesterData?.userType === 'contractor' && requesterData?.entityId && data.entityId !== requesterData.entityId) {
+      throw new ForbiddenError('You can only access your own company contracts');
+    }
+    return data;
   }
 
   async getContractByNumber(contractNumber) {

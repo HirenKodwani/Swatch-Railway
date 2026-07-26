@@ -53,10 +53,14 @@ export function requireEntityAccess(req, res, next) {
 
 export function requireStationAccess(req, res, next) {
   const stationId = req.user?.stationId;
-  if (stationId) {
+  const userStations = req.user?.stations;
+  if (stationId || (userStations && userStations.length > 0)) {
     const targetStationId = req.params.stationId || req.body.stationId || req.query.stationId;
-    if (targetStationId && targetStationId !== stationId) {
-      throw new ForbiddenError('You can only access your assigned station');
+    if (targetStationId) {
+      const allowed = [stationId, ...(userStations || [])].filter(Boolean);
+      if (!allowed.includes(targetStationId)) {
+        throw new ForbiddenError('You can only access your assigned station');
+      }
     }
   }
   next();

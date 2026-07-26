@@ -17,7 +17,7 @@ export const getContracts = asyncHandler(async (req, res) => {
 });
 
 export const getContractByUid = asyncHandler(async (req, res) => {
-  const result = await contractService.getContractByUid(req.params.uid);
+  const result = await contractService.getContractByUid(req.params.uid, req.user);
   res.status(200).json(result);
 });
 

@@ -190,16 +190,29 @@ class StationCleaningAttendanceService {
     };
   }
 
-  async listAttendance(filters = {}) {
+  async listAttendance(filters = {}, user) {
     const { runInstanceId, stationId, callerId, role } = filters;
     let query = db.collection('station_cleaning_attendance');
     if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
-    if (stationId) query = query.where('stationId', '==', stationId);
+    const roleUpper = (role || '').toUpperCase();
+    const isWorker = roleUpper === 'WORKER' || roleUpper === 'RAILWAY WORKER';
+    if (!isWorker && user) {
+      const userStations = user.stations || (user.stationId ? [user.stationId] : []);
+      if (stationId) {
+        if (userStations.length > 0 && !userStations.includes(stationId)) {
+          throw new ForbiddenError('You can only access attendance for your assigned stations');
+        }
+        query = query.where('stationId', '==', stationId);
+      } else if (userStations.length > 0) {
+        query = query.where('stationId', 'in', userStations);
+      }
+    } else if (stationId) {
+      query = query.where('stationId', '==', stationId);
+    }
     const snapshot = await query.limit(200).get();
     let records = [];
     snapshot.forEach(doc => records.push(doc.data()));
-    const roleUpper = (role || '').toUpperCase();
-    if (roleUpper === 'WORKER' || roleUpper === 'RAILWAY WORKER') records = records.filter(r => r.workerId === callerId);
+    if (isWorker) records = records.filter(r => r.workerId === callerId);
     records.sort((a, b) => ((b.updatedAt || '') > (a.updatedAt || '') ? 1 : -1));
     return { count: records.length, records };
   }

@@ -1,5 +1,5 @@
 import { db, admin } from '../database/index.js';
-import { NotFoundError, ValidationError } from '../errors/index.js';
+import { NotFoundError, ValidationError, ForbiddenError } from '../errors/index.js';
 
 class TaskManagementService {
   async generateFrequencyBasedTasks(targetDate) {
@@ -182,6 +182,14 @@ class TaskManagementService {
     } else if (endDate) {
       q = q.where('date', '<=', endDate);
     }
+    if (!stationId && user && !['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes((user.role || '').toUpperCase())) {
+      const userStations = user.stations || (user.stationId ? [user.stationId] : []);
+      if (userStations.length === 1) {
+        q = q.where('stationId', '==', userStations[0]);
+      } else if (userStations.length > 1) {
+        q = q.where('stationId', 'in', userStations);
+      }
+    }
     const snapshot = await q.limit(300).get();
     const tasks = [];
     const now = new Date();
@@ -209,10 +217,18 @@ class TaskManagementService {
     return { count: tasks.length, tasks };
   }
 
-  async getTaskById(taskId) {
+  async getTaskById(taskId, user) {
     const doc = await db.collection('cleaningTasks').doc(taskId).get();
     if (!doc.exists) throw new NotFoundError('Task not found');
-    return { id: doc.id, ...doc.data() };
+    const task = { id: doc.id, ...doc.data() };
+    const role = (user?.role || '').toUpperCase();
+    if (!['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes(role)) {
+      const userStations = user?.stations || (user?.stationId ? [user.stationId] : []);
+      if (userStations.length > 0 && task.stationId && !userStations.includes(task.stationId)) {
+        throw new ForbiddenError('You can only access tasks in your assigned stations');
+      }
+    }
+    return task;
   }
 
   async updateTaskStatus(taskId, status, user) {
@@ -337,17 +353,38 @@ class TaskManagementService {
     return { count: tasks.length, tasks };
   }
 
-  async getDailyTasks(date) {
+  async getDailyTasks(date, user) {
     if (!date) date = new Date().toISOString().split('T')[0];
-    const snapshot = await db.collection('cleaningTasks').limit(500).get();
+    const role = (user?.role || '').toUpperCase();
+    let q = db.collection('cleaningTasks').limit(500);
+    if (!['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes(role)) {
+      const userStations = user?.stations || (user?.stationId ? [user.stationId] : []);
+      if (userStations.length === 1) {
+        q = q.where('stationId', '==', userStations[0]);
+      } else if (userStations.length > 1) {
+        q = q.where('stationId', 'in', userStations);
+      }
+    }
+    const snapshot = await q.get();
     let tasks = [];
     snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
     tasks = tasks.filter(t => t.date === date || t.scheduledDate === date);
     return { count: tasks.length, date, tasks };
   }
 
-  async getSupervisorTasks(supervisorId, date, statusFilter) {
+  async getSupervisorTasks(supervisorId, date, statusFilter, user) {
     if (!supervisorId) throw new ValidationError('supervisorId is required');
+    const role = (user?.role || '').toUpperCase();
+    if (!['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN'].includes(role)) {
+      const allowedSupervisorIds = [user?.uid];
+      if (user?.contractId) {
+        const supSnap = await db.collection('users').where('contractId', '==', user.contractId).where('role', '==', 'Contractor Supervisor').get();
+        supSnap.forEach(d => allowedSupervisorIds.push(d.id));
+      }
+      if (!allowedSupervisorIds.includes(supervisorId)) {
+        throw new ForbiddenError('You can only view tasks for supervisors in your contract');
+      }
+    }
     const snapshot = await db.collection('cleaningTasks')
       .where('supervisorId', '==', supervisorId)
       .get();

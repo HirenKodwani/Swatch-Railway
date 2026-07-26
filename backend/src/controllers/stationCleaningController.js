@@ -311,22 +311,22 @@ export const getSupervisorDashboard = asyncHandler(async (req, res) => {
 
 export const generateDailyReport = asyncHandler(async (req, res) => {
   const { stationId } = req.params;
-  res.json(await stationCleaningService.generateDailyReport(stationId, req.query));
+  res.json(await stationCleaningService.generateDailyReport(stationId, req.query, req.user));
 });
 
 export const generateWeeklyReport = asyncHandler(async (req, res) => {
   const { stationId } = req.params;
-  res.json(await stationCleaningService.generateWeeklyReport(stationId, req.query));
+  res.json(await stationCleaningService.generateWeeklyReport(stationId, req.query, req.user));
 });
 
 export const generateMonthlyReport = asyncHandler(async (req, res) => {
   const { stationId } = req.params;
-  res.json(await stationCleaningService.generateMonthlyReport(stationId, req.query));
+  res.json(await stationCleaningService.generateMonthlyReport(stationId, req.query, req.user));
 });
 
 export const getScoreTrend = asyncHandler(async (req, res) => {
   const { stationId } = req.params;
-  res.json(await stationCleaningService.getScoreTrend(stationId, req.query));
+  res.json(await stationCleaningService.getScoreTrend(stationId, req.query, req.user));
 });
 
 // ─── Area-Task Frequency (SRS #2) ──────────────────────────────────────────

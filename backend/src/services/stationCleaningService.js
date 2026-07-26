@@ -350,6 +350,13 @@ class StationCleaningService {
 
   async listSchedules(stationId, user) {
     if (!stationId) throw new ValidationError('stationId is required');
+    const role = (user?.role || '').toUpperCase();
+    if (!this._isMasterOrAdmin(user)) {
+      const userStations = user?.stations || (user?.stationId ? [user.stationId] : []);
+      if (userStations.length > 0 && !userStations.includes(stationId)) {
+        throw new ForbiddenError('You can only access schedules for your assigned stations');
+      }
+    }
     const snapshot = await db.collection('stationSchedules')
       .where('stationId', '==', stationId).where('status', '==', 'active').get();
     const schedules = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1333,17 +1340,41 @@ class StationCleaningService {
     const pending = tasks.filter(t => t.status === 'pending').length;
     const approved = tasks.filter(t => t.status === 'approved').length;
     const rejected = tasks.filter(t => t.status === 'rejected').length;
+
+    // Fetch workers count for this supervisor
+    let workerPerformance = [];
+    try {
+      const workersSnap = await db.collection('supervisorWorkers')
+        .where('supervisorId', '==', supervisorId)
+        .where('isActive', '==', true)
+        .limit(300)
+        .get();
+      workerPerformance = workersSnap.docs.map(d => ({ uid: d.id, fullName: d.data().fullName || '' }));
+    } catch (e) {
+      console.error('Error fetching supervisor workers:', e.message);
+    }
+
     return {
       supervisorId, supervisorName: supervisor.fullName || '',
       date: targetDate, totalTasks: total,
       completedTasks: completed, inProgressTasks: inProgress,
-      pendingTasks: pending, approvedTasks: approved, rejectedTasks: rejected
+      pendingTasks: pending, approvedTasks: approved, rejectedTasks: rejected,
+      workerPerformance
     };
   }
 
-  async generateDailyReport(stationId, query = {}) {
+  _verifyStationAccessForStationId(stationId, user) {
+    if (this._isMasterOrAdmin(user)) return;
+    const userStations = user?.stations || (user?.stationId ? [user.stationId] : []);
+    if (userStations.length > 0 && !userStations.includes(stationId)) {
+      throw new ForbiddenError('You can only access data for your assigned stations');
+    }
+  }
+
+  async generateDailyReport(stationId, query = {}, user) {
     const { date } = query;
     const targetDate = date || new Date().toISOString().split('T')[0];
+    this._verifyStationAccessForStationId(stationId, user);
     const stationDoc = await db.collection('stations').doc(stationId).get();
     if (!stationDoc.exists) throw new NotFoundError('Station not found');
     const station = stationDoc.data();
@@ -1361,11 +1392,12 @@ class StationCleaningService {
     };
   }
 
-  async generateWeeklyReport(stationId, query = {}) {
+  async generateWeeklyReport(stationId, query = {}, user) {
     const { endDate } = query;
     const end = endDate || new Date().toISOString().split('T')[0];
     const start = new Date(end); start.setDate(start.getDate() - 6);
     const startStr = start.toISOString().split('T')[0];
+    this._verifyStationAccessForStationId(stationId, user);
     const stationDoc = await db.collection('stations').doc(stationId).get();
     if (!stationDoc.exists) throw new NotFoundError('Station not found');
     const station = stationDoc.data();
@@ -1385,7 +1417,7 @@ class StationCleaningService {
     };
   }
 
-  async generateMonthlyReport(stationId, query = {}) {
+  async generateMonthlyReport(stationId, query = {}, user) {
     const { month, year } = query;
     const now = new Date();
     const m = month !== undefined ? parseInt(month) : now.getMonth() + 1;
@@ -1393,6 +1425,7 @@ class StationCleaningService {
     const startStr = `${y}-${String(m).padStart(2, '0')}-01`;
     const lastDay = new Date(y, m, 0).getDate();
     const endStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    this._verifyStationAccessForStationId(stationId, user);
     const stationDoc = await db.collection('stations').doc(stationId).get();
     if (!stationDoc.exists) throw new NotFoundError('Station not found');
     const station = stationDoc.data();
@@ -1413,8 +1446,9 @@ class StationCleaningService {
     };
   }
 
-  async getScoreTrend(stationId, query = {}) {
+  async getScoreTrend(stationId, query = {}, user) {
     const { months } = query;
+    this._verifyStationAccessForStationId(stationId, user);
     const numMonths = months ? parseInt(months) : 6;
     const now = new Date();
     const data = [];
