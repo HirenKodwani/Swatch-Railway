@@ -695,7 +695,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
     final quickActions = _getQuickActions(user?.role);
-    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType);
+    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType ?? user?.domain);
 
     final parts = [
       if (user?.zone != null && user!.zone!.isNotEmpty) user.zone!,

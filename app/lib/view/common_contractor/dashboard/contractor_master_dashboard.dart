@@ -751,7 +751,7 @@ class _ContractorMasterDashboardState extends State<ContractorMasterDashboard> {
     const accentGreen = Color(0xFF12C27D);
     const softBorder = Color(0xFFE8E8F0);
 
-    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType);
+    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType ?? user?.domain);
     return Scaffold(
       appBar: AppBar(
         title: Text(
