@@ -27,6 +27,7 @@ class TaskManagementService {
       const frequencyTimes = area.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
       const areaName = area.areaName || area.name || assignment.areaName || '';
       const areaCode = area.areaCode || '';
+      const mainArea = area.mainArea || '';
       const platformId = assignment.platformId || area.platformId || null;
       const supervisorId = area.supervisorId || assignment.supervisorId || null;
 
@@ -35,13 +36,15 @@ class TaskManagementService {
 
       for (const scheduledTime of frequencyTimes) {
         const taskRef = db.collection('cleaningTasks').doc();
+        const displayName = [mainArea, areaName].filter(Boolean).join(' - ');
         const task = {
           uid: taskRef.id,
           stationId: area.stationId || assignment.stationId,
           platformId,
           areaId: assignment.areaId,
-          areaName,
+          areaName: displayName,
           areaCode,
+          mainArea,
           workerId: assignment.workerId,
           workerName: assignment.workerName,
           supervisorId,
@@ -476,6 +479,7 @@ class TaskManagementService {
       const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
       const baseAreaName = areaData.areaName || areaData.name || '';
       const areaCode = areaData.areaCode || '';
+      const mainArea = areaData.mainArea || '';
 
       const batch = db.batch();
       let batchCount = 0;
@@ -501,7 +505,7 @@ class TaskManagementService {
             const dupKey = `${areaId}|${w.uid}|${scheduledTime}`;
             if (existingTaskKeys.has(dupKey)) continue;
             const taskRef = db.collection('cleaningTasks').doc();
-            const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
+            const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
             const task = {
               uid: taskRef.id,
               stationId: areaData.stationId || w.stationId || '',
@@ -509,6 +513,7 @@ class TaskManagementService {
               areaId,
               areaName: displayAreaName,
               areaCode,
+              mainArea,
               zoneId: zoneInfo ? zoneInfo.uid : null,
               zoneName: zoneInfo ? zoneInfo.name : null,
               workerId: w.uid,
@@ -543,7 +548,7 @@ class TaskManagementService {
             const dupKey = `${areaId}|${assignedWorker.uid}|${scheduledTime}`;
             if (existingTaskKeys.has(dupKey)) continue;
             const taskRef = db.collection('cleaningTasks').doc();
-            const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
+            const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
             const task = {
               uid: taskRef.id,
               stationId: areaData.stationId || assignedWorker.stationId || '',
@@ -551,6 +556,7 @@ class TaskManagementService {
               areaId,
               areaName: displayAreaName,
               areaCode,
+              mainArea,
               zoneId: zoneInfo ? zoneInfo.uid : null,
               zoneName: zoneInfo ? zoneInfo.name : null,
               workerId: assignedWorker.uid,
@@ -587,7 +593,7 @@ class TaskManagementService {
               const dupKey = `${areaId}|${assignment.workerId}|${scheduledTime}`;
               if (existingTaskKeys.has(dupKey)) continue;
               const taskRef = db.collection('cleaningTasks').doc();
-              const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
+              const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
               const task = {
                 uid: taskRef.id,
                 stationId: areaData.stationId || assignment.stationId,
@@ -595,6 +601,7 @@ class TaskManagementService {
                 areaId,
                 areaName: displayAreaName,
                 areaCode,
+                mainArea,
                 zoneId: zoneInfo ? zoneInfo.uid : null,
                 zoneName: zoneInfo ? zoneInfo.name : null,
                 workerId: assignment.workerId,
@@ -630,7 +637,7 @@ class TaskManagementService {
             const dupKey = `${areaId}|${assignedSupervisorId}|${scheduledTime}`;
             if (existingTaskKeys.has(dupKey)) continue;
             const taskRef = db.collection('cleaningTasks').doc();
-            const displayAreaName = zoneInfo ? `${baseAreaName} - ${zoneInfo.name}` : baseAreaName;
+            const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
             const task = {
               uid: taskRef.id,
               stationId: areaData.stationId || '',
@@ -638,6 +645,7 @@ class TaskManagementService {
               areaId,
               areaName: displayAreaName,
               areaCode,
+              mainArea,
               zoneId: zoneInfo ? zoneInfo.uid : null,
               zoneName: zoneInfo ? zoneInfo.name : null,
               workerId: assignedSupervisorId,

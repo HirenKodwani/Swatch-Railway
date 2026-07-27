@@ -556,7 +556,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                             children: [
                                               Expanded(
                                                 child: Text(
-                                                  '${area.name} (${_getPlatformName(area.platformId)}) - $assignedText',
+                                                  '${area.name} (${_getPlatformName(area.platformId)}) - ${area.cleaningFrequency ?? 'daily'} - $assignedText',
                                                   style: TextStyle(
                                                     color: isSelected ? Colors.black87 : Colors.black54,
                                                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
