@@ -166,6 +166,22 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     return plat?.displayName ?? 'Platform $platformId';
   }
 
+  String _frequencyLabel(String f) {
+    switch (f) {
+      case 'daily': return 'Daily (1x)';
+      case 'twice_daily': return 'Twice Daily (2x)';
+      case 'shift_wise': return 'Shift Wise (3x)';
+      case 'four_times_daily': return 'Four Times (4x)';
+      case '4hrs': return 'Every 4 Hours (5x)';
+      case 'hourly': return 'Hourly (17x)';
+      case '2hrs': return 'Every 2 Hours';
+      case 'weekly': return 'Weekly';
+      case 'fortnightly': return 'Fortnightly';
+      case 'monthly': return 'Monthly';
+      default: return f;
+    }
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -523,55 +539,66 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 final isSelected = _selectedAreaIds.contains(areaId);
                                 
                                 final List<RailwayWorkerModel> assigned = _areaWorkerAssignments[areaId] ?? [];
-                                final assignedText = assigned.isEmpty
-                                    ? '(No assigned worker)'
-                                    : assigned.map((w) => w.fullName).join(', ');
 
                                 return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
+                                  margin: const EdgeInsets.only(bottom: 12),
                                   width: double.infinity,
                                   child: OutlinedButton(
                                     onPressed: () => _toggleAreaSelection(area),
                                     style: OutlinedButton.styleFrom(
                                       alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                       side: BorderSide(color: isSelected ? kRailwayBlue : Colors.grey.shade300, width: isSelected ? 1.5 : 1),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       backgroundColor: isSelected ? kRailwayBlue.withOpacity(0.04) : Colors.white,
                                     ),
                                     child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Icon(
-                                          isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                                          color: isSelected ? kRailwayBlue : Colors.grey.shade400,
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Icon(
+                                            isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                                            color: isSelected ? kRailwayBlue : Colors.grey.shade400,
+                                            size: 22,
+                                          ),
                                         ),
-                                        const SizedBox(width: 14),
+                                        const SizedBox(width: 12),
                                         Expanded(
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Expanded(
-                                                child: Text(
-                                                  '${area.name} (${_getPlatformName(area.platformId)}) - ${area.cleaningFrequency ?? 'daily'} - $assignedText',
-                                                  style: TextStyle(
-                                                    color: isSelected ? Colors.black87 : Colors.black54,
-                                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                                    fontSize: 14,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
+                                              if (area.mainArea != null && area.mainArea!.isNotEmpty)
+                                                Text(
+                                                  area.mainArea!,
+                                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                                                 ),
+                                              if (area.mainArea != null && area.mainArea!.isNotEmpty)
+                                                const SizedBox(height: 2),
+                                              Text(
+                                                area.name,
+                                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
                                               ),
-                                              if (isSelected)
-                                                IconButton(
-                                                  icon: const Icon(Icons.person_add_alt_1, size: 20, color: kRailwayBlue),
-                                                  onPressed: () {
-                                                    // Explicitly manage workers
-                                                    _showWorkerSelectionForArea(area);
-                                                  },
-                                                ),
+                                              const SizedBox(height: 4),
+                                              Row(
+                                                children: [
+                                                  Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    _frequencyLabel(area.cleaningFrequency ?? 'daily'),
+                                                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                  ),
+                                                ],
+                                              ),
                                             ],
                                           ),
                                         ),
+                                        if (isSelected)
+                                          IconButton(
+                                            icon: const Icon(Icons.person_add_alt_1, size: 20, color: kRailwayBlue),
+                                            onPressed: () => _showWorkerSelectionForArea(area),
+                                            visualDensity: VisualDensity.compact,
+                                          ),
                                       ],
                                     ),
                                   ),
