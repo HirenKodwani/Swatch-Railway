@@ -36,6 +36,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   Platform? _selectedPlatform; // Null means "All Platforms"
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'Morning';
+  String _selectedFrequency = 'daily';
   RailwayWorkerModel? _selectedSupervisor;
 
   String? _assignedPlatformId;
@@ -350,6 +351,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         date: todayStr,
         workerIds: workerIds.isNotEmpty ? workerIds : null,
         supervisorId: _selectedSupervisor?.uid,
+        frequency: _selectedFrequency,
       );
 
       if (mounted) {
@@ -421,26 +423,20 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Platform Dropdown (Optional)
-                          DropdownButtonFormField<Platform?>(
-                            decoration: InputDecoration(
-                              labelText: 'Platform',
-                              border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(Icons.view_quilt),
-                              hintText: _isPlatformLocked ? 'Assigned Platform (locked)' : null,
-                            ),
-                            value: _selectedPlatform,
-                            items: [
-                              const DropdownMenuItem<Platform?>(
-                                value: null,
-                                child: Text('All Platforms'),
-                              ),
-                              ..._platforms.map((p) => DropdownMenuItem<Platform?>(value: p, child: Text(p.displayName))),
+                          // Frequency Dropdown
+                          DropdownButtonFormField<String>(
+                            value: _selectedFrequency,
+                            decoration: const InputDecoration(labelText: 'Frequency', border: OutlineInputBorder(), prefixIcon: Icon(Icons.repeat)),
+                            items: const [
+                              DropdownMenuItem(value: 'daily', child: Text('Daily (1x)')),
+                              DropdownMenuItem(value: 'twice_daily', child: Text('Twice Daily (2x)')),
+                              DropdownMenuItem(value: 'shift_wise', child: Text('Shift Wise (3x)')),
+                              DropdownMenuItem(value: 'four_times_daily', child: Text('Four Times (4x)')),
+                              DropdownMenuItem(value: '4hrs', child: Text('Every 4hrs (5x)')),
+                              DropdownMenuItem(value: 'hourly', child: Text('Hourly (17x)')),
                             ],
-                            onChanged: _isPlatformLocked ? null : (v) {
-                              setState(() {
-                                _selectedPlatform = v;
-                              });
+                            onChanged: (v) {
+                              if (v != null) setState(() => _selectedFrequency = v);
                             },
                           ),
                           const SizedBox(height: 12),
