@@ -471,7 +471,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           DropdownButtonFormField<String>(
                             value: _selectedShift,
                             decoration: const InputDecoration(labelText: 'Shift', border: OutlineInputBorder(), prefixIcon: Icon(Icons.schedule)),
-                            items: ['Morning', 'Afternoon', 'Evening', 'Night'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                            items: ['Morning', 'Evening', 'Night'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                             onChanged: (v) {
                               if (v != null) setState(() => _selectedShift = v);
                             },
