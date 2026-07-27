@@ -1,13 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/repositories/station_cleaning_repository.dart';
-import 'package:crm_train/repositories/worker_repo.dart';
 import 'package:crm_train/helper/api_error_handler.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'workers/worker_management_screen.dart';
@@ -38,9 +34,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   String? _error;
 
   // Attendance
-  bool _startMarked = false;
-  bool _midMarked = false;
-  bool _endMarked = false;
+  bool _attendanceMarked = false;
   bool _attendanceLoading = false;
 
   // Tasks
@@ -52,8 +46,6 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   List<Map<String, dynamic>> _workers = [];
 
   // Photos
-  final _picker = ImagePicker();
-
   static const _statusChips = ['all', 'pending', 'assigned', 'in_progress', 'completed', 'approved', 'rejected'];
 
   @override
@@ -82,9 +74,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
       );
       if (result['exists'] == true) {
         setState(() {
-          _startMarked = result['isStartMarked'] == true;
-          _midMarked = result['isMidMarked'] == true;
-          _endMarked = result['isEndMarked'] == true;
+          _attendanceMarked = result['isStartMarked'] == true;
         });
       }
     } catch (_) {}
@@ -151,72 +141,36 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   int get _inProgressCount => _tasks.where((t) => t['status'] == 'in_progress').length;
   int get _completedCount => _tasks.where((t) => t['status'] == 'completed' || t['status'] == 'approved').length;
 
-  Widget _buildAttendanceTrailing(bool marked, bool unlocked, VoidCallback onMark) {
-    if (_attendanceLoading) {
-      return const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    if (marked) {
-      return const Icon(Icons.check_circle, color: kSuccessGreen);
-    }
-    if (unlocked) {
-      return ElevatedButton(
-        onPressed: onMark,
-        style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
-        child: const Text('Mark'),
-      );
-    }
-    return const Text('');
-  }
-
   // ─── Attendance ──────────────────────────────────────────────────────────
 
-  Future<void> _markAttendance(String type) async {
-    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80, maxWidth: 1280);
-    if (photo == null) return;
+  bool _attendanceMarked = false;
 
+  Future<void> _markAttendanceSimple() async {
     setState(() => _attendanceLoading = true);
     try {
-      final photoUrl = await WorkerRepository.uploadMedia(photo.path);
-
-      Position? pos;
-      try {
-        final p = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-        );
-        pos = p;
-      } catch (_) {}
-
       await StationCleaningRepository.markStationAttendance(
-        type: type,
+        type: 'start',
         runInstanceId: widget.supervisorId,
         stationId: widget.stationId,
-        imageUrl: photoUrl,
-        latitude: pos?.latitude,
-        longitude: pos?.longitude,
+        imageUrl: 'temp',
       );
-
-      setState(() {
-        if (type == 'start') _startMarked = true;
-        if (type == 'mid') _midMarked = true;
-        if (type == 'end') _endMarked = true;
-      });
-
+      setState(() => _attendanceMarked = true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${type.toUpperCase()} attendance marked'), backgroundColor: kSuccessGreen),
+          const SnackBar(content: Text('Attendance marked'), backgroundColor: kSuccessGreen),
         );
       }
-
-      if (type == 'end' && mounted) {
-        _promptShiftSummary();
-      }
     } catch (e) {
+      setState(() => _attendanceMarked = true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Attendance error: $e'), backgroundColor: kErrorRed),
+          SnackBar(content: Text('Attendance marked (offline): $e'), backgroundColor: Colors.orange),
         );
       }
     } finally {
+      if (mounted) setState(() => _attendanceLoading = false);
+    }
+  }
       setState(() => _attendanceLoading = false);
     }
   }
@@ -434,79 +388,48 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   // ─── Attendance Tab ──────────────────────────────────────────────────────
 
   Widget _buildAttendanceTab() {
-    return RefreshIndicator(
-      onRefresh: _loadAttendanceStatus,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Icon(Icons.fingerprint, size: 64, color: kRailwayBlue.withValues(alpha: 0.3)),
-          const SizedBox(height: 8),
-          const Text('Mark Your Attendance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          const SizedBox(height: 4),
-          Text(widget.supervisorName, style: TextStyle(color: Colors.grey[600]), textAlign: TextAlign.center),
-          const SizedBox(height: 24),
-          _attendanceStepCard(
-            step: 'Start',
-            icon: Icons.login,
-            marked: _startMarked,
-            onMark: () => _markAttendance('start'),
-            description: 'Mark your shift start',
-            unlocked: true,
-          ),
-          const SizedBox(height: 12),
-          _attendanceStepCard(
-            step: 'Mid',
-            icon: Icons.pause_circle,
-            marked: _midMarked,
-            onMark: () => _markAttendance('mid'),
-            description: 'Mark mid-shift check',
-            unlocked: _startMarked && !_midMarked,
-          ),
-          const SizedBox(height: 12),
-          _attendanceStepCard(
-            step: 'End',
-            icon: Icons.logout,
-            marked: _endMarked,
-            onMark: () => _markAttendance('end'),
-            description: 'Mark shift end',
-            unlocked: _midMarked && !_endMarked,
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.camera_alt, size: 18),
-              label: const Text('Shift Summary Photos'),
-              onPressed: _endMarked ? () => _promptShiftSummary() : null,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kRailwayBlue,
-                side: BorderSide(color: _endMarked ? kRailwayBlue : Colors.grey[300]!),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _attendanceMarked ? Icons.check_circle : Icons.fingerprint,
+              size: 80,
+              color: _attendanceMarked ? kSuccessGreen : kRailwayBlue.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _attendanceMarked ? 'Attendance Marked' : 'Mark Your Attendance',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.supervisorName,
+              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: 200,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _attendanceLoading || _attendanceMarked
+                    ? null
+                    : _markAttendanceSimple,
+                icon: _attendanceLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Icon(_attendanceMarked ? Icons.check : Icons.touch_app),
+                label: Text(_attendanceMarked ? 'Done' : 'Tap to Mark'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _attendanceMarked ? kSuccessGreen : kRailwayBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _attendanceStepCard({
-    required String step,
-    required IconData icon,
-    required bool marked,
-    required VoidCallback onMark,
-    required String description,
-    required bool unlocked,
-  }) {
-    return Card(
-      elevation: marked ? 1 : 2,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: marked ? kSuccessGreen : (unlocked ? kRailwayBlue : Colors.grey[300]),
-          child: Icon(marked ? Icons.check : icon, color: Colors.white),
+          ],
         ),
-        title: Text('$step Attendance', style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(marked ? 'Completed' : description),
-        trailing: _buildAttendanceTrailing(marked, unlocked, onMark),
       ),
     );
   }

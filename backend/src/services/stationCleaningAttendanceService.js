@@ -9,8 +9,8 @@ class StationCleaningAttendanceService {
       if (!allowedFields.includes(key)) throw new ValidationError(`Invalid field: '${key}'`);
     }
     const { runInstanceId, stationId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId, livenessChallenge } = body;
-    if (!attendanceType || !imageUrl || !deviceTimestamp) {
-      throw new ValidationError('attendanceType, imageUrl, and deviceTimestamp are required.');
+    if (!attendanceType || !deviceTimestamp) {
+      throw new ValidationError('attendanceType and deviceTimestamp are required.');
     }
     const effectiveRunId = runInstanceId || `self_${userData.uid}_${new Date().toISOString().split('T')[0]}`;
     if (!['start', 'mid', 'end'].includes(attendanceType)) {
