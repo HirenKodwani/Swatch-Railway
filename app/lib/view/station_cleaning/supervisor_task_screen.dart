@@ -37,8 +37,10 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   bool _isLoading = false;
   String? _error;
 
-  // Attendance
-  bool _attendanceMarked = false;
+  // Attendance (3-step: start/mid/end)
+  bool _startMarked = false;
+  bool _midMarked = false;
+  bool _endMarked = false;
   bool _attendanceLoading = false;
 
   // Tasks
@@ -149,10 +151,6 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
   // ─── Attendance ──────────────────────────────────────────────────────────
 
-  bool _startMarked = false;
-  bool _midMarked = false;
-  bool _endMarked = false;
-  bool _attendanceLoading = false;
   final _picker = ImagePicker();
 
   Future<void> _markAttendance(String type) async {
