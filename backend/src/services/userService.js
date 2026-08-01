@@ -144,6 +144,11 @@ class UserService {
       }
     }
 
+    // Railway Inspector is always scoped to the Station Cleaning contract
+    if (roleUpper === 'RAILWAY INSPECTOR') {
+      domain = 'station_cleaning';
+    }
+
     if (roleUpper === 'CTS' || roleUpper === 'CONTRACTOR SUPERVISOR') {
       if (!division) {
         throw new ValidationError("Division is mandatory for Contractor Supervisor.");
@@ -560,6 +565,7 @@ class UserService {
     const ROLE_HIERARCHY = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
       'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_INSPECTOR': 52,
       'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
       'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
@@ -626,6 +632,7 @@ class UserService {
     const ROLE_HIERARCHY = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
       'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_INSPECTOR': 52,
       'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
       'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1
@@ -951,6 +958,7 @@ class UserService {
     const ROLE_HIERARCHY = {
       'SUPER_ADMIN': 100, 'COMPANY_MASTER': 90, 'RAILWAY_MASTER': 80,
       'ADMIN': 70, 'RAILWAY_ADMIN': 60,
+      'RAILWAY_INSPECTOR': 52,
       'RAILWAY_SUPERVISOR': 50, 'CONTRACTOR_ADMIN': 45,
       'CONTRACTOR_SUPERVISOR': 40, 'CTS': 30,
       'WORKER': 10, 'RAILWAY_WORKER': 10, 'JANITOR': 10, 'ATTENDANT': 10, 'PASSENGER': 1

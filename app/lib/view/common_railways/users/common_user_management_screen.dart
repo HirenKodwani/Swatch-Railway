@@ -100,6 +100,7 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
       return [
         'All Roles',
         'Railway Admin',
+        'Railway Inspector',
         'Railway Supervisor',
         'Railway Worker',
         'Contractor Admin',
@@ -122,6 +123,7 @@ class _CommonUserManagementScreenState extends State<CommonUserManagementScreen>
       'Company Master',
       'Railway Master',
       'Railway Admin',
+      'Railway Inspector',
       'Railway Supervisor',
       'Railway Worker',
       'Contractor Master',

@@ -278,7 +278,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
   bool _shouldShowDivision() {
     if (_selectedRole == null || _zone == null) return false;
-    return _selectedRole!.contains('Admin') || _selectedRole!.contains('Supervisor') || _selectedRole!.contains('Worker');
+    return _selectedRole!.contains('Admin') || _selectedRole!.contains('Supervisor') || _selectedRole!.contains('Worker') || _selectedRole!.contains('Inspector');
   }
 
   bool _shouldShowDepot() {
@@ -313,6 +313,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
   bool _shouldShowStationSelection() {
     if (_selectedRole == null) return false;
     if (_selectedRole!.toLowerCase().contains('worker')) return true;
+    if (_selectedRole!.toLowerCase().contains('inspector')) return true;
     if (_selectedUserType == 'contractor' && _selectedCompany != null) return true;
     return false;
   }
@@ -1294,17 +1295,18 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (userType == 'railway') {
       if (currentUser?.role == 'Railway Admin') {
-        return ['Railway Supervisor', 'Railway Worker'];
+        return ['Railway Inspector', 'Railway Supervisor', 'Railway Worker'];
       }
       else if (currentUser?.role == 'Railway Master') {
         return [
           'Railway Admin',
+          'Railway Inspector',
           'Railway Supervisor',
           'Railway Worker',
         ];
       }
       else {
-        return ['Railway Admin', 'Railway Supervisor', 'Railway Worker'];
+        return ['Railway Admin', 'Railway Inspector', 'Railway Supervisor', 'Railway Worker'];
       }
     } else {
       if (currentUser?.role == 'Contractor Admin') {
@@ -1372,6 +1374,11 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
 
     if (_selectedUserType == 'contractor' && _isContractorAdminOrSupervisor() && _selectedContractId == null) {
       _showError('Please select a contract for Contractor Admin/Supervisor.');
+      return;
+    }
+
+    if (_selectedRole != null && _selectedRole!.toLowerCase().contains('inspector') && _selectedStationId == null) {
+      _showError('Please select a station for the Railway Inspector.');
       return;
     }
 
