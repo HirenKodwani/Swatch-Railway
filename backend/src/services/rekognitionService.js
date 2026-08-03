@@ -42,7 +42,7 @@ async function downloadImage(url) {
 export async function compareFaces(image1Url, image2Url) {
   try {
     if (!image1Url || !image2Url || image1Url.includes('undefined') || image2Url.includes('undefined')) {
-      return { matched: false, similarity: 0, reason: 'One or both image URLs are missing or invalid.' };
+      return { matched: false, similarity: 0, reason: 'One or both image URLs are missing or invalid.', error: true };
     }
 
     const rekognition = getRekognitionClient();
@@ -76,7 +76,7 @@ export async function compareFaces(image1Url, image2Url) {
     } else if (awsException.name === 'ImageTooLargeException') {
       errorMsg = 'The uploaded file size exceeds the allowed processing dimensions.';
     }
-    return { matched: false, similarity: 0, reason: errorMsg };
+    return { matched: false, similarity: 0, reason: errorMsg, error: true };
   }
 }
 

@@ -56,6 +56,39 @@ class StationCleaningAttendanceService {
     };
     const todayIST = getISTDateString(new Date());
 
+    const getTaskCompletion = async () => {
+      try {
+        const taskSnap = await db.collection('cleaningTasks')
+          .where('workerId', '==', workerId)
+          .where('date', '==', todayIST)
+          .get();
+        const tasks = [];
+        taskSnap.forEach(doc => tasks.push(doc.data()));
+        const doneStatuses = ['completed', 'approved'];
+        const completedCount = tasks.filter(t => doneStatuses.includes(t.status)).length;
+        const total = tasks.length;
+        return { total, completedCount };
+      } catch (e) {
+        logger.error('StationCleaning', '(Attendance Task Completion) Error:', e);
+        return { total: 0, completedCount: 0 };
+      }
+    };
+
+    if (attendanceType !== 'start') {
+      const { total, completedCount } = await getTaskCompletion();
+      if (total === 0) {
+        throw new ValidationError(`You have no cleaning tasks scheduled today. Mark 'start' attendance only.`);
+      }
+      if (attendanceType === 'mid' && completedCount < Math.ceil(total / 2)) {
+        throw new ValidationError(
+          `MID attendance requires at least half your tasks (${Math.ceil(total / 2)} of ${total}) completed. Currently ${completedCount} completed.`
+        );
+      }
+      if (attendanceType === 'end' && completedCount < total) {
+        throw new ValidationError(`END attendance requires all ${total} tasks completed. Currently ${completedCount} completed.`);
+      }
+    }
+
     const snapshot = await db.collection('station_cleaning_attendance').where('workerId', '==', workerId).get();
     let latestDoc = null;
     let latestTime = 0;
@@ -108,8 +141,9 @@ class StationCleaningAttendanceService {
 
       const { compareFaces } = await import('./rekognitionService.js');
       const faceVerification = await compareFaces(baseStartPhoto, imageUrl);
+      const isInfraError = faceVerification.error === true;
 
-      if (!faceVerification.matched) {
+      if (!faceVerification.matched && !isInfraError) {
         await attendanceRef.update({
           identityAuditStatus: 'MISMATCH_ALERT',
           lastMismatchReason: faceVerification.reason,
@@ -126,15 +160,19 @@ class StationCleaningAttendanceService {
         if (currentData.midAttendance) throw new ValidationError('Mid attendance already submitted.');
         updateData.midAttendance = attendanceEntry;
         updateData.isMidMarked = true;
-        updateData.identityAuditStatus = 'MID_VERIFIED';
+        updateData.identityAuditStatus = isInfraError ? 'MID_UNVERIFIED_REVIEW' : 'MID_VERIFIED';
       }
       if (attendanceType === 'end') {
         if (currentData.endAttendance) throw new ValidationError('End attendance already submitted.');
         updateData.endAttendance = attendanceEntry;
         updateData.isEndMarked = true;
-        updateData.identityAuditStatus = 'VERIFIED_SUCCESS';
+        updateData.identityAuditStatus = isInfraError ? 'UNVERIFIED_REVIEW' : 'VERIFIED_SUCCESS';
       }
       updateData.attendanceStatus = isLateAttendance ? 'LATE' : 'PRESENT';
+      if (isInfraError) {
+        updateData.identityVerification = { status: 'PENDING_REVIEW', reason: faceVerification.reason };
+        updateData.updatedAt = new Date().toISOString();
+      }
       updateData.timingSnapshot = {
         isLate: isLateAttendance, lateByMinutes,
         firstAttendanceReference: firstAttendanceTime,

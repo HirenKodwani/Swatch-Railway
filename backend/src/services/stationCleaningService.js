@@ -1042,8 +1042,8 @@ class StationCleaningService {
 
     const total = tasks.length;
     const completed = tasks.filter(t => t.status === 'completed' || t.status === 'approved').length;
-    const pending = tasks.filter(t => t.status === 'pending').length;
     const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+    const pending = tasks.filter(t => t.status === 'pending').length;
     const approved = tasks.filter(t => t.status === 'approved').length;
     const rejected = tasks.filter(t => t.status === 'rejected').length;
     const completionRate = total > 0 ? Math.round(completed / total * 100) : 0;
@@ -1353,6 +1353,14 @@ class StationCleaningService {
     const pending = tasks.filter(t => t.status === 'pending').length;
     const approved = tasks.filter(t => t.status === 'approved').length;
     const rejected = tasks.filter(t => t.status === 'rejected').length;
+    const now = new Date();
+    const overdue = tasks.filter(t => {
+      const actionableStatuses = ['pending', 'assigned', 'in_progress'];
+      if (!actionableStatuses.includes(t.status)) return false;
+      const taskDate = t.date || t.scheduledDate || '';
+      const taskTime = t.scheduledTime || '23:59';
+      return new Date(`${taskDate}T${taskTime}:00`) < now;
+    }).length;
 
     // Fetch workers count for this supervisor
     let workerPerformance = [];
@@ -1372,6 +1380,7 @@ class StationCleaningService {
       date: targetDate, totalTasks: total,
       completedTasks: completed, inProgressTasks: inProgress,
       pendingTasks: pending, approvedTasks: approved, rejectedTasks: rejected,
+      overdueTasks: overdue,
       workerPerformance
     };
   }
@@ -1685,12 +1694,61 @@ class StationCleaningService {
     return { message: 'Execution plan created', uid: ref.id, data };
   }
 
-  async submitShiftSummary(data) {
+  async submitShiftSummary(data, user) {
     const { supervisorId, supervisorName, stationId, stationName, date, shift, areas } = data;
-    if (!supervisorId || !stationId || !date || !areas || !Array.isArray(areas) || areas.length === 0) {
+    if (!supervisorId || !stationId || !date || !areas || !Array.isArray(areas)) {
       throw new ValidationError('supervisorId, stationId, date, and areas array are required');
     }
+    if (areas.length < 5) {
+      throw new ValidationError(`At least 5 areas must be submitted for the shift summary. Received ${areas.length}.`);
+    }
+    for (const a of areas) {
+      if (!a.photoUrl) throw new ValidationError(`Photo is required for area ${a.areaName || a.areaId || ''}`);
+      if (!a.remark || !String(a.remark).trim()) throw new ValidationError(`Remark is required for area ${a.areaName || a.areaId || ''}`);
+    }
+
+    const now = new Date().toISOString();
     const ref = db.collection('stationShiftSummaries').doc();
+    const enriched = await Promise.all(areas.map(async (a) => {
+      let areaBasicAreaSqFt = parseFloat(a.basicAreaSqFt) || 0;
+      let areaTimesPerPeriod = parseInt(a.boqTimesPerPeriod, 10) || 1;
+      let frequency = a.cleaningFrequency || a.frequency || 'daily';
+      let mainArea = a.mainArea || '';
+      let areaName = a.areaName || '';
+      let tenderedAreaPerDay = parseFloat(a.tenderedAreaPerDay) || 0;
+      if (a.areaId) {
+        try {
+          const areaDoc = await db.collection('stationAreas').doc(a.areaId).get();
+          if (areaDoc.exists) {
+            const area = areaDoc.data();
+            if (!areaBasicAreaSqFt) areaBasicAreaSqFt = parseFloat(area.basicAreaSqFt) || 0;
+            if (!areaTimesPerPeriod) areaTimesPerPeriod = parseInt(area.boqTimesPerPeriod || area.frequencyTimes, 10) || 1;
+            if (!frequency || frequency === 'daily') frequency = area.cleaningFrequency || area.frequency || frequency || 'daily';
+            if (!mainArea) mainArea = area.mainArea || '';
+            if (!areaName) areaName = area.areaName || area.name || '';
+            if (!tenderedAreaPerDay) tenderedAreaPerDay = parseFloat(area.tenderedAreaPerDay) || 0;
+          }
+        } catch (_) { /* keep provided values */ }
+      }
+      const workDone = Math.round(areaBasicAreaSqFt * areaTimesPerPeriod);
+      return {
+        areaId: a.areaId || '',
+        areaName: areaName,
+        mainArea: mainArea || '',
+        basicAreaSqFt: areaBasicAreaSqFt,
+        cleaningFrequency: frequency || 'daily',
+        boqTimesPerPeriod: areaTimesPerPeriod,
+        workDone,
+        tenderedAreaPerDay: tenderedAreaPerDay || workDone,
+        photoUrl: a.photoUrl || '',
+        scheduledTime: a.scheduledTime || '',
+        taskId: a.taskId || null,
+        remark: String(a.remark || '').trim(),
+      };
+    }));
+
+    const totalWorkDone = enriched.reduce((sum, a) => sum + (a.workDone || 0), 0);
+    const totalTenderedArea = enriched.reduce((sum, a) => sum + (a.tenderedAreaPerDay || 0), 0);
     const record = {
       uid: ref.id,
       supervisorId,
@@ -1699,17 +1757,97 @@ class StationCleaningService {
       stationName: stationName || '',
       date,
       shift: shift || '',
-      areas: areas.map(a => ({
-        areaId: a.areaId || '',
-        areaName: a.areaName || '',
-        photoUrl: a.photoUrl || '',
-        scheduledTime: a.scheduledTime || '',
-        taskId: a.taskId || null,
-      })),
-      submittedAt: new Date().toISOString(),
+      areas: enriched,
+      totalWorkDone,
+      totalTenderedArea,
+      status: 'submitted',
+      submittedAt: now,
+      submittedBy: (user && user.uid) || supervisorId,
+      approvedBy: null, approvedByName: null, approvedAt: null,
+      rejectedBy: null, rejectionReason: null, rejectedAt: null,
+      createdAt: now,
+      updatedAt: now,
     };
     await ref.set(record);
-    return { message: 'Shift summary submitted', uid: ref.id, count: areas.length };
+    return { message: 'Shift summary submitted for approval', uid: ref.id, count: enriched.length, totalWorkDone, status: 'submitted' };
+  }
+
+  async listShiftSummaries(query = {}, user) {
+    const { stationId, date, shift, supervisorId, status } = query;
+    let q = db.collection('stationShiftSummaries');
+    if (stationId) q = q.where('stationId', '==', stationId);
+    if (date) q = q.where('date', '==', date);
+    if (shift) q = q.where('shift', '==', shift);
+    if (status) q = q.where('status', '==', status);
+    const role = (user && user.role) ? String(user.role).toUpperCase() : '';
+    const isRailwayOrMaster = ['SUPER_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'ADMIN', 'RAILWAY_ADMIN', 'RAILWAY_INSPECTOR', 'RAILWAY_SUPERVISOR'].includes(role);
+    let snap;
+    try {
+      snap = await q.orderBy('submittedAt', 'desc').limit(200).get();
+    } catch (indexErr) {
+      snap = await q.limit(200).get();
+      const docs = [];
+      snap.forEach(d => docs.push(d));
+      docs.sort((a, b) => (b.data().submittedAt || '').localeCompare(a.data().submittedAt || ''));
+      const records = docs
+        .filter(d => {
+          if (supervisorId && d.data().supervisorId !== supervisorId) return false;
+          if (!isRailwayOrMaster && d.data().supervisorId !== user.uid) return false;
+          return true;
+        })
+        .map(d => ({ id: d.id, ...d.data() }));
+      return { count: records.length, summaries: records };
+    }
+    const summaries = [];
+    snap.forEach(d => {
+      const s = d.data();
+      if (supervisorId && s.supervisorId !== supervisorId) return;
+      if (!isRailwayOrMaster && s.supervisorId !== user.uid) return;
+      summaries.push({ id: d.id, ...s });
+    });
+    return { count: summaries.length, summaries };
+  }
+
+  async getShiftSummary(uid) {
+    const doc = await db.collection('stationShiftSummaries').doc(uid).get();
+    if (!doc.exists) throw new NotFoundError('Shift summary not found');
+    return { id: doc.id, ...doc.data() };
+  }
+
+  async approveShiftSummary(uid, user) {
+    const ref = db.collection('stationShiftSummaries').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Shift summary not found');
+    if (doc.data().status !== 'submitted') {
+      throw new ValidationError(`Only submitted shift summaries can be approved. Current: ${doc.data().status}`);
+    }
+    await ref.update({
+      status: 'approved',
+      approvedBy: user.uid,
+      approvedByName: user.fullName || user.name || 'Unknown',
+      approvedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return { message: 'Shift summary approved', uid };
+  }
+
+  async rejectShiftSummary(uid, reason, user) {
+    const ref = db.collection('stationShiftSummaries').doc(uid);
+    const doc = await ref.get();
+    if (!doc.exists) throw new NotFoundError('Shift summary not found');
+    if (doc.data().status !== 'submitted') {
+      throw new ValidationError(`Only submitted shift summaries can be rejected. Current: ${doc.data().status}`);
+    }
+    const rejectionReason = typeof reason === 'string' ? reason : (reason && reason.reason) || '';
+    await ref.update({
+      status: 'rejected',
+      rejectedBy: user.uid,
+      rejectedByName: user.fullName || user.name || 'Unknown',
+      rejectionReason,
+      rejectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return { message: 'Shift summary rejected', uid };
   }
 }
 

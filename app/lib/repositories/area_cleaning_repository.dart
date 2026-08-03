@@ -200,12 +200,12 @@ class AreaCleaningRepository {
     );
   }
 
-  static Future<CleaningTask> completeTask(String taskId, {required String afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
+  static Future<CleaningTask> completeTask(String taskId, {String? afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/$taskId/complete',
       body: {
-        'afterPhoto': afterPhoto,
+        if (afterPhoto != null) 'afterPhoto': afterPhoto,
         if (gpsLat != null) 'gpsLat': gpsLat,
         if (gpsLng != null) 'gpsLng': gpsLng,
         if (remarks != null) 'remarks': remarks,
@@ -214,12 +214,12 @@ class AreaCleaningRepository {
     );
   }
 
-  static Future<CleaningTask> resubmitTask(String taskId, {required String afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
+  static Future<CleaningTask> resubmitTask(String taskId, {String? afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/$taskId/resubmit',
       body: {
-        'afterPhoto': afterPhoto,
+        if (afterPhoto != null) 'afterPhoto': afterPhoto,
         if (gpsLat != null) 'gpsLat': gpsLat,
         if (gpsLng != null) 'gpsLng': gpsLng,
         if (remarks != null) 'remarks': remarks,

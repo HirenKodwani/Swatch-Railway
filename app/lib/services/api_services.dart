@@ -3970,6 +3970,77 @@ class ApiService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getShiftSummaries({
+    String? stationId,
+    String? date,
+    String? shift,
+    String? supervisorId,
+    String? status,
+  }) async {
+    try {
+      final token = await getToken();
+      final params = <String, String>{};
+      if (stationId != null) params['stationId'] = stationId;
+      if (date != null) params['date'] = date;
+      if (shift != null) params['shift'] = shift;
+      if (supervisorId != null) params['supervisorId'] = supervisorId;
+      if (status != null) params['status'] = status;
+      final uri = Uri.parse('$baseUrl/api/station-cleaning/shift-summaries')
+          .replace(queryParameters: params.isNotEmpty ? params : null);
+      final response = await http.get(uri, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['summaries'] as List).map((s) => Map<String, dynamic>.from(s as Map)).toList();
+      }
+      throw Exception('Failed to fetch shift summaries');
+    } catch (e) {
+      throw Exception('Error fetching shift summaries: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getShiftSummary(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/station-cleaning/shift-summaries/$uid'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to fetch shift summary');
+    } catch (e) {
+      throw Exception('Error fetching shift summary: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> approveShiftSummary(String uid) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning/shift-summaries/$uid/approve'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to approve shift summary');
+    } catch (e) {
+      throw Exception('Error approving shift summary: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> rejectShiftSummary(String uid, String reason) async {
+    try {
+      final token = await getToken();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/station-cleaning/shift-summaries/$uid/reject'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'reason': reason}),
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw Exception('Failed to reject shift summary');
+    } catch (e) {
+      throw Exception('Error rejecting shift summary: $e');
+    }
+  }
+
   static Future<Map<String, dynamic>> generateTasksFromSchedule(Map<String, dynamic> data) async {
     try {
       final token = await getToken();

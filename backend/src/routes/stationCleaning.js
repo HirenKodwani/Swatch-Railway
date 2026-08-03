@@ -138,7 +138,11 @@ router.get('/api/station-cleaning/submissions/my', verifyToken, requirePermissio
 router.get('/api/station-cleaning/submissions/list', verifyToken, requirePermission(PERMISSIONS.VIEW_SUBMISSIONS), stationCleaning.listAllSubmissions);
 router.put('/api/station-cleaning/submissions/:uid/review', verifyToken, requirePermission(PERMISSIONS.APPROVE_TASK), stationCleaning.reviewSubmission);
 
-// ─── Shift Summary (end-of-shift photo evidence) ──────────────────────────
+// ─── Shift Summary (end-of-shift photo evidence / work history) ────────────
 router.post('/api/station-cleaning/shift-summary', verifyToken, requirePermission(PERMISSIONS.SUBMIT_TASKS), stationCleaning.submitShiftSummary);
+router.get('/api/station-cleaning/shift-summaries', verifyToken, requirePermission(PERMISSIONS.VIEW_SHIFT_SUMMARIES), stationCleaning.listShiftSummaries);
+router.get('/api/station-cleaning/shift-summaries/:uid', verifyToken, requirePermission(PERMISSIONS.VIEW_SHIFT_SUMMARIES), stationCleaning.getShiftSummary);
+router.post('/api/station-cleaning/shift-summaries/:uid/approve', verifyToken, requirePermission(PERMISSIONS.APPROVE_SHIFT_SUMMARY), stationCleaning.approveShiftSummary);
+router.post('/api/station-cleaning/shift-summaries/:uid/reject', verifyToken, requirePermission(PERMISSIONS.REJECT_SHIFT_SUMMARY), stationCleaning.rejectShiftSummary);
 
 export default router;

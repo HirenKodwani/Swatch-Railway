@@ -52,7 +52,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   List<Map<String, dynamic>> _workers = [];
 
   // Photos
-  static const _statusChips = ['all', 'pending', 'assigned', 'in_progress', 'completed', 'approved', 'rejected'];
+  static const _statusChips = ['all', 'overdue', 'pending', 'assigned', 'in_progress', 'completed', 'approved', 'rejected'];
 
   @override
   void initState() {
@@ -134,7 +134,9 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
   List<Map<String, dynamic>> get _filteredTasks {
     var list = _tasks;
-    if (_taskFilter != 'all') {
+    if (_taskFilter == 'overdue') {
+      list = list.where((t) => t['isOverdue'] == true).toList();
+    } else if (_taskFilter != 'all') {
       list = list.where((t) => t['status'] == _taskFilter).toList();
     }
     list.sort((a, b) => ((a['scheduledTime'] ?? '00:00') as String).compareTo(b['scheduledTime'] ?? '00:00'));
@@ -146,6 +148,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
         ..sort((a, b) => ((a['scheduledTime'] ?? '00:00') as String).compareTo(b['scheduledTime'] ?? '00:00'));
 
   int get _pendingCount => _tasks.where((t) => t['status'] == 'pending').length;
+  int get _overdueCount => _tasks.where((t) => t['isOverdue'] == true).length;
   int get _inProgressCount => _tasks.where((t) => t['status'] == 'in_progress').length;
   int get _completedCount => _tasks.where((t) => t['status'] == 'completed' || t['status'] == 'approved').length;
 
@@ -236,7 +239,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('End of Shift'),
-        content: Text('Take photos of ${areas.length} area(s) to complete the shift.'),
+        content: Text('Record work done for at least 5 areas (photo + remark each) to submit the shift summary.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -260,7 +263,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
                 ),
               );
             },
-            child: const Text('Take Photos'),
+            child: const Text('Fill Summary'),
           ),
         ],
       ),
@@ -554,7 +557,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              Text('Pending: $_pendingCount  |  In Progress: $_inProgressCount  |  Done: $_completedCount',
+              Text('Pending: $_pendingCount  |  In Progress: $_inProgressCount  |  Overdue: $_overdueCount  |  Done: $_completedCount',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600])),
             ],
           ),
@@ -598,6 +601,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
   Widget _buildTaskCard(Map<String, dynamic> t) {
     final status = t['status'] ?? 'pending';
+    final isOverdue = t['isOverdue'] == true;
     final areaName = t['areaName'] ?? '';
     final time = t['scheduledTime'] ?? '--:--';
     final workerName = t['workerName'] ?? '';
@@ -606,13 +610,44 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: isOverdue
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: kErrorRed, width: 1.5),
+            )
+          : null,
       child: ExpansionTile(
-        leading: Icon(_statusIcon(status), color: _statusColor(status), size: 28),
+        leading: Icon(isOverdue ? Icons.error : _statusIcon(status), color: isOverdue ? kErrorRed : _statusColor(status), size: 28),
         title: Text('$time - ${areaName.isNotEmpty ? areaName : 'Area'}',
             style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-        subtitle: Text('${status.replaceAll('_', ' ')}${workerName.isNotEmpty ? ' | $workerName' : ''}',
-            style: TextStyle(fontSize: 12, color: _statusColor(status))),
+        subtitle: Text(
+          isOverdue ? 'Overdue | ${status.replaceAll('_', ' ')}${workerName.isNotEmpty ? ' | $workerName' : ''}'
+                    : '${status.replaceAll('_', ' ')}${workerName.isNotEmpty ? ' | $workerName' : ''}',
+          style: TextStyle(fontSize: 12, color: isOverdue ? kErrorRed : _statusColor(status)),
+        ),
         children: [
+          if (isOverdue)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: kErrorRed.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber, color: kErrorRed, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Overdue — you missed the time of cleaning',
+                      style: TextStyle(color: kErrorRed, fontWeight: FontWeight.w600, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (rejectionReason != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1018,9 +1053,9 @@ class _SupervisorTaskExecutionSheetState extends State<_SupervisorTaskExecutionS
   }
 
   bool _canProceed() {
-    if (currentStep == 0) return beforePhoto != null;
+    if (currentStep == 0) return true;
     if (currentStep == 1) return _commentCtrl.text.isNotEmpty;
-    if (currentStep == 2) return afterPhoto != null;
+    if (currentStep == 2) return true;
     return true;
   }
 
@@ -1040,8 +1075,14 @@ class _SupervisorTaskExecutionSheetState extends State<_SupervisorTaskExecutionS
       final token = prefs.getString('token');
       if (token == null) throw Exception('AUTH_ERROR');
 
-      final beforeUrl = await WorkerRepository.uploadMedia(beforePhoto!.path);
-      final afterUrl = await WorkerRepository.uploadMedia(afterPhoto!.path);
+      String? beforeUrl;
+      String? afterUrl;
+      if (beforePhoto != null) {
+        beforeUrl = await WorkerRepository.uploadMedia(beforePhoto!.path);
+      }
+      if (afterPhoto != null) {
+        afterUrl = await WorkerRepository.uploadMedia(afterPhoto!.path);
+      }
 
       double? lat, lng;
       try {
@@ -1053,10 +1094,10 @@ class _SupervisorTaskExecutionSheetState extends State<_SupervisorTaskExecutionS
       } catch (_) {}
 
       final body = <String, dynamic>{
-        'beforePhoto': beforeUrl,
-        'afterPhoto': afterUrl,
         'remarks': _commentCtrl.text.trim(),
       };
+      if (beforeUrl != null) { body['beforePhoto'] = beforeUrl; }
+      if (afterUrl != null) { body['afterPhoto'] = afterUrl; }
       if (lat != null) { body['gpsLat'] = lat; body['gpsLng'] = lng; }
 
       final endpoint = widget.mode == 'complete' ? 'complete' : 'resubmit';

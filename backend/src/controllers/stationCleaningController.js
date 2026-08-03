@@ -399,6 +399,26 @@ export const reviewSubmission = asyncHandler(async (req, res) => {
 });
 
 export const submitShiftSummary = asyncHandler(async (req, res) => {
-  const result = await stationCleaningService.submitShiftSummary(req.body);
+  const result = await stationCleaningService.submitShiftSummary(req.body, req.user);
   res.status(201).json({ success: true, ...result });
+});
+
+export const listShiftSummaries = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.listShiftSummaries(req.query, req.user);
+  res.status(200).json({ success: true, ...result });
+});
+
+export const getShiftSummary = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.getShiftSummary(req.params.uid);
+  res.status(200).json({ success: true, ...result });
+});
+
+export const approveShiftSummary = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.approveShiftSummary(req.params.uid, req.user);
+  res.status(200).json({ success: true, ...result });
+});
+
+export const rejectShiftSummary = asyncHandler(async (req, res) => {
+  const result = await stationCleaningService.rejectShiftSummary(req.params.uid, req.body, req.user);
+  res.status(200).json({ success: true, ...result });
 });

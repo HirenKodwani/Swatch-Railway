@@ -131,12 +131,10 @@ class TaskManagementService {
       throw new ValidationError(`Only in-progress or resubmitted tasks can be completed. Current: ${task.status}`);
     }
 
-    if (!data.afterPhoto) throw new ValidationError('After photo is required to complete task');
-
     const updates = {
       status: 'completed',
       completedAt: new Date().toISOString(),
-      afterPhoto: data.afterPhoto,
+      afterPhoto: data.afterPhoto || task.afterPhoto || null,
       gpsLat: data.gpsLat || task.gpsLat || null,
       gpsLng: data.gpsLng || task.gpsLng || null,
       remarks: data.remarks || task.remarks || '',
@@ -153,12 +151,10 @@ class TaskManagementService {
     const task = doc.data();
     if (task.status !== 'rejected') throw new ValidationError('Only rejected tasks can be resubmitted');
 
-    if (!data.afterPhoto) throw new ValidationError('After photo is required to resubmit');
-
     const updates = {
       status: 'resubmitted',
       resubmittedAt: new Date().toISOString(),
-      afterPhoto: data.afterPhoto,
+      afterPhoto: data.afterPhoto || task.afterPhoto || null,
       gpsLat: data.gpsLat || task.gpsLat || null,
       gpsLng: data.gpsLng || task.gpsLng || null,
       remarks: data.remarks || task.remarks || '',
@@ -398,7 +394,17 @@ class TaskManagementService {
       .where('supervisorId', '==', supervisorId)
       .get();
     let tasks = [];
-    snapshot.forEach(doc => tasks.push({ id: doc.id, ...doc.data() }));
+    const now = new Date();
+    snapshot.forEach(doc => {
+      const t = { id: doc.id, ...doc.data() };
+      const taskDate = t.date || t.scheduledDate || '';
+      const taskTime = t.scheduledTime || '23:59';
+      const taskDateTime = new Date(`${taskDate}T${taskTime}:00`);
+      const actionableStatuses = ['pending', 'assigned', 'in_progress'];
+      t.isOverdue = actionableStatuses.includes(t.status) && taskDateTime < now;
+      t.isDue = actionableStatuses.includes(t.status) && !t.isOverdue;
+      tasks.push(t);
+    });
     if (date) {
       tasks = tasks.filter(t => t.date === date || t.scheduledDate === date);
     }
