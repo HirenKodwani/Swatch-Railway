@@ -104,11 +104,15 @@ class StationCleaningAttendanceService {
     let attendanceDocId = `${effectiveRunId}_${workerId}`;
     let attendanceRef = db.collection('station_cleaning_attendance').doc(attendanceDocId);
     let attendanceDoc = await attendanceRef.get();
-    
+
     if (latestDoc && getISTDateString(new Date(latestDoc.data().createdAt)) === todayIST) {
         attendanceDoc = latestDoc;
         attendanceDocId = latestDoc.id;
         attendanceRef = db.collection('station_cleaning_attendance').doc(attendanceDocId);
+    } else if (attendanceDoc.exists && attendanceDoc.data().date !== todayIST) {
+        attendanceDocId = `${effectiveRunId}_${workerId}_${todayIST}`;
+        attendanceRef = db.collection('station_cleaning_attendance').doc(attendanceDocId);
+        attendanceDoc = await attendanceRef.get();
     }
     const attendanceEntry = {
       photoUrl: imageUrl, deviceTimestamp, serverTimestamp: new Date().toISOString(),
