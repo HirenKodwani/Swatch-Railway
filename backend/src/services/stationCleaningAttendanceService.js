@@ -22,14 +22,14 @@ class StationCleaningAttendanceService {
     let lateByMinutes = 0;
     let firstAttendanceTime = null;
 
-    // Liveness verification disabled for station cleaning module
-    // if (livenessChallenge) {
-    //   const { verifyFaceLiveness } = await import('./rekognitionService.js');
-    //   const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
-    //   if (!livenessResult.matched) {
-    //     throw new ValidationError(`Liveness Verification Failed: ${livenessResult.reason}`);
-    //   }
-    // }
+    // Liveness (biometric) verification — mirrors OBHS attendance flow
+    if (livenessChallenge) {
+      const { verifyFaceLiveness } = await import('./rekognitionService.js');
+      const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
+      if (!livenessResult.matched && !livenessResult.error) {
+        throw new ValidationError(`Liveness Verification Failed: ${livenessResult.reason}`);
+      }
+    }
 
     try {
       if (runInstanceId && attendanceType === 'start') {

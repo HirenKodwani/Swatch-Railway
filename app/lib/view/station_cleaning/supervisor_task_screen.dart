@@ -156,7 +156,60 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
   final _picker = ImagePicker();
 
+  String _generateLivenessChallenge() {
+    const challenges = ['THUMBS_UP', 'FIST', 'SMILE'];
+    return challenges[DateTime.now().millisecond % challenges.length];
+  }
+
+  String _livenessChallengeText(String challenge) {
+    switch (challenge) {
+      case 'THUMBS_UP': return 'Thumbs Up gesture';
+      case 'FIST': return 'Fist gesture';
+      case 'SMILE': return 'wide Smile';
+      default: return challenge;
+    }
+  }
+
   Future<void> _markAttendance(String type) async {
+    final challenge = _generateLivenessChallenge();
+    final challengeText = _livenessChallengeText(challenge);
+
+    bool proceed = false;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Liveness Check'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.camera_front, size: 50, color: kRailwayBlue),
+            const SizedBox(height: 10),
+            Text(
+              'Please take a selfie showing a:\n\n$challengeText\n\n(Keep your face clearly visible!)',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              proceed = true;
+              Navigator.pop(ctx);
+            },
+            child: const Text('Open Camera'),
+          ),
+        ],
+      ),
+    );
+
+    if (!proceed) return;
+
     final photo = await _picker.pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
@@ -183,6 +236,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
         imageUrl: photoUrl,
         latitude: pos?.latitude,
         longitude: pos?.longitude,
+        livenessChallenge: challenge,
       );
 
       setState(() {

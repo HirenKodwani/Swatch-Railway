@@ -83,7 +83,7 @@ export async function compareFaces(image1Url, image2Url) {
 export async function verifyFaceLiveness(imageUrl, expectedChallenge) {
   try {
     if (!imageUrl || imageUrl.includes('undefined')) {
-      return { matched: false, reason: 'Invalid image URL.' };
+      return { matched: false, reason: 'Invalid image URL.', error: true };
     }
 
     const rekognition = getRekognitionClient();
@@ -127,6 +127,6 @@ export async function verifyFaceLiveness(imageUrl, expectedChallenge) {
     return { matched: true };
   } catch (err) {
     console.error('[Rekognition Liveness] Error:', err.message);
-    return { matched: false, reason: 'Liveness verification failed due to internal error.' };
+    return { matched: false, reason: 'Liveness verification failed due to internal error.', error: true };
   }
 }
