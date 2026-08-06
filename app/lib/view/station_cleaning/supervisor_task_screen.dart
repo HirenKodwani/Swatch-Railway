@@ -164,6 +164,38 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
     return 'wide Smile';
   }
 
+  Future<Position?> _captureGps() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (e) {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) return lastKnown;
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _markAttendance(String type) async {
     final challenge = _generateLivenessChallenge();
     final challengeText = _livenessChallengeText(challenge);
@@ -216,12 +248,15 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
     try {
       final photoUrl = await WorkerRepository.uploadMedia(photo.path);
 
-      Position? pos;
-      try {
-        pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-        );
-      } catch (_) {}
+      final pos = await _captureGps();
+      if (pos == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not get GPS. Check location permissions.'), backgroundColor: kWarningOrange),
+          );
+        }
+        return;
+      }
 
       await StationCleaningRepository.markStationAttendance(
         type: type,
@@ -419,7 +454,10 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
       builder: (_) => _SupervisorTaskExecutionSheet(
         taskId: taskId,
         mode: 'complete',
-        onDone: () { _loadTasks(); Navigator.pop(context); },
+        onDone: () async {
+          await _loadTasks();
+          if (mounted) Navigator.pop(context);
+        },
       ),
     );
   }
@@ -432,7 +470,10 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
       builder: (_) => _SupervisorTaskExecutionSheet(
         taskId: taskId,
         mode: 'resubmit',
-        onDone: () { _loadTasks(); Navigator.pop(context); },
+        onDone: () async {
+          await _loadTasks();
+          if (mounted) Navigator.pop(context);
+        },
       ),
     );
   }
