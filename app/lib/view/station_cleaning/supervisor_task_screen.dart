@@ -157,17 +157,11 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   final _picker = ImagePicker();
 
   String _generateLivenessChallenge() {
-    const challenges = ['THUMBS_UP', 'FIST', 'SMILE'];
-    return challenges[DateTime.now().millisecond % challenges.length];
+    return 'SMILE';
   }
 
   String _livenessChallengeText(String challenge) {
-    switch (challenge) {
-      case 'THUMBS_UP': return 'Thumbs Up gesture';
-      case 'FIST': return 'Fist gesture';
-      case 'SMILE': return 'wide Smile';
-      default: return challenge;
-    }
+    return 'wide Smile';
   }
 
   Future<void> _markAttendance(String type) async {

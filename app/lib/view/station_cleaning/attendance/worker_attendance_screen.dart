@@ -45,17 +45,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
   }
 
   void _generateChallenge() {
-    final challenges = ['THUMBS_UP', 'FIST', 'SMILE'];
-    _livenessChallenge = challenges[DateTime.now().millisecond % challenges.length];
-  }
-
-  String _challengeDisplayText() {
-    switch (_livenessChallenge) {
-      case 'THUMBS_UP': return 'Thumbs Up gesture';
-      case 'FIST': return 'Fist gesture';
-      case 'SMILE': return 'wide Smile';
-      default: return _livenessChallenge;
-    }
+    _livenessChallenge = 'SMILE';
   }
 
   Future<Map<String, dynamic>?> _captureSelfie() async {
@@ -190,7 +180,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Show a ${_challengeDisplayText()} in your selfie.\nCamera capture only.',
+                    'Show a wide smile in your selfie.\nCamera capture only.',
                     style: const TextStyle(color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
@@ -198,7 +188,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
 
                   _buildVerificationCard(
                     title: 'Selfie Verification',
-                    subtitle: _selfie != null ? 'Selfie captured successfully' : 'Take a selfie with ${_challengeDisplayText()}',
+                    subtitle: _selfie != null ? 'Selfie captured successfully' : 'Take a selfie with a wide smile',
                     icon: Icons.camera_front,
                     isVerified: _selfie != null,
                     isVerifying: _isCapturingSelfie,

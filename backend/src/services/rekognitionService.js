@@ -103,7 +103,7 @@ export async function verifyFaceLiveness(imageUrl, expectedChallenge) {
       if (expectedChallenge === 'FIST' && (labels.includes('FIST') || labels.includes('HAND') || labels.includes('FINGERS'))) isMatch = true;
 
       if (!isMatch) {
-        return { matched: false, reason: `Could not detect ${expectedChallenge} gesture in the photo.` };
+        return { matched: false, reason: `Could not detect ${expectedChallenge} gesture in the photo.`, error: true };
       }
       return { matched: true };
     }
