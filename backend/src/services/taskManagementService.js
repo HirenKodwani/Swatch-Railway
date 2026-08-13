@@ -415,6 +415,33 @@ class TaskManagementService {
     return { count: tasks.length, tasks };
   }
 
+  _resolveActivityForArea(areaId, areaData, data = {}) {
+    const { areaActivities, activityType, taskTypeId, taskTypeName } = data;
+    const perArea = areaActivities ? areaActivities[areaId] : null;
+    if (perArea) {
+      if (typeof perArea === 'string') {
+        return {
+          id: null,
+          name: perArea,
+          label: perArea.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        };
+      }
+      return {
+        id: perArea.uid || perArea.id || taskTypeId || null,
+        name: perArea.name || taskTypeName || '',
+        label: perArea.label || (perArea.name ? perArea.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : taskTypeName || (areaData.areaType || 'Cleaning'))
+      };
+    }
+    if (activityType) {
+      return {
+        id: taskTypeId || null,
+        name: taskTypeName || activityType,
+        label: activityType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      };
+    }
+    return null;
+  }
+
   async bulkGenerate(data, user) {
     const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
@@ -481,6 +508,7 @@ class TaskManagementService {
         areaDoc = await db.collection('stationAreas').doc(areaId).get();
       }
       const areaData = areaDoc.exists ? areaDoc.data() : {};
+      const activity = this._resolveActivityForArea(areaId, areaData, data);
       const cleaningFrequency = frequency || areaData.cleaningFrequency || areaData.frequency || 'daily';
       const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
       const baseAreaName = areaData.areaName || areaData.name || '';
@@ -527,7 +555,9 @@ class TaskManagementService {
               supervisorId: assignedSupervisorId || areaData.supervisorId || null,
               supervisorName: assignedSupervisorName || areaData.supervisorName || '',
               assignmentId: null,
-              activityType: areaData.areaType || 'Cleaning',
+              activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
+              taskTypeId: activity ? activity.id : null,
+              taskTypeName: activity ? activity.name : null,
               frequency: cleaningFrequency,
               date: targetDate,
               scheduledDate: targetDate,
@@ -570,7 +600,9 @@ class TaskManagementService {
               supervisorId: assignedSupervisorId || areaData.supervisorId || null,
               supervisorName: assignedSupervisorName || areaData.supervisorName || '',
               assignmentId: null,
-              activityType: areaData.areaType || 'Cleaning',
+              activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
+              taskTypeId: activity ? activity.id : null,
+              taskTypeName: activity ? activity.name : null,
               frequency: cleaningFrequency,
               date: targetDate,
               scheduledDate: targetDate,
@@ -615,7 +647,9 @@ class TaskManagementService {
                 supervisorId: assignedSupervisorId || areaData.supervisorId || null,
               supervisorName: assignedSupervisorName || areaData.supervisorName || '',
                 assignmentId: assignment.uid,
-                activityType: areaData.areaType || 'Cleaning',
+                activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
+                taskTypeId: activity ? activity.id : null,
+                taskTypeName: activity ? activity.name : null,
                 frequency: cleaningFrequency,
                 date: targetDate,
                 scheduledDate: targetDate,
@@ -659,7 +693,9 @@ class TaskManagementService {
               supervisorId: assignedSupervisorId,
               supervisorName: assignedSupervisorName || '',
               assignmentId: null,
-              activityType: areaData.areaType || 'Cleaning',
+              activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
+              taskTypeId: activity ? activity.id : null,
+              taskTypeName: activity ? activity.name : null,
               frequency: cleaningFrequency,
               date: targetDate,
               scheduledDate: targetDate,
@@ -707,7 +743,7 @@ class TaskManagementService {
 
     while (current <= end) {
       const dateStr = current.toISOString().split('T')[0];
-      const result = await this.bulkGenerate({ areaIds, date: dateStr, workerId, shift: data.shift }, user);
+      const result = await this.bulkGenerate({ areaIds, date: dateStr, workerId, shift: data.shift, activityType: data.activityType, areaActivities: data.areaActivities, taskTypeId: data.taskTypeId, taskTypeName: data.taskTypeName }, user);
       total += result.count;
       allTaskIds.push(...result.taskIds);
       current.setDate(current.getDate() + 1);

@@ -325,6 +325,7 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
                                 final t = _filteredTasks[i];
                                 final status = t['status'] ?? 'pending';
                                 final areaName = t['areaName'] ?? '';
+                                final activityName = t['activityType'] ?? t['taskTypeName'] ?? 'Cleaning';
                                 final time = t['scheduledTime'] ?? '--:--';
                                 final rejectionReason = t['rejectionReason'];
 
@@ -332,9 +333,9 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
                                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                   child: ExpansionTile(
                                     leading: Icon(_statusIcon(status), color: _statusColor(status), size: 28),
-                                    title: Text('$time - ${areaName.isNotEmpty ? areaName : 'Area'}',
+                                    title: Text('$time - $activityName',
                                         style: const TextStyle(fontWeight: FontWeight.w500)),
-                                    subtitle: Text('Status: ${status.replaceAll('_', ' ')}'),
+                                    subtitle: Text('${areaName.isNotEmpty ? areaName : 'Area'} | Status: ${status.replaceAll('_', ' ')}'),
                                     children: [
                                       if (rejectionReason != null)
                                         Padding(

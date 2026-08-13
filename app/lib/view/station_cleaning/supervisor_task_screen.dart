@@ -692,6 +692,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
     final status = t['status'] ?? 'pending';
     final isOverdue = t['isOverdue'] == true;
     final areaName = t['areaName'] ?? '';
+    final activityName = t['activityType'] ?? t['taskTypeName'] ?? 'Cleaning';
     final time = t['scheduledTime'] ?? '--:--';
     final workerName = t['workerName'] ?? '';
     final taskId = t['uid'] ?? t['id'];
@@ -707,11 +708,12 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
           : null,
       child: ExpansionTile(
         leading: Icon(isOverdue ? Icons.error : _statusIcon(status), color: isOverdue ? kErrorRed : _statusColor(status), size: 28),
-        title: Text('$time - ${areaName.isNotEmpty ? areaName : 'Area'}',
+        title: Text('$time - $activityName',
             style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
         subtitle: Text(
-          isOverdue ? 'Overdue | ${status.replaceAll('_', ' ')}${workerName.isNotEmpty ? ' | $workerName' : ''}'
-                    : '${status.replaceAll('_', ' ')}${workerName.isNotEmpty ? ' | $workerName' : ''}',
+          '${areaName.isNotEmpty ? areaName : 'Area'}'
+          '${isOverdue ? ' | Overdue' : ''}'
+          '${workerName.isNotEmpty ? ' | $workerName' : ''}',
           style: TextStyle(fontSize: 12, color: isOverdue ? kErrorRed : _statusColor(status)),
         ),
         children: [
@@ -842,6 +844,7 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
               itemBuilder: (ctx, i) {
                 final t = _unassignedTasks[i];
                 final areaName = t['areaName'] ?? '';
+                final activityName = t['activityType'] ?? t['taskTypeName'] ?? 'Cleaning';
                 final time = t['scheduledTime'] ?? '--:--';
                 final taskId = t['uid'] ?? t['id'];
                 return Card(
@@ -851,8 +854,8 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
                       backgroundColor: Colors.orange.withOpacity(0.15),
                       child: const Icon(Icons.schedule, color: Colors.orange),
                     ),
-                    title: Text('$time - ${areaName.isNotEmpty ? areaName : 'Area'}'),
-                    subtitle: Text('${t['frequency'] ?? ''} | ${t['shift'] ?? ''}'),
+                    title: Text('$time - $activityName'),
+                    subtitle: Text('${areaName.isNotEmpty ? areaName : 'Area'} | ${t['frequency'] ?? ''} | ${t['shift'] ?? ''}'),
                     trailing: ElevatedButton.icon(
                       icon: const Icon(Icons.person_add, size: 16),
                       label: const Text('Assign'),
