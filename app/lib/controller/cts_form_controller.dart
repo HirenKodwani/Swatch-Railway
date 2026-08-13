@@ -661,7 +661,7 @@ class CTSFormController extends GetxController {
           trainId: selectedTrain.value!.uid ?? '',
           trainNumber: selectedTrain.value!.trainNo ?? '',
           trainName: selectedTrain.value!.trainName ?? '',
-          jobDate: jobDateTime.value.toIso8601String(),
+          formDateTime: jobDateTime.value.toIso8601String(),
           actArrival: actualArrivalDateTime.value?.toIso8601String() ?? '',
           actDeparture: actualDepartureDateTime.value?.toIso8601String() ?? '',
           workStart: workStartDateTime.value?.toIso8601String() ?? '',

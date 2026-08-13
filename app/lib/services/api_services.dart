@@ -2658,7 +2658,7 @@ class ApiService {
       final token = await getToken();
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/cts'),
+        Uri.parse('$baseUrl/api/cts-forms'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -2701,7 +2701,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cts'),
+        Uri.parse('$baseUrl/api/cts-forms'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -2725,7 +2725,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/cts?type=history'),
+        Uri.parse('$baseUrl/api/cts-forms?type=history'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -2750,11 +2750,11 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts/$formId/approve-manpower";
+      final String endpoint = "/api/cts-forms/$formId/approve-manpower";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.put(
+      final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2778,11 +2778,11 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts/$formId/reject";
+      final String endpoint = "/api/cts-forms/$formId/reject";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.put(
+      final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2820,7 +2820,7 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts/$formId/scoring";
+      final String endpoint = "/api/cts-forms/$formId/submit-scoring";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
@@ -2833,7 +2833,7 @@ class ApiService {
         "railwaySignatureDate": railwaySignatureDate,
       };
 
-      final response = await http.put(
+      final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2868,11 +2868,11 @@ class ApiService {
   }) async {
     try {
       final token = await getToken();
-      final String endpoint = "/api/cts/$formId/accept-rating";
+      final String endpoint = "/api/cts-forms/$formId/accept-rating";
 
       final Uri url = Uri.parse("$baseUrl$endpoint");
 
-      final response = await http.put(
+      final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
@@ -2905,7 +2905,7 @@ class ApiService {
     required String trainId,
     required String trainNumber,
     required String trainName,
-    required String jobDate,
+    required String formDateTime,
     required String actArrival,
     required String actDeparture,
     required String workStart,
@@ -2929,14 +2929,14 @@ class ApiService {
       throw Exception('No token found');
     }
 
-    final url = Uri.parse('$baseUrl/api/cts/$formId/resubmit');
+    final url = Uri.parse('$baseUrl/api/cts-forms/$formId/resubmit');
 
     final body = jsonEncode({
       'contractorRemarks': contractorRemarks,
       'trainId': trainId,
       'trainNumber': trainNumber,
       'trainName': trainName,
-      'jobDate': jobDate,
+      'formDateTime': formDateTime,
       'actArrival': actArrival,
       'actDeparture': actDeparture,
       'workStart': workStart,
