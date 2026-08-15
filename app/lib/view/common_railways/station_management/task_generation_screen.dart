@@ -10,8 +10,6 @@ import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/repositories/area_cleaning_repository.dart';
 import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/services/api_services.dart';
-import 'package:crm_train/model/task_type_model.dart';
-import 'package:crm_train/repositories/task_type_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:intl/intl.dart';
 
@@ -33,7 +31,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   List<StationArea> _allAreas = [];
   List<RailwayWorkerModel> _workers = [];
   List<RailwayWorkerModel> _supervisors = [];
-  List<TaskType> _taskTypes = [];
 
   Station? _selectedStation;
   Platform? _selectedPlatform; // Null means "All Platforms"
@@ -41,7 +38,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   String _selectedShift = 'Morning';
   String _selectedFrequency = 'daily';
   RailwayWorkerModel? _selectedSupervisor;
-  TaskType? _selectedActivity;
 
   String? _assignedPlatformId;
   bool _isStationLocked = false;
@@ -50,7 +46,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   // Selected areas and worker assignments
   final Set<String> _selectedAreaIds = {};
   final Map<String, List<RailwayWorkerModel>> _areaWorkerAssignments = {};
-  final Map<String, List<TaskType>> _areaActivities = {};
 
   String? _loadError;
   bool _areaLoadFailed = false;
@@ -114,15 +109,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         debugPrint('Error loading workers: $e');
       }
 
-      List<TaskType> cleaningTypes = [];
-      try {
-        final taskTypes = await TaskTypeRepository.list(isActive: true);
-        cleaningTypes = taskTypes.where((t) => t.category == 'cleaning' || t.category.isEmpty).toList();
-        if (cleaningTypes.isEmpty) cleaningTypes = taskTypes;
-      } catch (e) {
-        debugPrint('Error loading task types: $e');
-      }
-
       // Load only Contractor Supervisors (approved, real users)
       final supList = uniqueWorkers.where((w) {
         final role = w.role.toLowerCase().replaceAll('_', ' ');
@@ -134,7 +120,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _stations = filtered;
           _workers = uniqueWorkers;
           _supervisors = supList;
-          _taskTypes = cleaningTypes;
           _assignedPlatformId = assignedPlatformId;
           _isPlatformLocked = false;
           _isStationLocked = stationLocked;
@@ -175,7 +160,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           }
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
-          _areaActivities.clear();
         });
       }
     } catch (e) {
@@ -199,7 +183,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = false;
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
-          _areaActivities.clear();
         });
       }
     } catch (e) {
@@ -210,7 +193,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = true;
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
-          _areaActivities.clear();
         });
       }
     }
@@ -370,112 +352,13 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       setState(() {
         _selectedAreaIds.remove(areaId);
         _areaWorkerAssignments.remove(areaId);
-        _areaActivities.remove(areaId);
       });
       return;
     }
-    _pickActivities(area).then((picked) {
-      if (picked == null || picked.isEmpty) return;
-      setState(() {
-        _selectedAreaIds.add(areaId);
-        _areaWorkerAssignments[areaId] = [];
-        _areaActivities[areaId] = picked;
-      });
-    });
-  }
-
-  Future<void> _changeActivity(StationArea area) async {
-    final picked = await _pickActivities(area);
-    if (picked == null || picked.isEmpty) return;
     setState(() {
-      _areaActivities[area.uid ?? area.name] = picked;
+      _selectedAreaIds.add(areaId);
+      _areaWorkerAssignments[areaId] = [];
     });
-  }
-
-  String _activityLabel(String areaId) {
-    final list = _areaActivities[areaId];
-    if (list != null && list.isNotEmpty) {
-      return list.map((t) => t.label).join(', ');
-    }
-    final tt = _selectedActivity;
-    return tt != null ? tt.label : 'Cleaning';
-  }
-
-  Future<List<TaskType>?> _pickActivities(StationArea area) async {
-    final areaId = area.uid ?? area.name;
-    final current = List<TaskType>.from(_areaActivities[areaId] ?? []);
-    if (_taskTypes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No activities configured. Add them under Task Master first.'), backgroundColor: kWarningOrange),
-      );
-      return null;
-    }
-    return showDialog<List<TaskType>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final selected = List<TaskType>.from(current);
-          return AlertDialog(
-            title: Text('Select Activities: ${area.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Select one or more cleaning activities for this area.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 12),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.5,
-                    ),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _taskTypes.length,
-                      itemBuilder: (context, index) {
-                        final tt = _taskTypes[index];
-                        final isSelected = selected.any((t) => t.uid == tt.uid || t.name == tt.name);
-                        return CheckboxListTile(
-                          title: Text(tt.label, style: const TextStyle(fontWeight: FontWeight.w500)),
-                          subtitle: Text(tt.name),
-                          value: isSelected,
-                          onChanged: (val) {
-                            setDialogState(() {
-                              if (val == true) {
-                                if (!selected.any((t) => t.uid == tt.uid || t.name == tt.name)) {
-                                  selected.add(tt);
-                                }
-                              } else {
-                                selected.removeWhere((t) => t.uid == tt.uid || t.name == tt.name);
-                              }
-                            });
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context, selected);
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
-                child: const Text('Select'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
   }
 
   Future<void> _generateTasks() async {
@@ -532,24 +415,12 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           ? platformAssignments.map((pa) => pa.areaId).whereType<String>().toSet().toList()
           : _selectedAreaIds.toList();
       final workerIds = platformAssignments.map((pa) => pa.janitorId).whereType<String>().toSet().toList();
-      final areaActivities = <String, dynamic>{};
-      for (final entry in _areaActivities.entries) {
-        areaActivities[entry.key] = entry.value.map((tt) => {
-          'uid': tt.uid,
-          'name': tt.name,
-          'label': tt.label,
-        }).toList();
-      }
       await AreaCleaningRepository.generateTasks(
         areaIds: areaIds,
         date: todayStr,
         workerIds: workerIds.isNotEmpty ? workerIds : null,
         supervisorId: _selectedSupervisor?.uid,
         frequency: _selectedFrequency,
-        activityType: _selectedActivity?.name,
-        taskTypeId: _selectedActivity?.uid,
-        taskTypeName: _selectedActivity?.name,
-        areaActivities: areaActivities.isNotEmpty ? areaActivities : null,
       );
 
       if (mounted) {
@@ -627,7 +498,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                   _selectedStation = v;
                                   _selectedAreaIds.clear();
                                   _areaWorkerAssignments.clear();
-                                  _areaActivities.clear();
                                 });
                                 await _loadStationData(v.uid!);
                               }
@@ -703,28 +573,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Activity (Cleaning Task Type) Dropdown - default applied to all areas
-                          DropdownButtonFormField<TaskType>(
-                            value: _taskTypes.isEmpty ? null : _selectedActivity,
-                            decoration: const InputDecoration(labelText: 'Default Activity', border: OutlineInputBorder(), prefixIcon: Icon(Icons.checklist), hintText: 'Cleaning (default)'),
-                            items: [
-                              const DropdownMenuItem<TaskType>(value: null, child: Text('Cleaning (default)')),
-                              ..._taskTypes.map((tt) => DropdownMenuItem(value: tt, child: Text(tt.label))),
-                            ],
-                            onChanged: (v) {
-                              setState(() => _selectedActivity = v);
-                            },
-                          ),
-                          const SizedBox(height: 4),
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Text(
-                              'Per-area activities can be set after selecting an area.',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
                           // Supervisor Assignment
                           DropdownButtonFormField<RailwayWorkerModel>(
                             value: _selectedSupervisor,
@@ -774,7 +622,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Tap an area to choose its activities. Then assign workers (and set per-area activities) using the buttons on the selected card.',
+                            'Tap an area to select it, then assign workers using the button on the selected card.',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 16),
@@ -856,27 +704,14 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                                 area.name,
                                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
                                               ),
-                                              const SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    _frequencyLabel(area.cleaningFrequency ?? 'daily'),
-                                                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                                                  ),
-                                                ],
-                                              ),
                                                const SizedBox(height: 4),
                                                Row(
                                                  children: [
-                                                   Icon(Icons.cleaning_services, size: 14, color: isSelected ? kRailwayBlue : Colors.grey[500]),
+                                                   Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
                                                    const SizedBox(width: 4),
-                                                   Expanded(
-                                                     child: Text(
-                                                       _activityLabel(areaId),
-                                                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? kRailwayBlue : Colors.grey[600]),
-                                                     ),
+                                                   Text(
+                                                     _frequencyLabel(area.cleaningFrequency ?? 'daily'),
+                                                     style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                                                    ),
                                                  ],
                                                ),
@@ -898,13 +733,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                             ],
                                           ),
                                         ),
-                                        if (isSelected)
-                                          IconButton(
-                                            icon: const Icon(Icons.cleaning_services, size: 20, color: kRailwayBlue),
-                                            tooltip: 'Change Activities',
-                                            onPressed: () => _changeActivity(area),
-                                            visualDensity: VisualDensity.compact,
-                                          ),
                                         if (isSelected)
                                           IconButton(
                                             icon: const Icon(Icons.person_add_alt_1, size: 20, color: kRailwayBlue),
