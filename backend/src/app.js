@@ -38,6 +38,7 @@ import analyticsRoutes from './routes/analytics.js';
 import complaintRoutes from './routes/complaint.js';
 import deploymentRoutes from './routes/deployment.js';
 import executionRoutes from './routes/execution.js';
+import executionSheetRoutes from './routes/executionSheet.js';
 import inspectionRoutes from './routes/inspection.js';
 import scorecardRoutes from './routes/scorecard.js';
 import shiftRoutes from './routes/shift.js';
@@ -128,6 +129,7 @@ app.use(tasksV2Routes);                           // /api/tasks/* (v2 task manag
 app.use(complaintRoutes);                         // /api/complaints/*
 app.use(deploymentRoutes);                        // /api/deployments/*
 app.use(executionRoutes);                         // /api/execution-plans/*
+app.use(executionSheetRoutes);                    // /api/execution-sheet/*
 app.use(inspectionRoutes);                        // /api/inspections/*
 app.use(scorecardRoutes);                         // /api/scorecards/*
 app.use(shiftRoutes);                             // /api/shifts/*
