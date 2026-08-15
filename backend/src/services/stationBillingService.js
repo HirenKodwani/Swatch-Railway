@@ -161,6 +161,41 @@ class StationBillingService {
       logger.warn(`Execution sheet summary skipped for ${stationId} ${month}/${year}: ${err.message}`);
     }
 
+    // ── Inspection Score (20% billing component) ──
+    let inspectionBillingSummary = {
+      configured: false,
+      totalScoredInspections: 0,
+      inspectionScore: null,
+      monthlyBase,
+      inspectionComponentNetBase: Math.round(monthlyBase * 0.20),
+      achievedAmount: 0,
+      shortfallDeduction: 0,
+    };
+    const scoredInspections = inspections.filter(i => ['COMPLETED', 'APPROVED'].includes(i.status) && typeof i.overallScore === 'number');
+    if (scoredInspections.length > 0) {
+      const inspectionScore = Math.round((scoredInspections.reduce((s, i) => s + i.overallScore, 0) / scoredInspections.length) * 100) / 100;
+      const inspectionComponent = Math.round(monthlyBase * 0.20);
+      const achievedAmount = Math.round(inspectionComponent * (inspectionScore / 100));
+      const shortfallDeduction = inspectionComponent - achievedAmount;
+      inspectionBillingSummary = {
+        configured: true,
+        totalScoredInspections: scoredInspections.length,
+        inspectionScore,
+        monthlyBase,
+        inspectionComponentNetBase: inspectionComponent,
+        achievedAmount,
+        shortfallDeduction,
+      };
+      if (shortfallDeduction > 0) {
+        penalties.deductions.push({
+          reason: 'Inspection Score Shortfall (20% billing component)',
+          percentage: Math.round((100 - (inspectionScore > 100 ? 100 : inspectionScore)) * 100) / 100,
+          amount: shortfallDeduction,
+        });
+        penalties.totalPenaltyAmount += shortfallDeduction;
+      }
+    }
+
     const machines = []; machineSnap.forEach(d => machines.push(d.data()));
     const inMaintenanceCount = machines.filter(m => m.workingStatus === 'under_maintenance' || m.workingStatus === 'broken').length;
     const billableAmount = Math.max(0, (contractData.contractValue / 12) - penalties.totalPenaltyAmount);
@@ -180,7 +215,7 @@ class StationBillingService {
       scorecardSummary, complaintSummary: cmpSummary, feedbackSummary, inspectionSummary,
       pettyIssueSummary, evidenceSummary,
       machineSummary: { total: machines.length, inMaintenance: inMaintenanceCount, deployed: machines.length - inMaintenanceCount, downtime: machineDowntimeSummary },
-      executionSheetSummary,
+      executionSheetSummary, inspectionBillingSummary,
       penalties, billableAmount, status: 'DRAFT',
       paymentStatus: 'unpaid', paymentDate: null, paymentRef: null, paymentAmount: null,
       complianceChecklist: { attendanceSheetAttached: false, wagesheetAttached: false, bankStatementAttached: false, policeVerificationAttached: false, medicalCertificateAttached: false, biometricSheetAttached: false, scorecardAttached: scorecardSummary.daysWithScorecard > 0, gstInvoiceAttached: false },
