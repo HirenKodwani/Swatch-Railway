@@ -10,6 +10,8 @@ import 'package:crm_train/repositories/obhs_repository.dart';
 import 'package:crm_train/repositories/area_cleaning_repository.dart';
 import 'package:crm_train/model/railway_worker_model.dart';
 import 'package:crm_train/services/api_services.dart';
+import 'package:crm_train/model/task_type_model.dart';
+import 'package:crm_train/repositories/task_type_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:intl/intl.dart';
 
@@ -31,6 +33,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   List<StationArea> _allAreas = [];
   List<RailwayWorkerModel> _workers = [];
   List<RailwayWorkerModel> _supervisors = [];
+  List<TaskType> _taskTypes = [];
 
   Station? _selectedStation;
   Platform? _selectedPlatform; // Null means "All Platforms"
@@ -43,8 +46,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   bool _isStationLocked = false;
   bool _isPlatformLocked = false;
 
-  // Selected areas and worker assignments
+  // Selected areas, per-area activities, and worker assignments
   final Set<String> _selectedAreaIds = {};
+  final Map<String, List<TaskType>> _areaActivities = {};
   final Map<String, List<RailwayWorkerModel>> _areaWorkerAssignments = {};
 
   String? _loadError;
@@ -115,11 +119,20 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         return role.contains('contractor supervisor') && w.status == 'APPROVED';
       }).toList();
 
+      // Load cleaning activities (task types) for per-area selection
+      List<TaskType> taskTypes = [];
+      try {
+        taskTypes = await TaskTypeRepository.list(category: 'cleaning', isActive: true);
+      } catch (e) {
+        debugPrint('Error loading task types: $e');
+      }
+
       if (mounted) {
         setState(() {
           _stations = filtered;
           _workers = uniqueWorkers;
           _supervisors = supList;
+          _taskTypes = taskTypes;
           _assignedPlatformId = assignedPlatformId;
           _isPlatformLocked = false;
           _isStationLocked = stationLocked;
@@ -159,6 +172,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
             _selectedPlatform = null;
           }
           _selectedAreaIds.clear();
+          _areaActivities.clear();
           _areaWorkerAssignments.clear();
         });
       }
@@ -182,6 +196,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _allAreas = areas;
           _areaLoadFailed = false;
           _selectedAreaIds.clear();
+          _areaActivities.clear();
           _areaWorkerAssignments.clear();
         });
       }
@@ -192,6 +207,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _allAreas = [];
           _areaLoadFailed = true;
           _selectedAreaIds.clear();
+          _areaActivities.clear();
           _areaWorkerAssignments.clear();
         });
       }
@@ -351,13 +367,27 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     if (_selectedAreaIds.contains(areaId)) {
       setState(() {
         _selectedAreaIds.remove(areaId);
+        _areaActivities.remove(areaId);
         _areaWorkerAssignments.remove(areaId);
       });
       return;
     }
     setState(() {
       _selectedAreaIds.add(areaId);
+      _areaActivities[areaId] = [];
       _areaWorkerAssignments[areaId] = [];
+    });
+  }
+
+  void _toggleAreaActivity(String areaId, TaskType taskType) {
+    setState(() {
+      final current = _areaActivities[areaId] ?? [];
+      final exists = current.any((t) => t.uid == taskType.uid || t.name == taskType.name);
+      if (exists) {
+        _areaActivities[areaId] = current.where((t) => t.uid != taskType.uid && t.name != taskType.name).toList();
+      } else {
+        _areaActivities[areaId] = [...current, taskType];
+      }
     });
   }
 
@@ -415,12 +445,23 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           ? platformAssignments.map((pa) => pa.areaId).whereType<String>().toSet().toList()
           : _selectedAreaIds.toList();
       final workerIds = platformAssignments.map((pa) => pa.janitorId).whereType<String>().toSet().toList();
+
+      // Per-area activities: each selected area -> list of chosen activities
+      final areaActivities = <String, List<Map<String, dynamic>>>{};
+      for (final entry in _areaActivities.entries) {
+        if (entry.value.isEmpty) continue;
+        areaActivities[entry.key] = entry.value
+            .map((t) => {'uid': t.uid, 'name': t.name, 'label': t.label})
+            .toList();
+      }
+
       await AreaCleaningRepository.generateTasks(
         areaIds: areaIds,
         date: todayStr,
         workerIds: workerIds.isNotEmpty ? workerIds : null,
         supervisorId: _selectedSupervisor?.uid,
         frequency: _selectedFrequency,
+        areaActivities: areaActivities.isNotEmpty ? areaActivities : null,
       );
 
       if (mounted) {
@@ -497,6 +538,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 setState(() {
                                   _selectedStation = v;
                                   _selectedAreaIds.clear();
+                                  _areaActivities.clear();
                                   _areaWorkerAssignments.clear();
                                 });
                                 await _loadStationData(v.uid!);
@@ -622,7 +664,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Tap an area to select it, then assign workers using the button on the selected card.',
+                            'Tap an area to select it. Then tick the activities for that area and assign workers from the selected card.',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 16),
@@ -662,85 +704,166 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 final area = areas[index];
                                 final areaId = area.uid ?? area.name;
                                 final isSelected = _selectedAreaIds.contains(areaId);
-                                
                                 final List<RailwayWorkerModel> assigned = _areaWorkerAssignments[areaId] ?? [];
+                                final List<TaskType> areaActivities = _areaActivities[areaId] ?? [];
 
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   width: double.infinity,
-                                  child: OutlinedButton(
-                                    onPressed: () => _toggleAreaSelection(area),
-                                    style: OutlinedButton.styleFrom(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                      side: BorderSide(color: isSelected ? kRailwayBlue : Colors.grey.shade300, width: isSelected ? 1.5 : 1),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      backgroundColor: isSelected ? kRailwayBlue.withOpacity(0.04) : Colors.white,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 2),
-                                          child: Icon(
-                                            isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                                            color: isSelected ? kRailwayBlue : Colors.grey.shade400,
-                                            size: 22,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: isSelected ? kRailwayBlue : Colors.grey.shade300, width: isSelected ? 1.5 : 1),
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: isSelected ? kRailwayBlue.withOpacity(0.04) : Colors.white,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      InkWell(
+                                        onTap: () => _toggleAreaSelection(area),
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          child: Row(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              if (area.mainArea != null && area.mainArea!.isNotEmpty)
-                                                Text(
-                                                  area.mainArea!,
-                                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 2),
+                                                child: Icon(
+                                                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                                                  color: isSelected ? kRailwayBlue : Colors.grey.shade400,
+                                                  size: 22,
                                                 ),
-                                              if (area.mainArea != null && area.mainArea!.isNotEmpty)
-                                                const SizedBox(height: 2),
-                                              Text(
-                                                area.name,
-                                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
                                               ),
-                                               const SizedBox(height: 4),
-                                               Row(
-                                                 children: [
-                                                   Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
-                                                   const SizedBox(width: 4),
-                                                   Text(
-                                                     _frequencyLabel(area.cleaningFrequency ?? 'daily'),
-                                                     style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                                                   ),
-                                                 ],
-                                               ),
-                                               if (isSelected && assigned.isNotEmpty) ...[
-                                                 const SizedBox(height: 4),
-                                                 Row(
-                                                   children: [
-                                                     Icon(Icons.people, size: 14, color: kRailwayBlue),
-                                                     const SizedBox(width: 4),
-                                                     Expanded(
-                                                       child: Text(
-                                                         '${assigned.length} worker${assigned.length > 1 ? 's' : ''} · ${assigned.map((w) => w.fullName).take(3).join(', ')}${assigned.length > 3 ? '…' : ''}',
-                                                         style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                                       ),
-                                                     ),
-                                                   ],
-                                                 ),
-                                               ],
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    if (area.mainArea != null && area.mainArea!.isNotEmpty)
+                                                      Text(
+                                                        area.mainArea!,
+                                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                                                      ),
+                                                    if (area.mainArea != null && area.mainArea!.isNotEmpty)
+                                                      const SizedBox(height: 2),
+                                                    Text(
+                                                      area.name,
+                                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Row(
+                                                      children: [
+                                                        Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          _frequencyLabel(area.cleaningFrequency ?? 'daily'),
+                                                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    if (isSelected && assigned.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Row(
+                                                        children: [
+                                                          Icon(Icons.people, size: 14, color: kRailwayBlue),
+                                                          const SizedBox(width: 4),
+                                                          Expanded(
+                                                            child: Text(
+                                                              '${assigned.length} worker${assigned.length > 1 ? 's' : ''} · ${assigned.map((w) => w.fullName).take(3).join(', ')}${assigned.length > 3 ? '…' : ''}',
+                                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                              if (isSelected)
+                                                IconButton(
+                                                  icon: const Icon(Icons.person_add_alt_1, size: 20, color: kRailwayBlue),
+                                                  onPressed: () => _showWorkerSelectionForArea(area),
+                                                  visualDensity: VisualDensity.compact,
+                                                ),
                                             ],
                                           ),
                                         ),
-                                        if (isSelected)
-                                          IconButton(
-                                            icon: const Icon(Icons.person_add_alt_1, size: 20, color: kRailwayBlue),
-                                            onPressed: () => _showWorkerSelectionForArea(area),
-                                            visualDensity: VisualDensity.compact,
+                                      ),
+                                      if (isSelected) ...[
+                                        const Divider(height: 1),
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.cleaning_services, size: 14, color: kRailwayBlue),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'Activities for this area',
+                                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              if (_taskTypes.isEmpty)
+                                                const Text(
+                                                  'No activities available.',
+                                                  style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                                                )
+                                              else
+                                                Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children: _taskTypes.map((tt) {
+                                                    final checked = areaActivities.any((t) => t.uid == tt.uid || t.name == tt.name);
+                                                    return InkWell(
+                                                      onTap: () => _toggleAreaActivity(areaId, tt),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                                        decoration: BoxDecoration(
+                                                          border: Border.all(color: checked ? kRailwayBlue : Colors.grey.shade300),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          color: checked ? kRailwayBlue.withOpacity(0.08) : Colors.white,
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              checked ? Icons.check_box : Icons.check_box_outline_blank,
+                                                              size: 16,
+                                                              color: checked ? kRailwayBlue : Colors.grey.shade500,
+                                                            ),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              tt.label,
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                color: Colors.black87,
+                                                                fontWeight: checked ? FontWeight.w600 : FontWeight.w400,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }).toList(),
+                                                ),
+                                              if (areaActivities.isEmpty)
+                                                const Padding(
+                                                  padding: EdgeInsets.only(top: 6),
+                                                  child: Text(
+                                                    'No activity selected - cleaning task will use the area default.',
+                                                    style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
+                                        ),
                                       ],
-                                    ),
+                                    ],
                                   ),
                                 );
                               },
