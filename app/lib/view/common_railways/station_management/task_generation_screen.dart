@@ -15,6 +15,31 @@ import 'package:crm_train/repositories/task_type_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 import 'package:intl/intl.dart';
 
+// Fallback cleaning activities used when the backend task-types endpoint is
+// unavailable or returns nothing. Kept in sync with the seeded task types.
+const List<Map<String, String>> _defaultCleaningActivities = [
+  {'name': 'sweeping', 'label': 'Sweeping'},
+  {'name': 'mopping', 'label': 'Mopping'},
+  {'name': 'washing', 'label': 'Washing'},
+  {'name': 'rag_picking', 'label': 'Rag Picking'},
+  {'name': 'garbage_collection', 'label': 'Garbage Collection'},
+  {'name': 'garbage_disposal', 'label': 'Garbage Disposal'},
+  {'name': 'drain_cleaning', 'label': 'Drain Cleaning'},
+  {'name': 'consumable_refill', 'label': 'Consumable Refill'},
+  {'name': 'cobweb_removal', 'label': 'Cobweb Removal'},
+  {'name': 'deep_cleaning', 'label': 'Deep Cleaning'},
+];
+
+List<TaskType> _defaultActivities() => _defaultCleaningActivities
+    .map((a) => TaskType(
+          uid: a['name']!,
+          name: a['name']!,
+          label: a['label']!,
+          createdAt: '',
+          updatedAt: '',
+        ))
+    .toList();
+
 class TaskGenerationScreen extends StatefulWidget {
   final String? stationId;
   final String? stationName;
@@ -31,7 +56,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   List<Station> _stations = [];
   List<Platform> _platforms = [];
   List<StationArea> _allAreas = [];
-  List<RailwayWorkerModel> _workers = [];
   List<RailwayWorkerModel> _supervisors = [];
   List<TaskType> _taskTypes = [];
 
@@ -46,10 +70,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   bool _isStationLocked = false;
   bool _isPlatformLocked = false;
 
-  // Selected areas, per-area activities, and worker assignments
+  // Selected areas and per-area activities
   final Set<String> _selectedAreaIds = {};
   final Map<String, List<TaskType>> _areaActivities = {};
-  final Map<String, List<RailwayWorkerModel>> _areaWorkerAssignments = {};
 
   String? _loadError;
   bool _areaLoadFailed = false;
@@ -126,11 +149,13 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       } catch (e) {
         debugPrint('Error loading task types: $e');
       }
+      if (taskTypes.isEmpty) {
+        taskTypes = _defaultActivities();
+      }
 
       if (mounted) {
         setState(() {
           _stations = filtered;
-          _workers = uniqueWorkers;
           _supervisors = supList;
           _taskTypes = taskTypes;
           _assignedPlatformId = assignedPlatformId;
@@ -173,7 +198,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           }
           _selectedAreaIds.clear();
           _areaActivities.clear();
-          _areaWorkerAssignments.clear();
         });
       }
     } catch (e) {
@@ -197,7 +221,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = false;
           _selectedAreaIds.clear();
           _areaActivities.clear();
-          _areaWorkerAssignments.clear();
         });
       }
     } catch (e) {
@@ -208,7 +231,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = true;
           _selectedAreaIds.clear();
           _areaActivities.clear();
-          _areaWorkerAssignments.clear();
         });
       }
     }
@@ -219,12 +241,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       return _allAreas;
     }
     return _allAreas.where((a) => a.platformId == _selectedPlatform!.uid).toList();
-  }
-
-  String _getPlatformName(String? platformId) {
-    if (platformId == null || platformId.isEmpty) return 'Entire Station';
-    final plat = _platforms.where((p) => p.uid == platformId).firstOrNull;
-    return plat?.displayName ?? 'Platform $platformId';
   }
 
   String _frequencyLabel(String f) {
@@ -253,28 +269,24 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  Future<void> _showWorkerSelectionForArea(StationArea area) async {
+  void _toggleAreaSelection(StationArea area) {
     final areaId = area.uid ?? area.name;
-    final currentAssigned = _areaWorkerAssignments[areaId] ?? [];
-    final selectedWorkers = List<RailwayWorkerModel>.from(currentAssigned);
+    if (_selectedAreaIds.contains(areaId)) {
+      setState(() {
+        _selectedAreaIds.remove(areaId);
+        _areaActivities.remove(areaId);
+      });
+      return;
+    }
+    setState(() {
+      _selectedAreaIds.add(areaId);
+      _areaActivities[areaId] = [];
+    });
+  }
 
-    // Show only actual workers (exclude supervisors) so the supervisor can
-    // manually assign them per area. Unassigned workers (no station/depot)
-    // are offered so they can be assigned to any station.
-    final availableWorkers = _workers.where((w) {
-      final role = w.role.toLowerCase().replaceAll('_', ' ');
-      if (role.contains('supervisor')) return false;
-      if (_selectedStation == null) return true;
-      if (w.stationId == _selectedStation!.uid) return true;
-      if (w.depot != null && w.depot!.isNotEmpty) {
-        final sName = _selectedStation!.stationName.toLowerCase();
-        final wDepot = w.depot!.toLowerCase();
-        if (sName.contains(wDepot) || wDepot.contains(sName)) return true;
-      }
-      final wStationId = w.stationId ?? '';
-      final wDepot = w.depot ?? '';
-      return wStationId.isEmpty && wDepot.isEmpty;
-    }).toList();
+  Future<void> _showActivitySelectionForArea(StationArea area) async {
+    final areaId = area.uid ?? area.name;
+    final selected = List<TaskType>.from(_areaActivities[areaId] ?? []);
 
     await showDialog(
       context: context,
@@ -282,47 +294,47 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text('Assign Workers: ${area.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              title: Text('Select Activities: ${area.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
               content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Select one or more workers for this area.',
+                      'Tick one or more activities to do in this area.',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     const SizedBox(height: 12),
                     ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.5,
+                        maxHeight: MediaQuery.of(context).size.height * 0.55,
                       ),
-                      child: availableWorkers.isEmpty
+                      child: _taskTypes.isEmpty
                           ? const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
                               child: Text(
-                                'No workers available for this station.',
+                                'No activities available.',
                                 style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
                               ),
                             )
                           : ListView.builder(
                               shrinkWrap: true,
-                              itemCount: availableWorkers.length,
+                              itemCount: _taskTypes.length,
                               itemBuilder: (context, index) {
-                                final worker = availableWorkers[index];
-                                final isSelected = selectedWorkers.any((w) => w.uid == worker.uid);
+                                final tt = _taskTypes[index];
+                                final isChecked = selected.any((t) => t.uid == tt.uid || t.name == tt.name);
                                 return CheckboxListTile(
-                                  title: Text(worker.fullName),
-                                  subtitle: Text(worker.role),
-                                  value: isSelected,
+                                  dense: true,
+                                  title: Text(tt.label),
+                                  value: isChecked,
                                   onChanged: (val) {
                                     setDialogState(() {
                                       if (val == true) {
-                                        if (!selectedWorkers.any((w) => w.uid == worker.uid)) {
-                                          selectedWorkers.add(worker);
+                                        if (!selected.any((t) => t.uid == tt.uid || t.name == tt.name)) {
+                                          selected.add(tt);
                                         }
                                       } else {
-                                        selectedWorkers.removeWhere((w) => w.uid == worker.uid);
+                                        selected.removeWhere((t) => t.uid == tt.uid || t.name == tt.name);
                                       }
                                     });
                                   },
@@ -341,13 +353,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      if (selectedWorkers.isEmpty) {
-                        _areaWorkerAssignments.remove(areaId);
-                        _selectedAreaIds.remove(areaId);
-                      } else {
-                        _areaWorkerAssignments[areaId] = selectedWorkers;
-                        _selectedAreaIds.add(areaId);
-                      }
+                      _areaActivities[areaId] = List<TaskType>.from(selected);
                     });
                     Navigator.pop(context);
                   },
@@ -362,35 +368,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     );
   }
 
-  void _toggleAreaSelection(StationArea area) {
-    final areaId = area.uid ?? area.name;
-    if (_selectedAreaIds.contains(areaId)) {
-      setState(() {
-        _selectedAreaIds.remove(areaId);
-        _areaActivities.remove(areaId);
-        _areaWorkerAssignments.remove(areaId);
-      });
-      return;
-    }
-    setState(() {
-      _selectedAreaIds.add(areaId);
-      _areaActivities[areaId] = [];
-      _areaWorkerAssignments[areaId] = [];
-    });
-  }
-
-  void _toggleAreaActivity(String areaId, TaskType taskType) {
-    setState(() {
-      final current = _areaActivities[areaId] ?? [];
-      final exists = current.any((t) => t.uid == taskType.uid || t.name == taskType.name);
-      if (exists) {
-        _areaActivities[areaId] = current.where((t) => t.uid != taskType.uid && t.name != taskType.name).toList();
-      } else {
-        _areaActivities[areaId] = [...current, taskType];
-      }
-    });
-  }
-
   Future<void> _generateTasks() async {
     if (_selectedStation == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a station')));
@@ -399,27 +376,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     if (_selectedAreaIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select at least one area')));
       return;
-    }
-
-    // Check if worker overrides are needed or individual assignments are valid
-    final List<StationPlatformAssignment> platformAssignments = [];
-
-    for (final areaId in _selectedAreaIds) {
-      final area = _allAreas.where((a) => (a.uid ?? a.name) == areaId).firstOrNull;
-      if (area == null) continue;
-      final platformName = _getPlatformName(area.platformId);
-
-      final workersToAssign = _areaWorkerAssignments[areaId] ?? [];
-
-      for (final worker in workersToAssign) {
-        platformAssignments.add(StationPlatformAssignment(
-          platformNumber: platformName.replaceAll('Platform ', '').trim(),
-          areaId: area.uid,
-          areaName: area.name,
-          janitorId: worker.uid,
-          janitorName: worker.fullName,
-        ));
-      }
     }
 
     setState(() => _isSubmitting = true);
@@ -434,17 +390,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         shift: _selectedShift,
         date: todayStr,
         status: 'Pending',
-        platforms: platformAssignments,
+        platforms: const [],
       );
 
       // Save run instance
       await StationRunRepository.createStationRun(run);
-
-      // Trigger task generation via repository
-      final areaIds = platformAssignments.isNotEmpty
-          ? platformAssignments.map((pa) => pa.areaId).whereType<String>().toSet().toList()
-          : _selectedAreaIds.toList();
-      final workerIds = platformAssignments.map((pa) => pa.janitorId).whereType<String>().toSet().toList();
 
       // Per-area activities: each selected area -> list of chosen activities
       final areaActivities = <String, List<Map<String, dynamic>>>{};
@@ -456,9 +406,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       }
 
       await AreaCleaningRepository.generateTasks(
-        areaIds: areaIds,
+        areaIds: _selectedAreaIds.toList(),
         date: todayStr,
-        workerIds: workerIds.isNotEmpty ? workerIds : null,
         supervisorId: _selectedSupervisor?.uid,
         frequency: _selectedFrequency,
         areaActivities: areaActivities.isNotEmpty ? areaActivities : null,
@@ -539,7 +488,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                   _selectedStation = v;
                                   _selectedAreaIds.clear();
                                   _areaActivities.clear();
-                                  _areaWorkerAssignments.clear();
                                 });
                                 await _loadStationData(v.uid!);
                               }
@@ -664,7 +612,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Tap an area to select it. Then tick the activities for that area and assign workers from the selected card.',
+                            'Tap an area to select it, then tick the activities for that area.',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 16),
@@ -704,7 +652,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                 final area = areas[index];
                                 final areaId = area.uid ?? area.name;
                                 final isSelected = _selectedAreaIds.contains(areaId);
-                                final List<RailwayWorkerModel> assigned = _areaWorkerAssignments[areaId] ?? [];
                                 final List<TaskType> areaActivities = _areaActivities[areaId] ?? [];
 
                                 return Container(
@@ -761,30 +708,9 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                                         ),
                                                       ],
                                                     ),
-                                                    if (isSelected && assigned.isNotEmpty) ...[
-                                                      const SizedBox(height: 4),
-                                                      Row(
-                                                        children: [
-                                                          Icon(Icons.people, size: 14, color: kRailwayBlue),
-                                                          const SizedBox(width: 4),
-                                                          Expanded(
-                                                            child: Text(
-                                                              '${assigned.length} worker${assigned.length > 1 ? 's' : ''} · ${assigned.map((w) => w.fullName).take(3).join(', ')}${assigned.length > 3 ? '…' : ''}',
-                                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ],
                                                   ],
                                                 ),
                                               ),
-                                              if (isSelected)
-                                                IconButton(
-                                                  icon: const Icon(Icons.person_add_alt_1, size: 20, color: kRailwayBlue),
-                                                  onPressed: () => _showWorkerSelectionForArea(area),
-                                                  visualDensity: VisualDensity.compact,
-                                                ),
                                             ],
                                           ),
                                         ),
@@ -796,69 +722,50 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Row(
-                                                children: [
-                                                  const Icon(Icons.cleaning_services, size: 14, color: kRailwayBlue),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    'Activities for this area',
-                                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+                                              InkWell(
+                                                onTap: () => _showActivitySelectionForArea(area),
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: Container(
+                                                  width: double.infinity,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: kRailwayBlue.withOpacity(0.4)),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    color: kRailwayBlue.withOpacity(0.05),
                                                   ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              if (_taskTypes.isEmpty)
-                                                const Text(
-                                                  'No activities available.',
-                                                  style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
-                                                )
-                                              else
-                                                Wrap(
-                                                  spacing: 8,
-                                                  runSpacing: 8,
-                                                  children: _taskTypes.map((tt) {
-                                                    final checked = areaActivities.any((t) => t.uid == tt.uid || t.name == tt.name);
-                                                    return InkWell(
-                                                      onTap: () => _toggleAreaActivity(areaId, tt),
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      child: Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                                        decoration: BoxDecoration(
-                                                          border: Border.all(color: checked ? kRailwayBlue : Colors.grey.shade300),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          color: checked ? kRailwayBlue.withOpacity(0.08) : Colors.white,
-                                                        ),
-                                                        child: Row(
-                                                          mainAxisSize: MainAxisSize.min,
-                                                          children: [
-                                                            Icon(
-                                                              checked ? Icons.check_box : Icons.check_box_outline_blank,
-                                                              size: 16,
-                                                              color: checked ? kRailwayBlue : Colors.grey.shade500,
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Row(
+                                                        children: [
+                                                          const Icon(Icons.cleaning_services, size: 16, color: kRailwayBlue),
+                                                          const SizedBox(width: 6),
+                                                          Expanded(
+                                                            child: Text(
+                                                              'Select Activities',
+                                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
                                                             ),
-                                                            const SizedBox(width: 4),
-                                                            Text(
-                                                              tt.label,
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors.black87,
-                                                                fontWeight: checked ? FontWeight.w600 : FontWeight.w400,
-                                                              ),
-                                                            ),
-                                                          ],
+                                                          ),
+                                                          Icon(Icons.chevron_right, size: 18, color: Colors.grey[600]),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        areaActivities.isEmpty
+                                                            ? 'Tap to choose the activities for this area'
+                                                            : areaActivities.map((t) => t.label).join(' · '),
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: areaActivities.isEmpty ? Colors.grey[600] : Colors.black87,
+                                                          fontStyle: areaActivities.isEmpty ? FontStyle.italic : FontStyle.normal,
                                                         ),
                                                       ),
-                                                    );
-                                                  }).toList(),
-                                                ),
-                                              if (areaActivities.isEmpty)
-                                                const Padding(
-                                                  padding: EdgeInsets.only(top: 6),
-                                                  child: Text(
-                                                    'No activity selected - cleaning task will use the area default.',
-                                                    style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                                                    ],
                                                   ),
                                                 ),
+                                              ),
                                             ],
                                           ),
                                         ),
