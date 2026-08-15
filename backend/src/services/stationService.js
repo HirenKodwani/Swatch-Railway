@@ -31,7 +31,10 @@ class StationService {
         .where('contractorId', '==', user.entityId)
         .where('status', '==', 'active')
         .get();
-      const stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
+      let stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
+      if (stationIds.length === 0 && Array.isArray(user.stations) && user.stations.length > 0) {
+        stationIds = user.stations;
+      }
       if (stationIds.length > 0) {
         q = q.where('uid', 'in', stationIds);
       } else if (division || user.division) {

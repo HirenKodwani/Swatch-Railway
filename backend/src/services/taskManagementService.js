@@ -442,6 +442,18 @@ class TaskManagementService {
     return null;
   }
 
+  _resolveActivitiesForArea(areaId, areaData, data = {}) {
+    const perArea = data.areaActivities ? data.areaActivities[areaId] : null;
+    if (Array.isArray(perArea)) {
+      return perArea
+        .filter(a => a && (typeof a === 'string' || a.uid || a.id || a.name || a.label))
+        .map(a => this._resolveActivityForArea(areaId, areaData, { ...data, areaActivities: { [areaId]: a } }))
+        .filter(Boolean);
+    }
+    const single = this._resolveActivityForArea(areaId, areaData, data);
+    return single ? [single] : [];
+  }
+
   async bulkGenerate(data, user) {
     const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
@@ -490,11 +502,11 @@ class TaskManagementService {
       const existingTasksSnap = await db.collection('cleaningTasks')
         .where('date', '==', targetDate)
         .where('areaId', 'in', chunk)
-        .select('workerId', 'areaId', 'scheduledTime')
+        .select('workerId', 'areaId', 'scheduledTime', 'taskTypeId')
         .get();
       existingTasksSnap.forEach(doc => {
         const d = doc.data();
-        existingTaskKeys.add(`${d.areaId}|${d.workerId}|${d.scheduledTime}`);
+        existingTaskKeys.add(`${d.areaId}|${d.workerId}|${d.scheduledTime}|${d.taskTypeId || 'default'}`);
       });
     }
 
@@ -508,7 +520,8 @@ class TaskManagementService {
         areaDoc = await db.collection('stationAreas').doc(areaId).get();
       }
       const areaData = areaDoc.exists ? areaDoc.data() : {};
-      const activity = this._resolveActivityForArea(areaId, areaData, data);
+      const activities = this._resolveActivitiesForArea(areaId, areaData, data);
+      const taskActivities = activities.length > 0 ? activities : [null];
       const cleaningFrequency = frequency || areaData.cleaningFrequency || areaData.frequency || 'daily';
       const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
       const baseAreaName = areaData.areaName || areaData.name || '';
@@ -530,192 +543,118 @@ class TaskManagementService {
         }
       }
 
+      const buildTask = (workerInfo, zoneInfo, scheduledTime, activity) => {
+        const taskRef = db.collection('cleaningTasks').doc();
+        const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
+        const task = {
+          uid: taskRef.id,
+          stationId: workerInfo.stationId || '',
+          platformId: workerInfo.platformId || null,
+          areaId,
+          areaName: displayAreaName,
+          areaCode,
+          mainArea,
+          zoneId: zoneInfo ? zoneInfo.uid : null,
+          zoneName: zoneInfo ? zoneInfo.name : null,
+          workerId: workerInfo.workerId,
+          workerName: workerInfo.workerName || 'Unknown',
+          supervisorId: workerInfo.supervisorId,
+          supervisorName: workerInfo.supervisorName || '',
+          assignmentId: workerInfo.assignmentId || null,
+          activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
+          taskTypeId: activity ? activity.id : null,
+          taskTypeName: activity ? activity.name : null,
+          frequency: cleaningFrequency,
+          date: targetDate,
+          scheduledDate: targetDate,
+          scheduledTime,
+          priority: areaData.priority || 3,
+          shift: workerInfo.shift,
+          status: 'pending',
+          startedAt: null, completedAt: null,
+          approvedAt: null, rejectedAt: null,
+          beforePhoto: null, afterPhoto: null,
+          gpsLat: null, gpsLng: null,
+          supervisorNotes: null, rejectionReason: null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: new Date().toISOString()
+        };
+        return { taskRef, task };
+      };
+
+      const processWorker = (workerInfo) => {
+        for (const scheduledTime of frequencyTimes) {
+          for (const zoneInfo of targetZones) {
+            for (const activity of taskActivities) {
+              const dupKey = `${areaId}|${workerInfo.workerId}|${scheduledTime}|${activity ? (activity.id || 'default') : 'default'}`;
+              if (existingTaskKeys.has(dupKey)) continue;
+              const { taskRef, task } = buildTask(workerInfo, zoneInfo, scheduledTime, activity);
+              batch.set(taskRef, task);
+              allTaskIds.push(taskRef.id);
+              batchCount++;
+            }
+          }
+        }
+      };
+
       if (assignedWorkers.length > 0) {
         let workerIdx = 0;
         for (const scheduledTime of frequencyTimes) {
           for (const zoneInfo of targetZones) {
             const w = assignedWorkers[workerIdx % assignedWorkers.length];
             workerIdx++;
-            const dupKey = `${areaId}|${w.uid}|${scheduledTime}`;
-            if (existingTaskKeys.has(dupKey)) continue;
-            const taskRef = db.collection('cleaningTasks').doc();
-            const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
-            const task = {
-              uid: taskRef.id,
-              stationId: areaData.stationId || w.stationId || '',
-              platformId: areaData.platformId || null,
-              areaId,
-              areaName: displayAreaName,
-              areaCode,
-              mainArea,
-              zoneId: zoneInfo ? zoneInfo.uid : null,
-              zoneName: zoneInfo ? zoneInfo.name : null,
-              workerId: w.uid,
-              workerName: w.fullName || w.name || 'Unknown',
-              supervisorId: assignedSupervisorId || areaData.supervisorId || null,
-              supervisorName: assignedSupervisorName || areaData.supervisorName || '',
-              assignmentId: null,
-              activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
-              taskTypeId: activity ? activity.id : null,
-              taskTypeName: activity ? activity.name : null,
-              frequency: cleaningFrequency,
-              date: targetDate,
-              scheduledDate: targetDate,
-              scheduledTime,
-              priority: areaData.priority || 3,
-              shift: data.shift || areaData.defaultShift || 'morning',
-              status: 'pending',
-              startedAt: null, completedAt: null,
-              approvedAt: null, rejectedAt: null,
-              beforePhoto: null, afterPhoto: null,
-              gpsLat: null, gpsLng: null,
-              supervisorNotes: null, rejectionReason: null,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: new Date().toISOString()
-            };
-            batch.set(taskRef, task);
-            allTaskIds.push(taskRef.id);
-            batchCount++;
-          }
-        }
-      } else if (assignedWorker) {
-        for (const scheduledTime of frequencyTimes) {
-          for (const zoneInfo of targetZones) {
-            const dupKey = `${areaId}|${assignedWorker.uid}|${scheduledTime}`;
-            if (existingTaskKeys.has(dupKey)) continue;
-            const taskRef = db.collection('cleaningTasks').doc();
-            const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
-            const task = {
-              uid: taskRef.id,
-              stationId: areaData.stationId || assignedWorker.stationId || '',
-              platformId: areaData.platformId || null,
-              areaId,
-              areaName: displayAreaName,
-              areaCode,
-              mainArea,
-              zoneId: zoneInfo ? zoneInfo.uid : null,
-              zoneName: zoneInfo ? zoneInfo.name : null,
-              workerId: assignedWorker.uid,
-              workerName: assignedWorker.fullName || assignedWorker.name || 'Unknown',
-              supervisorId: assignedSupervisorId || areaData.supervisorId || null,
-              supervisorName: assignedSupervisorName || areaData.supervisorName || '',
-              assignmentId: null,
-              activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
-              taskTypeId: activity ? activity.id : null,
-              taskTypeName: activity ? activity.name : null,
-              frequency: cleaningFrequency,
-              date: targetDate,
-              scheduledDate: targetDate,
-              scheduledTime,
-              priority: areaData.priority || 3,
-              shift: data.shift || areaData.defaultShift || 'morning',
-              status: 'pending',
-              startedAt: null, completedAt: null,
-              approvedAt: null, rejectedAt: null,
-              beforePhoto: null, afterPhoto: null,
-              gpsLat: null, gpsLng: null,
-              supervisorNotes: null, rejectionReason: null,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: new Date().toISOString()
-            };
-            batch.set(taskRef, task);
-            allTaskIds.push(taskRef.id);
-            batchCount++;
-          }
-        }
-      } else if (workersSnap && workersSnap.size > 0) {
-        workersSnap.forEach(workerDoc => {
-          const assignment = workerDoc.data();
-          for (const scheduledTime of frequencyTimes) {
-            for (const zoneInfo of targetZones) {
-              const dupKey = `${areaId}|${assignment.workerId}|${scheduledTime}`;
+            for (const activity of taskActivities) {
+              const dupKey = `${areaId}|${w.uid}|${scheduledTime}|${activity ? (activity.id || 'default') : 'default'}`;
               if (existingTaskKeys.has(dupKey)) continue;
-              const taskRef = db.collection('cleaningTasks').doc();
-              const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
-              const task = {
-                uid: taskRef.id,
-                stationId: areaData.stationId || assignment.stationId,
-                platformId: areaData.platformId || assignment.platformId || null,
-                areaId,
-                areaName: displayAreaName,
-                areaCode,
-                mainArea,
-                zoneId: zoneInfo ? zoneInfo.uid : null,
-                zoneName: zoneInfo ? zoneInfo.name : null,
-                workerId: assignment.workerId,
-                workerName: assignment.workerName,
+              const { taskRef, task } = buildTask({
+                workerId: w.uid,
+                workerName: w.fullName || w.name || 'Unknown',
+                stationId: areaData.stationId || w.stationId || '',
+                platformId: areaData.platformId || null,
                 supervisorId: assignedSupervisorId || areaData.supervisorId || null,
-              supervisorName: assignedSupervisorName || areaData.supervisorName || '',
-                assignmentId: assignment.uid,
-                activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
-                taskTypeId: activity ? activity.id : null,
-                taskTypeName: activity ? activity.name : null,
-                frequency: cleaningFrequency,
-                date: targetDate,
-                scheduledDate: targetDate,
-                scheduledTime,
-                priority: areaData.priority || 3,
-                shift: assignment.shift || areaData.defaultShift || 'morning',
-                status: 'pending',
-                startedAt: null, completedAt: null,
-                approvedAt: null, rejectedAt: null,
-                beforePhoto: null, afterPhoto: null,
-                gpsLat: null, gpsLng: null,
-                supervisorNotes: null, rejectionReason: null,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: new Date().toISOString()
-              };
+                supervisorName: assignedSupervisorName || areaData.supervisorName || '',
+                shift: data.shift || areaData.defaultShift || 'morning',
+              }, zoneInfo, scheduledTime, activity);
               batch.set(taskRef, task);
               allTaskIds.push(taskRef.id);
               batchCount++;
             }
           }
+        }
+      } else if (assignedWorker) {
+        processWorker({
+          workerId: assignedWorker.uid,
+          workerName: assignedWorker.fullName || assignedWorker.name || 'Unknown',
+          stationId: areaData.stationId || assignedWorker.stationId || '',
+          platformId: areaData.platformId || null,
+          supervisorId: assignedSupervisorId || areaData.supervisorId || null,
+          supervisorName: assignedSupervisorName || areaData.supervisorName || '',
+          shift: data.shift || areaData.defaultShift || 'morning',
+        });
+      } else if (workersSnap && workersSnap.size > 0) {
+        workersSnap.forEach(workerDoc => {
+          const assignment = workerDoc.data();
+          processWorker({
+            workerId: assignment.workerId,
+            workerName: assignment.workerName,
+            stationId: areaData.stationId || assignment.stationId,
+            platformId: areaData.platformId || assignment.platformId || null,
+            assignmentId: assignment.uid,
+            supervisorId: assignedSupervisorId || areaData.supervisorId || null,
+            supervisorName: assignedSupervisorName || areaData.supervisorName || '',
+            shift: assignment.shift || areaData.defaultShift || 'morning',
+          });
         });
       } else if (assignedSupervisorId) {
-        for (const scheduledTime of frequencyTimes) {
-          for (const zoneInfo of targetZones) {
-            const dupKey = `${areaId}|${assignedSupervisorId}|${scheduledTime}`;
-            if (existingTaskKeys.has(dupKey)) continue;
-            const taskRef = db.collection('cleaningTasks').doc();
-            const displayAreaName = [mainArea, baseAreaName, zoneInfo?.name].filter(Boolean).join(' - ');
-            const task = {
-              uid: taskRef.id,
-              stationId: areaData.stationId || '',
-              platformId: areaData.platformId || null,
-              areaId,
-              areaName: displayAreaName,
-              areaCode,
-              mainArea,
-              zoneId: zoneInfo ? zoneInfo.uid : null,
-              zoneName: zoneInfo ? zoneInfo.name : null,
-              workerId: assignedSupervisorId,
-              workerName: assignedSupervisorName || 'Supervisor',
-              supervisorId: assignedSupervisorId,
-              supervisorName: assignedSupervisorName || '',
-              assignmentId: null,
-              activityType: activity ? activity.label : (areaData.areaType || 'Cleaning'),
-              taskTypeId: activity ? activity.id : null,
-              taskTypeName: activity ? activity.name : null,
-              frequency: cleaningFrequency,
-              date: targetDate,
-              scheduledDate: targetDate,
-              scheduledTime,
-              priority: areaData.priority || 3,
-              shift: data.shift || areaData.defaultShift || 'morning',
-              status: 'pending',
-              startedAt: null, completedAt: null,
-              approvedAt: null, rejectedAt: null,
-              beforePhoto: null, afterPhoto: null,
-              gpsLat: null, gpsLng: null,
-              supervisorNotes: null, rejectionReason: null,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: new Date().toISOString()
-            };
-            batch.set(taskRef, task);
-            allTaskIds.push(taskRef.id);
-            batchCount++;
-          }
-        }
+        processWorker({
+          workerId: assignedSupervisorId,
+          workerName: assignedSupervisorName || 'Supervisor',
+          stationId: areaData.stationId || '',
+          platformId: areaData.platformId || null,
+          supervisorId: assignedSupervisorId,
+          supervisorName: assignedSupervisorName || '',
+          shift: data.shift || areaData.defaultShift || 'morning',
+        });
       }
 
       if (batchCount > 0) {

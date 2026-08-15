@@ -50,7 +50,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   // Selected areas and worker assignments
   final Set<String> _selectedAreaIds = {};
   final Map<String, List<RailwayWorkerModel>> _areaWorkerAssignments = {};
-  final Map<String, TaskType> _areaActivities = {};
+  final Map<String, List<TaskType>> _areaActivities = {};
+
+  String? _loadError;
+  bool _areaLoadFailed = false;
 
   @override
   void initState() {
@@ -59,7 +62,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
@@ -68,31 +74,54 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           ? user.areaId
           : user?.platformId;
 
-      final stData = await ApiService.getStations(active: true);
-      List<Station> filtered = stData;
+      List<Station> filtered = [];
       bool stationLocked = false;
-      if (widget.stationId != null) {
-        filtered = stData.where((s) => s.uid == widget.stationId).toList();
-        stationLocked = true;
-      } else if (role == 'Contractor Admin' || role == 'Contractor Master') {
-        final userStationIds = <String>{};
-        if (user?.stationId != null && user!.stationId!.isNotEmpty) {
-          userStationIds.add(user.stationId!);
-        }
-        if (user?.stations != null && user!.stations.isNotEmpty) {
-          userStationIds.addAll(user.stations);
-        }
-        if (userStationIds.isNotEmpty) {
-          filtered = stData.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
+      try {
+        final stData = await ApiService.getStations(active: true);
+        if (widget.stationId != null) {
+          filtered = stData.where((s) => s.uid == widget.stationId).toList();
           stationLocked = true;
+        } else if (role == 'Contractor Admin' || role == 'Contractor Master') {
+          final userStationIds = <String>{};
+          if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+            userStationIds.add(user.stationId!);
+          }
+          if (user?.stations != null && user!.stations.isNotEmpty) {
+            userStationIds.addAll(user.stations);
+          }
+          if (userStationIds.isNotEmpty) {
+            filtered = stData.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
+            stationLocked = true;
+          } else {
+            filtered = stData;
+          }
+        } else {
+          filtered = stData;
+        }
+      } catch (e) {
+        debugPrint('Error loading stations: $e');
+        if (mounted) {
+          setState(() => _loadError = 'Failed to load stations. Check your connection and try again.');
         }
       }
-      final wkData = await OBHSRepository.getWorkers();
-      final seen = <String>{};
-      final uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
 
-      final taskTypes = await TaskTypeRepository.list(isActive: true);
-      final cleaningTypes = taskTypes.where((t) => t.category == 'cleaning' || t.category.isEmpty).toList();
+      List<RailwayWorkerModel> uniqueWorkers = [];
+      try {
+        final wkData = await OBHSRepository.getWorkers();
+        final seen = <String>{};
+        uniqueWorkers = wkData.where((w) => seen.add(w.uid)).toList();
+      } catch (e) {
+        debugPrint('Error loading workers: $e');
+      }
+
+      List<TaskType> cleaningTypes = [];
+      try {
+        final taskTypes = await TaskTypeRepository.list(isActive: true);
+        cleaningTypes = taskTypes.where((t) => t.category == 'cleaning' || t.category.isEmpty).toList();
+        if (cleaningTypes.isEmpty) cleaningTypes = taskTypes;
+      } catch (e) {
+        debugPrint('Error loading task types: $e');
+      }
 
       // Load only Contractor Supervisors (approved, real users)
       final supList = uniqueWorkers.where((w) {
@@ -105,20 +134,21 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _stations = filtered;
           _workers = uniqueWorkers;
           _supervisors = supList;
-          _taskTypes = cleaningTypes.isEmpty ? taskTypes : cleaningTypes;
+          _taskTypes = cleaningTypes;
           _assignedPlatformId = assignedPlatformId;
           _isPlatformLocked = false;
           _isStationLocked = stationLocked;
           if (_stations.isNotEmpty) {
-            if (user?.stationId != null && user!.stationId!.isNotEmpty) {
-              final match = _stations.where((s) => s.uid == user!.stationId).firstOrNull;
-              if (match != null) _selectedStation = match;
+            if (widget.stationId != null) {
+              _selectedStation = _stations.where((s) => s.uid == widget.stationId).firstOrNull ?? _stations.first;
+            } else if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+              _selectedStation = _stations.where((s) => s.uid == user.stationId).firstOrNull;
             }
             _selectedStation ??= _stations.first;
           }
         });
         if (_selectedStation != null) {
-          await _loadPlatforms(_selectedStation!.uid!);
+          await _loadStationData(_selectedStation!.uid!);
         }
       }
     } catch (e) {
@@ -128,21 +158,21 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     }
   }
 
+  Future<void> _loadStationData(String stationId) async {
+    await Future.wait([_loadPlatforms(stationId), _loadAreas(stationId)]);
+  }
+
   Future<void> _loadPlatforms(String stationId) async {
     try {
       final platforms = await PlatformRepository.getByStation(stationId);
-      final areas = await ApiService.getStationAreas(stationId);
       if (mounted) {
         setState(() {
           _platforms = platforms;
-          _allAreas = areas;
-          
           if (_isPlatformLocked && _assignedPlatformId != null && _assignedPlatformId!.isNotEmpty) {
             _selectedPlatform = _platforms.where((p) => p.uid == _assignedPlatformId).firstOrNull;
           } else {
             _selectedPlatform = null;
           }
-          
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
           _areaActivities.clear();
@@ -153,9 +183,31 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       if (mounted) {
         setState(() {
           _platforms = [];
-          _allAreas = [];
           _selectedPlatform = null;
           _isPlatformLocked = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAreas(String stationId) async {
+    try {
+      final areas = await ApiService.getStationAreas(stationId);
+      if (mounted) {
+        setState(() {
+          _allAreas = areas;
+          _areaLoadFailed = false;
+          _selectedAreaIds.clear();
+          _areaWorkerAssignments.clear();
+          _areaActivities.clear();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading areas: $e');
+      if (mounted) {
+        setState(() {
+          _allAreas = [];
+          _areaLoadFailed = true;
           _selectedAreaIds.clear();
           _areaWorkerAssignments.clear();
           _areaActivities.clear();
@@ -316,8 +368,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       });
       return;
     }
-    _pickActivity(area).then((picked) {
-      if (picked == null) return;
+    _pickActivities(area).then((picked) {
+      if (picked == null || picked.isEmpty) return;
       setState(() {
         _selectedAreaIds.add(areaId);
         _areaWorkerAssignments[areaId] = [];
@@ -327,41 +379,45 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   }
 
   Future<void> _changeActivity(StationArea area) async {
-    final picked = await _pickActivity(area);
-    if (picked == null) return;
+    final picked = await _pickActivities(area);
+    if (picked == null || picked.isEmpty) return;
     setState(() {
       _areaActivities[area.uid ?? area.name] = picked;
     });
   }
 
   String _activityLabel(String areaId) {
-    final tt = _areaActivities[areaId] ?? _selectedActivity;
+    final list = _areaActivities[areaId];
+    if (list != null && list.isNotEmpty) {
+      return list.map((t) => t.label).join(', ');
+    }
+    final tt = _selectedActivity;
     return tt != null ? tt.label : 'Cleaning';
   }
 
-  Future<TaskType?> _pickActivity(StationArea area) async {
+  Future<List<TaskType>?> _pickActivities(StationArea area) async {
     final areaId = area.uid ?? area.name;
-    final current = _areaActivities[areaId] ?? _selectedActivity;
+    final current = List<TaskType>.from(_areaActivities[areaId] ?? []);
     if (_taskTypes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No activities configured. Add them under Task Master first.'), backgroundColor: kWarningOrange),
       );
       return null;
     }
-    return showDialog<TaskType>(
+    return showDialog<List<TaskType>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          TaskType? selected = current;
+          final selected = List<TaskType>.from(current);
           return AlertDialog(
-            title: Text('Select Activity: ${area.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text('Select Activities: ${area.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
             content: SizedBox(
               width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'Choose the cleaning activity to perform in this area.',
+                    'Select one or more cleaning activities for this area.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
@@ -374,12 +430,22 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                       itemCount: _taskTypes.length,
                       itemBuilder: (context, index) {
                         final tt = _taskTypes[index];
-                        return RadioListTile<TaskType>(
+                        final isSelected = selected.any((t) => t.uid == tt.uid || t.name == tt.name);
+                        return CheckboxListTile(
                           title: Text(tt.label, style: const TextStyle(fontWeight: FontWeight.w500)),
                           subtitle: Text(tt.name),
-                          value: tt,
-                          groupValue: selected,
-                          onChanged: (v) => setDialogState(() => selected = v),
+                          value: isSelected,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                if (!selected.any((t) => t.uid == tt.uid || t.name == tt.name)) {
+                                  selected.add(tt);
+                                }
+                              } else {
+                                selected.removeWhere((t) => t.uid == tt.uid || t.name == tt.name);
+                              }
+                            });
+                          },
                         );
                       },
                     ),
@@ -394,7 +460,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  selected ??= _taskTypes.first;
                   Navigator.pop(context, selected);
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
@@ -463,11 +528,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       final workerIds = platformAssignments.map((pa) => pa.janitorId).whereType<String>().toSet().toList();
       final areaActivities = <String, dynamic>{};
       for (final entry in _areaActivities.entries) {
-        areaActivities[entry.key] = {
-          'uid': entry.value.uid,
-          'name': entry.value.name,
-          'label': entry.value.label,
-        };
+        areaActivities[entry.key] = entry.value.map((tt) => {
+          'uid': tt.uid,
+          'name': tt.name,
+          'label': tt.label,
+        }).toList();
       }
       await AreaCleaningRepository.generateTasks(
         areaIds: areaIds,
@@ -510,7 +575,14 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+          : (_stations.isEmpty)
+              ? _LoadFailureView(
+                  message: _loadError ?? 'No stations available for your account.',
+                  onRetry: () {
+                    _loadInitialData();
+                  },
+                )
+              : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,7 +617,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                   _areaWorkerAssignments.clear();
                                   _areaActivities.clear();
                                 });
-                                _loadPlatforms(v.uid!);
+                                await _loadStationData(v.uid!);
                               }
                             },
                           ),
@@ -648,12 +720,32 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 16),
                           if (areas.isEmpty)
-                            const Center(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24),
-                                child: Text('No areas configured for this selection', style: TextStyle(color: Colors.grey)),
-                              ),
-                            )
+                            _areaLoadFailed
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 24),
+                                      child: Column(
+                                        children: [
+                                          const Text(
+                                            'Failed to load areas. Please retry.',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextButton.icon(
+                                            onPressed: () => _loadAreas(_selectedStation?.uid ?? ''),
+                                            icon: const Icon(Icons.refresh),
+                                            label: const Text('Retry'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 24),
+                                      child: Text('No areas configured for this selection', style: TextStyle(color: Colors.grey)),
+                                    ),
+                                  )
                           else
                             ListView.builder(
                               shrinkWrap: true,
@@ -735,7 +827,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                         if (isSelected)
                                           IconButton(
                                             icon: const Icon(Icons.cleaning_services, size: 20, color: kRailwayBlue),
-                                            tooltip: 'Change Activity',
+                                            tooltip: 'Change Activities',
                                             onPressed: () => _changeActivity(area),
                                             visualDensity: VisualDensity.compact,
                                           ),
@@ -777,6 +869,40 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _LoadFailureView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _LoadFailureView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
