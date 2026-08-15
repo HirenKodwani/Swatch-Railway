@@ -260,17 +260,23 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     final currentAssigned = _areaWorkerAssignments[areaId] ?? [];
     final selectedWorkers = List<RailwayWorkerModel>.from(currentAssigned);
 
-    final availableWorkers = _selectedStation == null
-        ? _workers
-        : _workers.where((w) {
-            if (w.stationId == _selectedStation!.uid) return true;
-            if (w.depot != null && w.depot!.isNotEmpty) {
-              final sName = _selectedStation!.stationName.toLowerCase();
-              final wDepot = w.depot!.toLowerCase();
-              if (sName.contains(wDepot) || wDepot.contains(sName)) return true;
-            }
-            return false;
-          }).toList();
+    // Show only actual workers (exclude supervisors) so the supervisor can
+    // manually assign them per area. Unassigned workers (no station/depot)
+    // are offered so they can be assigned to any station.
+    final availableWorkers = _workers.where((w) {
+      final role = w.role.toLowerCase().replaceAll('_', ' ');
+      if (role.contains('supervisor')) return false;
+      if (_selectedStation == null) return true;
+      if (w.stationId == _selectedStation!.uid) return true;
+      if (w.depot != null && w.depot!.isNotEmpty) {
+        final sName = _selectedStation!.stationName.toLowerCase();
+        final wDepot = w.depot!.toLowerCase();
+        if (sName.contains(wDepot) || wDepot.contains(sName)) return true;
+      }
+      final wStationId = w.stationId ?? '';
+      final wDepot = w.depot ?? '';
+      return wStationId.isEmpty && wDepot.isEmpty;
+    }).toList();
 
     await showDialog(
       context: context,
@@ -297,7 +303,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ? const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
                               child: Text(
-                                'No workers registered at this station.',
+                                'No workers available for this station.',
                                 style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
                               ),
                             )
@@ -587,7 +593,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Task Parameters Card
+                  // 1. Location & Schedule Card
                   Card(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     elevation: 1,
@@ -596,9 +602,15 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Task Parameters', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Row(
+                            children: [
+                              const Icon(Icons.map, color: kRailwayBlue, size: 20),
+                              const SizedBox(width: 8),
+                              const Text('Location & Schedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
+                          ),
                           const SizedBox(height: 16),
-                          
+
                           // Station Dropdown
                           DropdownButtonFormField<Station>(
                             value: _selectedStation,
@@ -623,6 +635,56 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 12),
 
+                          // Date & Shift side by side
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _pickDate,
+                                  child: InputDecorator(
+                                    decoration: const InputDecoration(labelText: 'Date', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today)),
+                                    child: Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: _selectedShift,
+                                  decoration: const InputDecoration(labelText: 'Shift', border: OutlineInputBorder(), prefixIcon: Icon(Icons.schedule)),
+                                  items: ['Morning', 'Evening', 'Night'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                                  onChanged: (v) {
+                                    if (v != null) setState(() => _selectedShift = v);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 2. Cleaning Setup Card
+                  Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.cleaning_services, color: kRailwayBlue, size: 20),
+                              const SizedBox(width: 8),
+                              const Text('Cleaning Setup', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
                           // Frequency Dropdown
                           DropdownButtonFormField<String>(
                             value: _selectedFrequency,
@@ -641,10 +703,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Activity (Cleaning Task Type) Dropdown
+                          // Activity (Cleaning Task Type) Dropdown - default applied to all areas
                           DropdownButtonFormField<TaskType>(
                             value: _taskTypes.isEmpty ? null : _selectedActivity,
-                            decoration: const InputDecoration(labelText: 'Activity', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cleaning_services), hintText: 'Select default activity'),
+                            decoration: const InputDecoration(labelText: 'Default Activity', border: OutlineInputBorder(), prefixIcon: Icon(Icons.checklist), hintText: 'Cleaning (default)'),
                             items: [
                               const DropdownMenuItem<TaskType>(value: null, child: Text('Cleaning (default)')),
                               ..._taskTypes.map((tt) => DropdownMenuItem(value: tt, child: Text(tt.label))),
@@ -653,26 +715,13 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               setState(() => _selectedActivity = v);
                             },
                           ),
-                          const SizedBox(height: 12),
-
-                          // Date Picker
-                          InkWell(
-                            onTap: _pickDate,
-                            child: InputDecorator(
-                              decoration: const InputDecoration(labelText: 'Date', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today)),
-                              child: Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
+                          const SizedBox(height: 4),
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Text(
+                              'Per-area activities can be set after selecting an area.',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Shift Dropdown
-                          DropdownButtonFormField<String>(
-                            value: _selectedShift,
-                            decoration: const InputDecoration(labelText: 'Shift', border: OutlineInputBorder(), prefixIcon: Icon(Icons.schedule)),
-                            items: ['Morning', 'Evening', 'Night'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                            onChanged: (v) {
-                              if (v != null) setState(() => _selectedShift = v);
-                            },
                           ),
                           const SizedBox(height: 12),
 
@@ -698,7 +747,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                               setState(() => _selectedSupervisor = v);
                             },
                           ),
-
                         ],
                       ),
                     ),
@@ -714,9 +762,20 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Select Areas (${_selectedAreaIds.length} selected)',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          Row(
+                            children: [
+                              const Icon(Icons.dashboard_outlined, color: kRailwayBlue, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Select Areas (${_selectedAreaIds.length} selected)',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Tap an area to choose its activities. Then assign workers (and set per-area activities) using the buttons on the selected card.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 16),
                           if (areas.isEmpty)
@@ -808,19 +867,34 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                                   ),
                                                 ],
                                               ),
-                                              const SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Icon(Icons.cleaning_services, size: 14, color: isSelected ? kRailwayBlue : Colors.grey[500]),
-                                                  const SizedBox(width: 4),
-                                                  Expanded(
-                                                    child: Text(
-                                                      _activityLabel(areaId),
-                                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? kRailwayBlue : Colors.grey[600]),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                               const SizedBox(height: 4),
+                                               Row(
+                                                 children: [
+                                                   Icon(Icons.cleaning_services, size: 14, color: isSelected ? kRailwayBlue : Colors.grey[500]),
+                                                   const SizedBox(width: 4),
+                                                   Expanded(
+                                                     child: Text(
+                                                       _activityLabel(areaId),
+                                                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? kRailwayBlue : Colors.grey[600]),
+                                                     ),
+                                                   ),
+                                                 ],
+                                               ),
+                                               if (isSelected && assigned.isNotEmpty) ...[
+                                                 const SizedBox(height: 4),
+                                                 Row(
+                                                   children: [
+                                                     Icon(Icons.people, size: 14, color: kRailwayBlue),
+                                                     const SizedBox(width: 4),
+                                                     Expanded(
+                                                       child: Text(
+                                                         '${assigned.length} worker${assigned.length > 1 ? 's' : ''} · ${assigned.map((w) => w.fullName).take(3).join(', ')}${assigned.length > 3 ? '…' : ''}',
+                                                         style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                       ),
+                                                     ),
+                                                   ],
+                                                 ),
+                                               ],
                                             ],
                                           ),
                                         ),
