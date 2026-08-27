@@ -328,6 +328,8 @@ class _ShiftSummaryDetailScreenState extends State<ShiftSummaryDetailScreen> {
           if (_summary['rejectionReason'] != null)
             _headerRow('Rejection Reason', '${_summary['rejectionReason']}'),
           const SizedBox(height: 16),
+          _buildAreaCleanedSummary(areas),
+          const SizedBox(height: 16),
           const Text('Areas Work', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           const SizedBox(height: 8),
           ...areas.map((a) {
@@ -424,6 +426,69 @@ class _ShiftSummaryDetailScreenState extends State<ShiftSummaryDetailScreen> {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildAreaCleanedSummary(List areas) {
+    double totalSqft = 0;
+    for (final a in areas) {
+      final m = Map<String, dynamic>.from(a as Map);
+      final sqft = (m['basicAreaSqFt'] ?? 0).toDouble();
+      final freq = (m['boqTimesPerPeriod'] ?? 1).toInt();
+      totalSqft += sqft * freq;
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Area Cleaned Summary',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 8),
+          ...areas.map((a) {
+            final m = Map<String, dynamic>.from(a as Map);
+            final sqft = (m['basicAreaSqFt'] ?? 0).toDouble();
+            final freq = (m['boqTimesPerPeriod'] ?? 1).toInt();
+            final cleaned = sqft * freq;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${m['areaName'] ?? ''}',
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '${sqft.toStringAsFixed(0)} sqft × ${freq}x = ${cleaned.toStringAsFixed(0)} sqft',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const Divider(),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Total Area Cleaned',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+              Text(
+                '${totalSqft.toStringAsFixed(0)} sqft',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF1B5E20)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

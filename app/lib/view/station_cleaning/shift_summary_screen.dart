@@ -298,14 +298,15 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Add Area'),
-                      onPressed: _isSubmitting ? null : _addArea,
+                  if (_availableMasterAreas.isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Add Area'),
+                        onPressed: _isSubmitting ? null : _addArea,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
