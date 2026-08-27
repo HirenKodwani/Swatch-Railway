@@ -169,18 +169,13 @@ class StationReportService {
 
   async generateDailyAttendanceReport(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const [stationAttSnap, cleaningAttSnap] = await Promise.all([
-      db.collection('station_attendance').where('stationId', '==', stationId).get(),
-      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
-    ]);
+    // Attendance is captured only by the contractor supervisor via station_attendance.
+    // Workers do not self-mark station cleaning attendance (station_cleaning_attendance).
+    const stationAttSnap = await db.collection('station_attendance').where('stationId', '==', stationId).get();
     const records = []; stationAttSnap.forEach(d => { const r = d.data(); if (r.date === date) records.push(r); });
-    const dayCleaning = []; cleaningAttSnap.forEach(d => { const r = d.data(); const d2 = r.date || (r.createdAt || '').substring(0, 10); if (d2 === date) dayCleaning.push(r); });
-    const combinedRecords = [
-      ...records.map(r => ({ ...r, source: 'station_attendance' })),
-      ...dayCleaning.map(r => ({ ...r, source: 'station_cleaning_attendance' })),
-    ];
-    const present = records.filter(r => r.status === 'present').length + dayCleaning.filter(r => r.isStartMarked).length;
-    const late = records.filter(r => r.status === 'late').length + dayCleaning.filter(r => r.attendanceStatus === 'LATE').length;
+    const combinedRecords = records.map(r => ({ ...r, source: 'station_attendance' }));
+    const present = records.filter(r => r.status === 'present').length;
+    const late = records.filter(r => r.status === 'late').length;
     const absent = records.filter(r => r.status === 'absent').length;
     const onLeave = records.filter(r => r.status === 'on_leave').length;
     const report = await this._storeReport({
@@ -362,18 +357,14 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const monthPad = String(month).padStart(2, '0');
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
-    const [snap, cleaningSnap, overtimeSnap] = await Promise.all([
+    // Attendance is captured only by the contractor supervisor via station_attendance.
+    const [snap, overtimeSnap] = await Promise.all([
       db.collection('station_attendance').where('stationId', '==', stationId).get(),
-      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
       db.collection('overtime_records').where('stationId', '==', stationId).get(),
     ]);
     const records = []; snap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) records.push(r); });
-    const dayCleaning = []; cleaningSnap.forEach(d => { const r = d.data(); if (r.date && r.date >= startDate && r.date <= endDate) dayCleaning.push(r); });
     const overtime = []; overtimeSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) overtime.push(r); });
-    const combinedRecords = [
-      ...records.map(r => ({ ...r, source: 'station_attendance' })),
-      ...dayCleaning.map(r => ({ ...r, source: 'station_cleaning_attendance', status: r.attendanceStatus === 'LATE' ? 'late' : 'present' })),
-    ];
+    const combinedRecords = records.map(r => ({ ...r, source: 'station_attendance' }));
     const daysPresent = new Set(combinedRecords.filter(r => r.status === 'present').map(r => r.date)).size;
     const totalDays = new Set(combinedRecords.map(r => r.date)).size;
     const workerMap = {}; combinedRecords.forEach(r => { const w = r.workerId || r.userId; if (!w) return; if (!workerMap[w]) workerMap[w] = { present: 0, late: 0, absent: 0, leave: 0, total: 0 }; workerMap[w][r.status === 'present' ? 'present' : r.status === 'late' ? 'late' : r.status === 'absent' ? 'absent' : r.status === 'on_leave' ? 'leave' : 'total']++; workerMap[w].total++; });

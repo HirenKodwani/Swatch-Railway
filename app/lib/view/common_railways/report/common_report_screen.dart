@@ -17,12 +17,12 @@ import '../widgets/rolevise_dropdowns.dart';
 import '../report_excel_format/obhs_report_excel.dart';
 import '../station_management/area_performance_dashboard.dart';
 import '../../../services/pdf_report_service.dart';
+import '../../../services/station_cleaning_report_service.dart';
 import '../../../repositories/worker_repo.dart';
 import 'package:printing/printing.dart';
 import 'package:crm_train/model/station_models.dart';
-import 'package:crm_train/model/platform_model.dart';
-import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/repositories/base_repository.dart';
+import 'package:crm_train/repositories/station_report_repository.dart';
 class CommonReportScreen extends StatefulWidget {
   final int initialIndex;
   const CommonReportScreen({super.key, this.initialIndex = 0});
@@ -91,16 +91,19 @@ class _CommonReportScreenState extends State<CommonReportScreen>
 
   List<Station> _stnCleaningStations = [];
   Station? _stnCleaningSelectedStation;
-  List<Platform> _stnCleaningPlatforms = [];
-  Platform? _stnCleaningSelectedPlatform;
 
   String? selectedReportType;
   DateTime? selectedDepartureDate;
 
+  bool _isContractorOnly = false;
+  bool _contractorNoStationAssigned = false;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialIndex);
+    final role = (Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '').toUpperCase().replaceAll(' ', '_');
+    _isContractorOnly = {'CONTRACTOR_ADMIN', 'CONTRACTOR_SUPERVISOR'}.contains(role);
+    _tabController = TabController(length: _isContractorOnly ? 1 : 5, vsync: this, initialIndex: _isContractorOnly ? 0 : widget.initialIndex);
     _loadStatistics();
     _loadStnCleaningStations();
   }
@@ -1283,24 +1286,28 @@ class _CommonReportScreenState extends State<CommonReportScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: "Premises"),
-            Tab(text: "Coach"),
-            Tab(text: "CTS"),
-            Tab(text: "OBHS"),
-            Tab(text: "Stn Cleaning"),
-          ],
+          tabs: _isContractorOnly
+              ? const [Tab(text: "Stn Cleaning")]
+              : const [
+                  Tab(text: "Premises"),
+                  Tab(text: "Coach"),
+                  Tab(text: "CTS"),
+                  Tab(text: "OBHS"),
+                  Tab(text: "Stn Cleaning"),
+                ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildPremisesCleaningTab(),
-          _buildCoachCleaningTab(),
-          _buildCTSTab(),
-          _buildOBHSTab(),
-          _buildStnCleaningTab(),
-        ],
+        children: _isContractorOnly
+            ? [_buildStnCleaningTab()]
+            : [
+                _buildPremisesCleaningTab(),
+                _buildCoachCleaningTab(),
+                _buildCTSTab(),
+                _buildOBHSTab(),
+                _buildStnCleaningTab(),
+              ],
       ),
     );
   }
@@ -3213,21 +3220,41 @@ class _CommonReportScreenState extends State<CommonReportScreen>
     try {
       final stationsList = await ApiService.getStations(active: true);
       if (mounted) {
-        setState(() {
-          _stnCleaningStations = stationsList;
-        });
-      }
-    } catch (_) {}
-  }
+        List<Station> available = stationsList;
+        if (_isContractorOnly) {
+          final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+          final userStationIds = <String>{};
+          if (user?.stationId != null && user!.stationId!.isNotEmpty) {
+            userStationIds.add(user.stationId!);
+          }
+          if (user?.stations != null && user!.stations.isNotEmpty) {
+            userStationIds.addAll(user.stations);
+          }
+          if (userStationIds.isNotEmpty) {
+            available = stationsList
+                .where((s) => s.uid != null && userStationIds.contains(s.uid))
+                .toList();
+          } else {
+            available = [];
+          }
+        }
 
-  Future<void> _loadStnCleaningPlatforms(String stationId) async {
-    try {
-      final platforms = await PlatformRepository.getByStation(stationId);
-      if (mounted) {
         setState(() {
-          _stnCleaningPlatforms = platforms;
-          _stnCleaningSelectedPlatform = null;
+          _stnCleaningStations = available;
+          _contractorNoStationAssigned =
+              _isContractorOnly && available.isEmpty;
+          _stnCleaningSelectedStation =
+              available.isNotEmpty ? available.first : null;
         });
+
+        if (_contractorNoStationAssigned) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    "No station is assigned to your contract. Please contact the higher authority."),
+                backgroundColor: Colors.orange),
+          );
+        }
       }
     } catch (_) {}
   }
@@ -3235,6 +3262,15 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   String? _stnCleaningSelectedReportType;
 
   Future<void> _generateStnCleaningReport() async {
+    if (_contractorNoStationAssigned) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                "No station is assigned to your contract. Please contact the higher authority."),
+            backgroundColor: Colors.orange),
+      );
+      return;
+    }
     if (_stnCleaningSelectedStation == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a station *")));
       return;
@@ -3254,7 +3290,8 @@ class _CommonReportScreenState extends State<CommonReportScreen>
       );
 
       if (mounted) {
-        final runs = (result['runs'] as List?) ?? [];
+        final runList = (result['data'] as List?) ?? (result['runs'] as List?) ?? [];
+        final runs = runList.cast<Map<String, dynamic>>();
         int completed = 0;
         int active = 0;
         int approved = 0;
@@ -3356,50 +3393,41 @@ class _CommonReportScreenState extends State<CommonReportScreen>
   Future<void> _downloadStnCleaningPdf(List<dynamic> runInstances) async {
     setState(() => isDownloading = true);
     try {
-      final runs = runInstances.cast<Map<String, dynamic>>();
-      Uint8List? pdfBytes;
-
-      switch (_stnCleaningSelectedReportType) {
-        case 'Station Run Report':
-          // Using train report pdf template as fallback for now
-          pdfBytes = await PDFReportService.generateTrainReportPdf(runs);
-          break;
-        case 'Attendance Report':
-          final allAttendance = <Map<String, dynamic>>[];
-          for (final run in runs) {
-            final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
-            if (runId.isNotEmpty) {
-              allAttendance.addAll(await FirebaseOBHSService.getAttendanceForRun(runId));
-            }
-          }
-          pdfBytes = await PDFReportService.generateAttendanceReportPdf(runs, allAttendance);
-          break;
-        case 'Worker Activity Report':
-          final allTasks = <Map<String, dynamic>>[];
-          for (final run in runs) {
-            final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
-            if (runId.isNotEmpty) {
-              allTasks.addAll(await FirebaseOBHSService.getTasksForRun(runId));
-            }
-          }
-          pdfBytes = await PDFReportService.generateWorkerActivityReportPdf(runs, allTasks);
-          break;
-        case 'Complaint Report':
-          final allComplaints = <Map<String, dynamic>>[];
-          for (final run in runs) {
-            final runId = run['runInstanceId']?.toString() ?? run['instanceId']?.toString() ?? run['id']?.toString() ?? '';
-            if (runId.isNotEmpty) {
-              allComplaints.addAll(await FirebaseOBHSService.getComplaintsForRun(runId));
-            }
-          }
-          pdfBytes = await PDFReportService.generateComplaintReportPdf(runs, allComplaints);
-          break;
-        default:
-          pdfBytes = await PDFReportService.generateTrainReportPdf(runs);
+      if (_contractorNoStationAssigned) {
+        throw Exception(
+            'No station is assigned to your contract. Please contact the higher authority.');
+      }
+      final station = _stnCleaningSelectedStation;
+      if (station == null || station.uid == null || station.uid!.isEmpty) {
+        throw Exception('Please select a station');
       }
 
+      final DateTime reportDate = endDate ?? DateTime.now();
+      final String dateStr = DateFormat('yyyy-MM-dd').format(reportDate);
+
+      String backendType;
+      switch (_stnCleaningSelectedReportType) {
+        case 'Attendance Report':
+          backendType = 'daily_attendance';
+          break;
+        case 'Complaint Report':
+          backendType = 'daily_complaint';
+          break;
+        case 'Worker Activity Report':
+          backendType = 'daily_activity';
+          break;
+        case 'Station Run Report':
+        default:
+          backendType = 'daily_activity';
+          break;
+      }
+
+      Uint8List? pdfBytes;
+      final report = await StationReportRepository.generateDaily(backendType, station.uid!, dateStr);
+      pdfBytes = await StationCleaningReportService.generateStationReportPdf(report);
+
       setState(() => isDownloading = false);
-      
+
       if (pdfBytes != null) {
         final typeSlug = (_stnCleaningSelectedReportType ?? 'report').toLowerCase().replaceAll(' ', '_');
         final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
@@ -3541,36 +3569,18 @@ class _CommonReportScreenState extends State<CommonReportScreen>
               DropdownButtonFormField<Station>(
                 value: _stnCleaningSelectedStation,
                 decoration: InputDecoration(
-                  labelText: 'Station *',
+                  labelText: _isContractorOnly ? 'Station (Locked)' : 'Station *',
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 items: _stnCleaningStations.map((s) => DropdownMenuItem(value: s, child: Text(s.stationName, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) {
-                  setState(() {
-                    _stnCleaningSelectedStation = v;
-                    _stnCleaningSelectedPlatform = null;
-                  });
-                  if (v != null && v.uid != null) {
-                    _loadStnCleaningPlatforms(v.uid!);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<Platform>(
-                value: _stnCleaningSelectedPlatform,
-                decoration: InputDecoration(
-                  labelText: 'Platform (optional)',
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                items: [
-                  const DropdownMenuItem<Platform>(value: null, child: Text('All Platforms (Station Level)', style: TextStyle(fontSize: 13))),
-                  ..._stnCleaningPlatforms.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName, style: const TextStyle(fontSize: 13)))),
-                ],
-                onChanged: (v) {
-                  setState(() { _stnCleaningSelectedPlatform = v; });
-                },
+                onChanged: _isContractorOnly
+                    ? null
+                    : (v) {
+                        setState(() {
+                          _stnCleaningSelectedStation = v;
+                        });
+                      },
               ),
               const SizedBox(height: 12),
               _dateRangePicker(),
@@ -3602,8 +3612,15 @@ class _CommonReportScreenState extends State<CommonReportScreen>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: const Icon(Icons.assessment, color: Colors.white),
-                label: const Text("Generate Report", style: TextStyle(color: Colors.white, fontSize: 15)),
-                onPressed: isLoading ? null : _generateStnCleaningReport,
+                label: Text(
+                  _contractorNoStationAssigned
+                      ? "No Station Assigned"
+                      : "Generate Report",
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                ),
+                onPressed: (isLoading || _contractorNoStationAssigned)
+                    ? null
+                    : _generateStnCleaningReport,
               ),
             ],
           ),
