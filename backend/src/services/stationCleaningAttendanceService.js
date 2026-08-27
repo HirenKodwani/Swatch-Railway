@@ -1,6 +1,7 @@
 import { db, admin } from '../database/index.js';
 import logger from '../logger/index.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../errors/index.js';
+import { fcmService } from './fcmService.js';
 
 class StationCleaningAttendanceService {
   async markAttendance(userData, body) {
@@ -184,6 +185,17 @@ class StationCleaningAttendanceService {
       };
       await attendanceRef.update(updateData);
     }
+
+    // Send shift summary reminder notification when end attendance is marked
+    if (attendanceType === 'end') {
+      try {
+        const title = 'Shift Ended — Submit Photos';
+        const body = 'You must photograph at least 5 critical areas and submit your shift summary to complete your shift.';
+        const data = { type: 'shift_summary_reminder', stationId: stationId || '', shift: '' };
+        fcmService.sendPush(workerId, title, body, data).catch(() => {});
+      } catch (_) { /* notification failure should not block attendance */ }
+    }
+
     return { success: true, message: `${attendanceType.toUpperCase()} attendance processed successfully.`, uid: attendanceDocId, isLate: isLateAttendance };
   }
 

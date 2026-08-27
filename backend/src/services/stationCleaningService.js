@@ -1,6 +1,7 @@
 import { db, admin } from '../database/index.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../errors/index.js';
 import { paginate } from '../utils/paginate.js';
+import { fcmService } from './fcmService.js';
 
 class StationCleaningService {
 
@@ -1769,6 +1770,25 @@ class StationCleaningService {
       updatedAt: now,
     };
     await ref.set(record);
+
+    // Notify railway supervisors/admins for approval
+    try {
+      const notifyRoles = ['RAILWAY_SUPERVISOR', 'RAILWAY_ADMIN', 'RAILWAY_MASTER', 'SUPER_ADMIN'];
+      const usersSnap = await db.collection('users')
+        .where('role', 'in', notifyRoles)
+        .limit(50)
+        .get();
+      const title = 'Shift Summary Submitted';
+      const body = `${supervisorName || 'Supervisor'} submitted shift summary for ${stationName || 'station'} — ${shift || ''} shift. Please review and approve.`;
+      const data = { type: 'shift_summary_approval', summaryUid: ref.id, stationId: stationId || '' };
+      for (const userDoc of usersSnap.docs) {
+        const userData = userDoc.data();
+        if (userData.stationId === stationId || (userData.stations && Array.isArray(userData.stations) && userData.stations.includes(stationId))) {
+          fcmService.sendPush(userDoc.id, title, body, data).catch(() => {});
+        }
+      }
+    } catch (_) { /* notification failure should not block submission */ }
+
     return { message: 'Shift summary submitted for approval', uid: ref.id, count: enriched.length, totalWorkDone, status: 'submitted' };
   }
 

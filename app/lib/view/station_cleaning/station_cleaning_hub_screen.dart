@@ -46,6 +46,7 @@ import 'petty_issue/petty_issue_list_screen.dart';
 import 'task_master/task_type_list_screen.dart';
 import 'workers/worker_management_screen.dart';
 import 'field_work/photo_submission_screen.dart';
+import 'shift_summary_approval_screen.dart';
 
 class StationCleaningHubScreen extends StatefulWidget {
   final String stationId;
@@ -110,13 +111,15 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
     final r = role.toUpperCase().replaceAll(' ', '_');
     switch (r) {
       case 'RAILWAY_MASTER':
-        return {0, 1, 8, 9, 15, 16, 23, 24, 29, 30, 31};
+        return {0, 1, 8, 9, 15, 16, 23, 24, 29, 30, 31, 35};
       case 'RAILWAY_ADMIN':
-        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 35};
       case 'RAILWAY_INSPECTOR':
-        return {15};
+        return {15, 35};
       case 'RAILWAY_SUPERVISOR':
-        return {0, 1, 14, 15, 22, 28, 30, 31};
+        return {0, 1, 14, 15, 22, 28, 30, 31, 35};
+      case 'COMPANY_MASTER':
+        return {0, 1, 8, 9, 15, 18, 30, 31, 35};
       case 'CONTRACTOR_MASTER':
         return {0, 1, 8, 9, 15, 18, 30, 31};
       case 'CONTRACTOR_ADMIN':
@@ -174,6 +177,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       _moduleCard(context, Icons.book, 'Daily\nLog', Colors.blue, () => _openDailyLog(context)),                    // 32
       _moduleCard(context, Icons.groups, 'Workers', Colors.teal, () => _openWorkers(context)),                     // 33
       _moduleCard(context, Icons.camera_alt, 'Field\nWork', Colors.deepOrange, () => _openFieldWork(context)),     // 34
+      _moduleCard(context, Icons.approval, 'Shift\nSummary', Colors.teal.shade700, () => _openShiftSummaryApproval(context)), // 35
     ];
 
     final cards = <Widget>[];
@@ -513,5 +517,9 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   void _openFieldWork(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoSubmissionScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
+  }
+
+  void _openShiftSummaryApproval(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ShiftSummaryApprovalScreen(stationId: _selectedStationId)));
   }
 }

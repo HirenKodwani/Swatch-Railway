@@ -275,9 +275,24 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${type.toUpperCase()} attendance marked'), backgroundColor: kSuccessGreen),
-        );
+        if (type == 'end') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Shift ended — submit your photos for critical areas now'),
+              backgroundColor: Colors.orange.shade800,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'SUBMIT',
+                textColor: Colors.white,
+                onPressed: _promptShiftSummary,
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${type.toUpperCase()} attendance marked'), backgroundColor: kSuccessGreen),
+          );
+        }
       }
 
       if (type == 'end' && mounted) {
@@ -320,35 +335,44 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('End of Shift'),
-        content: Text('Record work done for at least 5 areas (photo + remark each) to submit the shift summary.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Skip'),
+      barrierDismissible: false,
+      builder: (ctx) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          icon: const Icon(Icons.camera_alt, size: 48, color: Colors.orange),
+          title: const Text('Shift Summary Required'),
+          content: const Text(
+            'You must photograph at least 5 critical areas and submit your shift summary to complete your shift.',
+            textAlign: TextAlign.center,
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ShiftSummaryScreen(
-                    stationId: widget.stationId,
-                    stationName: widget.stationName,
-                    supervisorId: widget.supervisorId,
-                    supervisorName: widget.supervisorName,
-                    shift: primaryShift,
-                    date: _selectedDate,
-                    areas: areas,
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ShiftSummaryScreen(
+                      stationId: widget.stationId,
+                      stationName: widget.stationName,
+                      supervisorId: widget.supervisorId,
+                      supervisorName: widget.supervisorName,
+                      shift: primaryShift,
+                      date: _selectedDate,
+                      areas: areas,
+                    ),
                   ),
-                ),
-              );
-            },
-            child: const Text('Fill Summary'),
-          ),
-        ],
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kRailwayBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text('Submit Photos'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -554,13 +578,14 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
           if (_endMarked)
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: ElevatedButton.icon(
                 icon: const Icon(Icons.camera_alt, size: 18),
-                label: const Text('Shift Summary Photos'),
+                label: const Text('Submit Shift Summary Photos'),
                 onPressed: () => _promptShiftSummary(),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: kRailwayBlue,
-                  side: BorderSide(color: kRailwayBlue),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade800,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
             ),
