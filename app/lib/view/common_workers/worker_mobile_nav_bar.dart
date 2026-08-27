@@ -70,7 +70,8 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
     return [
       WorkerMobileHomeScreen(),
       WorkerTaskViewScreen(workerId: widget.user.uid, workerName: widget.user.fullName),
-      const _AttendanceTab(),
+      // ── Station Cleaning Attendance tab: hidden (commented) per requirement ──
+      // const _AttendanceTab(),
       WorkerComplaintsScreen(),
       const WorkerRatingScreen(isOfficialMode: false),
     ];
@@ -90,12 +91,13 @@ class _WorkerMobileNavBarState extends State<WorkerMobileNavBar> {
         activeColorPrimary: kRailwayBlue,
         inactiveColorPrimary: Colors.grey,
       ),
-      PersistentBottomNavBarItem(
-        icon: const Icon(Icons.description),
-        title: "Attendance",
-        activeColorPrimary: kRailwayBlue,
-        inactiveColorPrimary: Colors.grey,
-      ),
+      // ── Station Cleaning Attendance tab: hidden (commented) per requirement ──
+      // PersistentBottomNavBarItem(
+      //   icon: const Icon(Icons.description),
+      //   title: "Attendance",
+      //   activeColorPrimary: kRailwayBlue,
+      //   inactiveColorPrimary: Colors.grey,
+      // ),
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.report_rounded),
         title: "Complaints",
