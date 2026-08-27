@@ -272,11 +272,14 @@ class ExecutionSheetService {
     const prefix = `${year}-${String(month).padStart(2, '0')}`;
 
     const snapshot = await db.collection('execution_sheet_daily_logs')
-      .where('stationId', '==', stationId).get();
+      .where('stationId', '==', stationId)
+      .where('date', '>=', `${prefix}-01`)
+      .where('date', '<=', `${prefix}-31`)
+      .get();
     const logs = [];
     snapshot.forEach((doc) => {
       const d = doc.data();
-      if ((d.date || '').startsWith(prefix) && d.status === 'SUBMITTED') logs.push(d);
+      if (d.status === 'SUBMITTED') logs.push(d);
     });
 
     const shiftSummaries = await this._fetchAreaExecution(stationId, month, year);
