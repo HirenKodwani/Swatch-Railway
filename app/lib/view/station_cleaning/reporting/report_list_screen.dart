@@ -13,7 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ReportListScreen extends StatefulWidget {
   final String stationId;
   final String stationName;
-  const ReportListScreen({super.key, required this.stationId, required this.stationName});
+  final String? role;
+  const ReportListScreen({super.key, required this.stationId, required this.stationName, this.role});
 
   @override
   State<ReportListScreen> createState() => _ReportListScreenState();
@@ -32,7 +33,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
   int _filterMonth = DateTime.now().month;
   int _filterYear = DateTime.now().year;
 
-  final List<String> _reportTypes = [
+  final List<String> _allReportTypes = [
     'daily_attendance', 'daily_activity', 'daily_scorecard', 'daily_complaint',
     'daily_feedback', 'daily_inspection', 'daily_supervisor_log', 'missed_activity',
     'archive_retrieval',
@@ -41,12 +42,25 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
     'monthly_performance',
   ];
 
+  static const _contractorSupervisorTypes = [
+    'daily_attendance', 'daily_activity', 'daily_scorecard', 'daily_complaint',
+    'daily_feedback', 'missed_activity',
+  ];
+
+  late final List<String> _reportTypes = _getReportTypes();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadReports();
     _loadSchedules();
+  }
+
+  List<String> _getReportTypes() {
+    final r = (widget.role ?? '').toUpperCase();
+    if (r == 'CONTRACTOR_SUPERVISOR' || r == 'CONTRACTOR_ADMIN') return _contractorSupervisorTypes;
+    return _allReportTypes;
   }
 
   @override
@@ -64,7 +78,11 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
         'year': _filterYear.toString(),
       };
       if (_filterReportType != null) query['reportType'] = _filterReportType!;
-      final list = await StationReportRepository.list(query);
+      var list = await StationReportRepository.list(query);
+      final r = (widget.role ?? '').toUpperCase();
+      if (r == 'CONTRACTOR_ADMIN' || r == 'CONTRACTOR_SUPERVISOR') {
+        list = list.where((report) => _contractorSupervisorTypes.contains(report.reportType)).toList();
+      }
       setState(() => _reports = list);
     } catch (e) {
       if (mounted) {
@@ -102,6 +120,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
     int selectedYear = DateTime.now().year;
     var isDaily = selectedType.startsWith('daily_') || selectedType == 'missed_activity';
     var isArchive = selectedType == 'archive_retrieval';
+    bool datePicked = false;
 
     showDialog(
       context: context,
@@ -125,6 +144,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                         selectedType = val;
                         isDaily = val.startsWith('daily_') || val == 'missed_activity';
                         isArchive = val == 'archive_retrieval';
+                        datePicked = true;
                       });
                     }
                   },
@@ -139,7 +159,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                         firstDate: DateTime.now().subtract(const Duration(days: 365)),
                         lastDate: DateTime.now(),
                       );
-                      if (picked != null) setDialogState(() => archiveStartDate = picked);
+                      if (picked != null) setDialogState(() { archiveStartDate = picked; datePicked = true; });
                     },
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: 'Start Date', border: OutlineInputBorder()),
@@ -155,7 +175,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                         firstDate: DateTime.now().subtract(const Duration(days: 365)),
                         lastDate: DateTime.now(),
                       );
-                      if (picked != null) setDialogState(() => archiveEndDate = picked);
+                      if (picked != null) setDialogState(() { archiveEndDate = picked; datePicked = true; });
                     },
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: 'End Date', border: OutlineInputBorder()),
@@ -171,7 +191,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                         firstDate: DateTime.now().subtract(const Duration(days: 90)),
                         lastDate: DateTime.now(),
                       );
-                      if (picked != null) setDialogState(() => selectedDate = picked);
+                      if (picked != null) setDialogState(() { selectedDate = picked; datePicked = true; });
                     },
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: 'Date', border: OutlineInputBorder()),
@@ -187,7 +207,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                       child: Text(DateTime(2000, i + 1).month.toString()),
                     )),
                     onChanged: (val) {
-                      if (val != null) setDialogState(() => selectedMonth = val);
+                      if (val != null) setDialogState(() { selectedMonth = val; datePicked = true; });
                     },
                   ),
                   const SizedBox(height: 12),
@@ -199,7 +219,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                       child: Text((DateTime.now().year - 2 + i).toString()),
                     )),
                     onChanged: (val) {
-                      if (val != null) setDialogState(() => selectedYear = val);
+                      if (val != null) setDialogState(() { selectedYear = val; datePicked = true; });
                     },
                   ),
                 ],
@@ -209,7 +229,7 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: datePicked ? () async {
                 Navigator.pop(ctx);
                 setState(() => _isLoadingReports = true);
                 try {
@@ -238,9 +258,12 @@ class _ReportListScreenState extends State<ReportListScreen> with TickerProvider
                 } finally {
                   if (mounted) setState(() => _isLoadingReports = false);
                 }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: kRailwayBlue, foregroundColor: Colors.white),
-              child: const Text('Generate'),
+              } : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kRailwayBlue,
+                foregroundColor: Colors.white,
+              ),
+              child: datePicked ? const Text('Generate') : const Text('Select a date first'),
             ),
           ],
         ),
