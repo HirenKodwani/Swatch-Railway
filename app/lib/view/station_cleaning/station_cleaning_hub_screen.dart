@@ -102,7 +102,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   bool _canSwitchStation(String role) {
     final r = role.toUpperCase().replaceAll(' ', '_');
-    const switchable = {'SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'CONTRACTOR_MASTER', 'CONTRACTOR_ADMIN'};
+    const switchable = {'SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'CONTRACTOR_MASTER'};
     return switchable.contains(r);
   }
 
