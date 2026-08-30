@@ -42,6 +42,7 @@ import '../attendance/attendance_exception_dashboard.dart';
 import '../station_management/area_list_screen.dart';
 import '../station_management/task_generation_screen.dart';
 import '../station_management/task_approval_screen.dart';
+import '../../station_cleaning/shift_summary_approval_screen.dart';
 import '../station_management/machine_master_list_screen.dart';
 import '../station_management/material_list_screen.dart';
 import '../station_management/area_performance_dashboard.dart';
@@ -478,17 +479,18 @@ class _CommonDashboardState extends State<CommonDashboard> {
         "icon": Icons.cleaning_services_rounded,
         "title": "Station Cleaning",
         "contractTypes": ["station_cleaning"],
-        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"],
+        "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Railway Inspector"],
         "children": [
-          {"title": "Module Hub", "route": "sc_main"},
-          {"title": "Inspection", "route": "sc_inspection"},
-          {"title": "Petty Issues", "route": "sc_petty_issues"},
-          {"title": "Dashboard", "route": "sc_dashboard"},
-          {"title": "Area Management", "route": "sc_areas"},
-          {"title": "Generate Tasks", "route": "sc_generate_tasks"},
-          {"title": "Task Approval", "route": "sc_approval"},
-          {"title": "Machines", "route": "sc_machines"},
-          {"title": "Materials", "route": "sc_materials"},
+          {"title": "Module Hub", "route": "sc_main", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Railway Inspector"]},
+          {"title": "Inspection", "route": "sc_inspection", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Railway Inspector"]},
+          {"title": "Petty Issues", "route": "sc_petty_issues", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]},
+          {"title": "Dashboard", "route": "sc_dashboard", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]},
+          {"title": "Area Management", "route": "sc_areas", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"]},
+          {"title": "Generate Tasks", "route": "sc_generate_tasks", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor"]},
+          {"title": "Task Approval", "route": "sc_approval", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin", "Railway Supervisor", "Railway Inspector"]},
+          {"title": "Shift Summary Approval", "route": "sc_shift_summary_approval", "roles": ["Railway Admin", "Railway Supervisor"]},
+          {"title": "Machines", "route": "sc_machines", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"]},
+          {"title": "Materials", "route": "sc_materials", "roles": ["Super Admin", "Company Master", "Contractor Admin", "Railway Master", "Railway Admin"]},
         ]
       },
       {
@@ -541,6 +543,10 @@ class _CommonDashboardState extends State<CommonDashboard> {
     }).map((item) {
       if (item.containsKey('children')) {
         final children = (item['children'] as List<Map<String, dynamic>>).where((child) {
+          if (child.containsKey('roles')) {
+            final allowedRoles = child['roles'] as List<String>;
+            if (!allowedRoles.contains(userRole)) return false;
+          }
           if (child.containsKey('contractTypes') && contractType != null) {
             final allowedTypes = child['contractTypes'] as List<String>;
             if (!allowedTypes.contains(contractType)) return false;
@@ -677,6 +683,9 @@ class _CommonDashboardState extends State<CommonDashboard> {
       case "sc_approval":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskApprovalScreen()));
         break;
+      case "sc_shift_summary_approval":
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ShiftSummaryApprovalScreen()));
+        break;
       case "sc_machines":
         Navigator.push(context, MaterialPageRoute(builder: (context) => const MachineMasterListScreen()));
         break;
@@ -695,7 +704,7 @@ class _CommonDashboardState extends State<CommonDashboard> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
     final quickActions = _getQuickActions(user?.role);
-    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType);
+    final sidebarMenuItems = _getSidebarMenuItems(user?.role, user?.contractType ?? user?.domain);
 
     final parts = [
       if (user?.zone != null && user!.zone!.isNotEmpty) user.zone!,

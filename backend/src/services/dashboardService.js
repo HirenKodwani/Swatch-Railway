@@ -615,8 +615,12 @@ class DashboardService {
     return { count: snapshot.size, trains: snapshot.docs.map(d => ({ uid: d.id, ...d.data() })) };
   }
 
-  async getActiveWorkers() {
-    const snapshot = await db.collection('users').where('userType', '==', 'contractor').where('status', '==', 'APPROVED').get();
+  async getActiveWorkers(requesterData = {}) {
+    let query = db.collection('users').where('userType', '==', 'contractor').where('status', '==', 'APPROVED');
+    if (requesterData.userType === 'contractor' && requesterData.domain) {
+      query = query.where('domain', '==', requesterData.domain);
+    }
+    const snapshot = await query.get();
     return { count: snapshot.size, workers: snapshot.docs.map(d => ({ id: d.id, ...d.data() })) };
   }
 

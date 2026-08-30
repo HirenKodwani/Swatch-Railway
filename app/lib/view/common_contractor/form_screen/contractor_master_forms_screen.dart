@@ -1,3 +1,4 @@
+import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/view/common_contractor/form_screen/select_from_screen.dart';
 import 'package:crm_train/view/station_cleaning/cleaning_form/station_cleaning_form_list_screen.dart';
@@ -432,7 +433,7 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
 
   Widget _buildStationCleaningFormsTab() {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-    final stations = user?.stations ?? [];
+    final stationIds = user?.stations ?? [];
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -441,7 +442,7 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
           const Text("Station Cleaning Forms",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          if (stations.isEmpty)
+          if (stationIds.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
@@ -450,25 +451,40 @@ class _ContractorMasterFormsScreenState extends State<ContractorMasterFormsScree
               ),
             )
           else
-            ...stations.map((stationId) => Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: const Icon(Icons.train, color: kRailwayBlue),
-                    title: Text(stationId),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => StationCleaningFormListScreen(
-                            stationId: stationId,
-                            stationName: stationId,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                )),
+            FutureBuilder<List<Station>>(
+              future: ApiService.getStations(),
+              builder: (ctx, snapshot) {
+                final stations = snapshot.data ?? [];
+                return Column(
+                  children: stationIds.map((sid) {
+                    final station = stations.cast<Station?>().firstWhere(
+                      (s) => s?.uid == sid || s?.stationCode == sid || s?.stationName == sid,
+                      orElse: () => null,
+                    );
+                    final displayName = station?.stationName ?? sid;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: const Icon(Icons.train, color: kRailwayBlue),
+                        title: Text(displayName),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => StationCleaningFormListScreen(
+                                stationId: sid,
+                                stationName: displayName,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
         ],
       ),
     );

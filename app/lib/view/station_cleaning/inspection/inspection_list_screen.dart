@@ -77,7 +77,7 @@ class _InspectionListScreenState extends State<InspectionListScreen> {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null) return false;
     final r = (user.role ?? '').toUpperCase().replaceAll(' ', '_');
-    return ['SUPER_ADMIN', 'ADMIN', 'COMPANY_MASTER', 'RAILWAY_ADMIN'].contains(r);
+    return ['SUPER_ADMIN', 'ADMIN', 'COMPANY_MASTER', 'RAILWAY_ADMIN', 'RAILWAY_INSPECTOR'].contains(r);
   }
 
   @override

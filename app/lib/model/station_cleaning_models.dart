@@ -220,6 +220,8 @@ class StationBillingPack {
   final Map<String, dynamic> pettyIssueSummary;
   final Map<String, dynamic> evidenceSummary;
   final Map<String, dynamic> machineSummary;
+  final Map<String, dynamic> executionSheetSummary;
+  final Map<String, dynamic> inspectionBillingSummary;
   final Map<String, dynamic> penalties;
   final int billableAmount;
   final String status;
@@ -251,6 +253,8 @@ class StationBillingPack {
     this.pettyIssueSummary = const {},
     this.evidenceSummary = const {},
     required this.machineSummary,
+    this.executionSheetSummary = const {},
+    this.inspectionBillingSummary = const {},
     required this.penalties,
     required this.billableAmount,
     required this.status,
@@ -283,6 +287,8 @@ class StationBillingPack {
     pettyIssueSummary: json['pettyIssueSummary'] ?? {},
     evidenceSummary: json['evidenceSummary'] ?? {},
     machineSummary: json['machineSummary'] ?? {},
+    executionSheetSummary: json['executionSheetSummary'] ?? {},
+    inspectionBillingSummary: json['inspectionBillingSummary'] ?? {},
     penalties: json['penalties'] ?? {},
     billableAmount: json['billableAmount'] ?? 0,
     status: json['status'] ?? 'DRAFT',
@@ -1130,6 +1136,122 @@ class PettyIssue {
     closureHistory: (json['closureHistory'] as List?)?.cast<Map<String, dynamic>>() ?? [],
     createdAt: json['createdAt'] ?? '',
     updatedAt: json['updatedAt'] ?? '',
+  );
+}
+
+class SupervisorWorker {
+  final String uid;
+  final String supervisorId;
+  final String supervisorName;
+  final String fullName;
+  final String phone;
+  final String employeePhotoUrl;
+  final String aadhaarNumber;
+  final String aadhaarPhotoUrl;
+  final String panNumber;
+  final String panPhotoUrl;
+  final String pfUanNumber;
+  final String pfDocumentUrl;
+  final String policeVerificationNumber;
+  final String policeVerificationDocUrl;
+  final String stationId;
+  final String contractId;
+  final bool isActive;
+  final String createdAt;
+  final String updatedAt;
+
+  SupervisorWorker({
+    required this.uid, required this.supervisorId, required this.supervisorName,
+    required this.fullName, required this.phone,
+    this.employeePhotoUrl = '', this.aadhaarNumber = '', this.aadhaarPhotoUrl = '',
+    this.panNumber = '', this.panPhotoUrl = '', this.pfUanNumber = '',
+    this.pfDocumentUrl = '', this.policeVerificationNumber = '',
+    this.policeVerificationDocUrl = '', this.stationId = '', this.contractId = '',
+    this.isActive = true, required this.createdAt, required this.updatedAt,
+  });
+
+  factory SupervisorWorker.fromJson(Map<String, dynamic> json) => SupervisorWorker(
+    uid: json['uid'] ?? '',
+    supervisorId: json['supervisorId'] ?? '',
+    supervisorName: json['supervisorName'] ?? '',
+    fullName: json['fullName'] ?? '',
+    phone: json['phone'] ?? '',
+    employeePhotoUrl: json['employeePhotoUrl'] ?? '',
+    aadhaarNumber: json['aadhaarNumber'] ?? '',
+    aadhaarPhotoUrl: json['aadhaarPhotoUrl'] ?? '',
+    panNumber: json['panNumber'] ?? '',
+    panPhotoUrl: json['panPhotoUrl'] ?? '',
+    pfUanNumber: json['pfUanNumber'] ?? '',
+    pfDocumentUrl: json['pfDocumentUrl'] ?? '',
+    policeVerificationNumber: json['policeVerificationNumber'] ?? '',
+    policeVerificationDocUrl: json['policeVerificationDocUrl'] ?? '',
+    stationId: json['stationId'] ?? '',
+    contractId: json['contractId'] ?? '',
+    isActive: json['isActive'] ?? true,
+    createdAt: json['createdAt'] ?? '',
+    updatedAt: json['updatedAt'] ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'fullName': fullName, 'phone': phone,
+    'employeePhotoUrl': employeePhotoUrl,
+    'aadhaarNumber': aadhaarNumber, 'aadhaarPhotoUrl': aadhaarPhotoUrl,
+    'panNumber': panNumber, 'panPhotoUrl': panPhotoUrl,
+    'pfUanNumber': pfUanNumber, 'pfDocumentUrl': pfDocumentUrl,
+    'policeVerificationNumber': policeVerificationNumber, 'policeVerificationDocUrl': policeVerificationDocUrl,
+    'stationId': stationId,
+  };
+}
+
+class CleaningSubmission {
+  final String uid;
+  final String stationId;
+  final String stationName;
+  final String areaId;
+  final String areaName;
+  final String taskTypeId;
+  final String taskTypeName;
+  final String beforePhotoUrl;
+  final String afterPhotoUrl;
+  final String notes;
+  final String supervisorId;
+  final String supervisorName;
+  final String contractId;
+  final String submittedAt;
+  final String status;
+  final String? reviewedBy;
+  final String? reviewedAt;
+  final String? rejectionReason;
+
+  CleaningSubmission({
+    required this.uid, required this.stationId, this.stationName = '',
+    required this.areaId, this.areaName = '',
+    this.taskTypeId = '', this.taskTypeName = '',
+    required this.beforePhotoUrl, required this.afterPhotoUrl,
+    this.notes = '', required this.supervisorId, this.supervisorName = '',
+    this.contractId = '', required this.submittedAt,
+    this.status = 'pending', this.reviewedBy, this.reviewedAt, this.rejectionReason,
+  });
+
+  factory CleaningSubmission.fromJson(Map<String, dynamic> json) => CleaningSubmission(
+    uid: json['uid'] ?? '',
+    stationId: json['stationId'] ?? '',
+    stationName: json['stationName'] ?? '',
+    areaId: json['areaId'] ?? '',
+    areaName: json['areaName'] ?? '',
+    taskTypeId: json['taskTypeId'] ?? '',
+    taskTypeName: json['taskTypeName'] ?? '',
+    beforePhotoUrl: json['beforePhotoUrl'] ?? '',
+    afterPhotoUrl: json['afterPhotoUrl'] ?? '',
+    notes: json['notes'] ?? '',
+    supervisorId: json['supervisorId'] ?? '',
+    supervisorName: json['supervisorName'] ?? '',
+    contractId: json['contractId'] ?? '',
+    submittedAt: json['submittedAt'] ?? '',
+    status: json['status'] ?? 'pending',
+    reviewedBy: json['reviewedBy'],
+    reviewedAt: json['reviewedAt'],
+    rejectionReason: json['rejectionReason'],
   );
 }
 

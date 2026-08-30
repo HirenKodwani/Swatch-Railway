@@ -63,6 +63,8 @@ class UserModel {
         return 'Admin';
       case 'RAILWAY_ADMIN':
         return 'Railway Admin';
+      case 'RAILWAY_INSPECTOR':
+        return 'Railway Inspector';
       case 'RAILWAY_SUPERVISOR':
         return 'Railway Supervisor';
       case 'CONTRACTOR_ADMIN':

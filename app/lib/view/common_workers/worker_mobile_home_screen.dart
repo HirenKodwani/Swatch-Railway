@@ -782,12 +782,13 @@ class WorkerMobileHomeScreen extends StatelessWidget {
           'subtitle': 'View & raise',
           'color': Colors.red,
         },
-        {
-          'icon': Icons.cleaning_services,
-          'title': 'Station Cleaning',
-          'subtitle': 'My platform tasks',
-          'color': Colors.teal,
-        },
+        // ── Station Cleaning: hidden (commented) per requirement ──
+        // {
+        //   'icon': Icons.cleaning_services,
+        //   'title': 'Station Cleaning',
+        //   'subtitle': 'My platform tasks',
+        //   'color': Colors.teal,
+        // },
         {
           'icon': Icons.bug_report,
           'title': 'Pest Control',

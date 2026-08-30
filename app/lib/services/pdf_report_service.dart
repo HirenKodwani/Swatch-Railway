@@ -52,7 +52,7 @@ class PDFReportService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(title, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: primaryColor)),
-                  pw.Text('Indian Railways - OBHS Enterprise Monitoring System', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                  pw.Text('Indian Railways - Station Cleaning Enterprise Monitoring System', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                 ],
               ),
             ],
@@ -161,7 +161,7 @@ class PDFReportService {
                 pw.Container(width: 100, height: 1, color: PdfColors.grey),
                 pw.SizedBox(height: 5),
                 pw.Text('Audit Verified By', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                pw.Text('OBHS Monitoring System', style: const pw.TextStyle(fontSize: 8)),
+                pw.Text('Station Cleaning Monitoring System', style: const pw.TextStyle(fontSize: 8)),
               ]),
               pw.Column(children: [
                 if (officialImg != null)

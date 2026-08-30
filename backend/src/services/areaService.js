@@ -18,6 +18,17 @@ const STATION_AREA_TYPES = ['Waiting Room', 'Station Toilet', 'FOB', 'Escalator'
 
 const TENDER_FIELDS = ['section', 'sectionName', 'platformRef', 'surfaceType', 'areaSqft', 'shiftConsidered', 'tenderedAreaPerDay', 'cleaningInterval'];
 
+function _calcTenderedArea(basicAreaSqFt, frequencyType, frequencyTimes) {
+  const area = basicAreaSqFt || 0;
+  const times = frequencyTimes || 1;
+  switch ((frequencyType || 'daily').toLowerCase()) {
+    case 'monthly': return Math.round((area * times) / 30);
+    case 'weekly': return Math.round((area * times) / 7);
+    case 'daily':
+    default: return Math.round(area * times);
+  }
+}
+
 const VALID_FREQUENCIES = ['hourly', '2hrs', '4hrs', 'daily', 'shift_wise', 'once_per_day', 'twice_per_day', 'three_times_per_day', 'every_six_hours', 'weekly', 'fortnightly', 'monthly', 'as_and_when_required'];
 
 async function _generateAreaCode(stationId, platformId, areaType) {
@@ -57,14 +68,27 @@ class AreaService {
 
     const ref = db.collection('areas').doc();
     const areaCode = body.areaCode || await _generateAreaCode(stationId, platformId, areaType || 'Other');
+
+    const mainArea = body.mainArea || '';
+    const basicAreaSqFt = parseFloat(body.basicAreaSqFt) || 0;
+    const boqFrequencyType = body.frequencyType || '';
+    const boqTimesPerPeriod = parseInt(body.boqTimesPerPeriod || body.frequencyTimes) || 1;
+    const tenderedAreaPerDay = body.tenderedAreaPerDay !== undefined
+      ? parseFloat(body.tenderedAreaPerDay)
+      : (basicAreaSqFt && boqFrequencyType ? _calcTenderedArea(basicAreaSqFt, boqFrequencyType, boqTimesPerPeriod) : (body.tenderedAreaPerDay || 0));
+
     const data = {
       uid: ref.id, stationId,
       stationName: stationDoc.data().stationName || '',
       platformId: platformId || null,
       areaName, areaType: areaType || 'Other',
       areaCode,
+      mainArea,
+      basicAreaSqFt,
+      frequencyType: boqFrequencyType,
+      boqTimesPerPeriod,
+      tenderedAreaPerDay,
       cleaningFrequency: cf,
-      frequencyTimes: frequencyTimes || [],
       priority: Math.max(1, Math.min(5, Number(priority) || 3)),
       supervisorId: supervisorId || null,
       defaultWorkers: defaultWorkers || [],
@@ -88,10 +112,12 @@ class AreaService {
       const ref = db.collection('areas').doc(uid);
       const doc = await ref.get();
       if (!doc.exists) throw new NotFoundError('Area not found');
+      const existing = doc.data();
       const updates = {};
       const allowed = ['areaName', 'areaType', 'areaCode', 'cleaningFrequency', 'frequencyTimes', 'priority',
                         'supervisorId', 'defaultWorkers', 'defaultShift', 'qrCode', 'status', 'surfaceType',
-                        'areaSqft', 'platformId', ...TENDER_FIELDS];
+                        'areaSqft', 'platformId', 'mainArea', 'basicAreaSqFt', 'frequencyType', 'boqTimesPerPeriod',
+                        'tenderedAreaPerDay', ...TENDER_FIELDS];
       for (const key of allowed) {
         if (updateData[key] !== undefined) {
           if (key === 'cleaningFrequency' && !VALID_FREQUENCIES.includes(updateData[key])) {
@@ -108,6 +134,14 @@ class AreaService {
         if (!stationDoc.exists) throw new NotFoundError('Station not found');
         updates.stationId = updateData.stationId;
         updates.stationName = stationDoc.data().stationName || '';
+      }
+      if (updateData.basicAreaSqFt !== undefined || updateData.frequencyType !== undefined || updateData.boqTimesPerPeriod !== undefined) {
+        const basic = updateData.basicAreaSqFt !== undefined ? parseFloat(updateData.basicAreaSqFt) : (existing.basicAreaSqFt || 0);
+        const freqType = updateData.frequencyType || existing.frequencyType || '';
+        const times = updateData.boqTimesPerPeriod !== undefined ? parseInt(updateData.boqTimesPerPeriod) : (existing.boqTimesPerPeriod || 1);
+        if (basic && freqType) {
+          updates.tenderedAreaPerDay = _calcTenderedArea(basic, freqType, times);
+        }
       }
       updates.updatedAt = new Date().toISOString();
       await ref.update(updates);
@@ -150,9 +184,12 @@ class AreaService {
     const ref = db.collection('areas').doc(uid);
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Area not found');
+    const existing = doc.data();
     const updates = {};
     const allowed = ['areaName', 'areaType', 'areaCode', 'cleaningFrequency', 'frequencyTimes', 'priority',
-                      'supervisorId', 'defaultWorkers', 'defaultShift', 'qrCode', 'status', ...TENDER_FIELDS];
+                      'supervisorId', 'defaultWorkers', 'defaultShift', 'qrCode', 'status',
+                      'mainArea', 'basicAreaSqFt', 'frequencyType', 'boqTimesPerPeriod', 'tenderedAreaPerDay',
+                      ...TENDER_FIELDS];
     for (const key of allowed) {
       if (body[key] !== undefined) updates[key] = key === 'priority' ? Math.max(1, Math.min(5, Number(body[key]))) : body[key];
     }
@@ -166,6 +203,14 @@ class AreaService {
       updates.stationName = stationDoc.data().stationName || '';
     }
     if (body.platformId !== undefined) updates.platformId = body.platformId || null;
+    if (body.basicAreaSqFt !== undefined || body.frequencyType !== undefined || body.boqTimesPerPeriod !== undefined) {
+      const basic = body.basicAreaSqFt !== undefined ? parseFloat(body.basicAreaSqFt) : (existing.basicAreaSqFt || 0);
+      const freqType = body.frequencyType || existing.frequencyType || '';
+      const times = body.boqTimesPerPeriod !== undefined ? parseInt(body.boqTimesPerPeriod) : (existing.boqTimesPerPeriod || 1);
+      if (basic && freqType) {
+        updates.tenderedAreaPerDay = _calcTenderedArea(basic, freqType, times);
+      }
+    }
     updates.updatedAt = new Date().toISOString();
     await ref.update(updates);
     return { message: 'Area updated', uid };
@@ -177,6 +222,35 @@ class AreaService {
     if (!doc.exists) throw new NotFoundError('Area not found');
     await ref.update({ status: 'inactive', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     return { message: 'Area deactivated' };
+  }
+
+  async getAreaSummary(stationId) {
+    if (!stationId) throw new ValidationError('stationId is required');
+    const snapshot = await db.collection('areas')
+      .where('stationId', '==', stationId)
+      .where('status', '==', 'active').get();
+    const areas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const grouped = {};
+    let totalBasicArea = 0;
+    let totalTenderedArea = 0;
+
+    for (const area of areas) {
+      const main = area.mainArea || 'Uncategorized';
+      if (!grouped[main]) grouped[main] = [];
+      grouped[main].push(area);
+      totalBasicArea += (area.basicAreaSqFt || 0);
+      totalTenderedArea += (area.tenderedAreaPerDay || 0);
+    }
+
+    return {
+      count: areas.length,
+      grouped,
+      totals: {
+        totalBasicArea: Math.round(totalBasicArea),
+        totalTenderedArea: Math.round(totalTenderedArea)
+      }
+    };
   }
 
   async getAreasByStation(stationId, section) {

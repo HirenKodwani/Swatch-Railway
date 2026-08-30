@@ -44,6 +44,9 @@ import 'attendance/worker_attendance_screen.dart';
 import 'inspection/inspection_list_screen.dart';
 import 'petty_issue/petty_issue_list_screen.dart';
 import 'task_master/task_type_list_screen.dart';
+import 'workers/worker_management_screen.dart';
+import 'field_work/photo_submission_screen.dart';
+import 'shift_summary_approval_screen.dart';
 
 class StationCleaningHubScreen extends StatefulWidget {
   final String stationId;
@@ -78,26 +81,9 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   Future<void> _loadStations() async {
     setState(() => _loadingStations = true);
     try {
-      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
-      final role = user?.role ?? '';
       final all = await ApiService.getStations();
-      final contractorRoles = {'CONTRACTOR_ADMIN', 'CONTRACTOR_MASTER', 'CONTRACTOR_SUPERVISOR'};
-      final isContractor = contractorRoles.contains(role.toUpperCase().replaceAll(' ', '_'));
-      List<Station> filtered = all;
-      if (isContractor) {
-        final userStationIds = <String>{};
-        if (user?.stationId != null && user!.stationId!.isNotEmpty) {
-          userStationIds.add(user.stationId!);
-        }
-        if (user?.stations != null && user!.stations.isNotEmpty) {
-          userStationIds.addAll(user.stations);
-        }
-        if (userStationIds.isNotEmpty) {
-          filtered = all.where((s) => s.uid != null && userStationIds.contains(s.uid)).toList();
-        }
-      }
       setState(() {
-        _availableStations = filtered;
+        _availableStations = all;
         _loadingStations = false;
       });
     } catch (e) {
@@ -116,7 +102,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   bool _canSwitchStation(String role) {
     final r = role.toUpperCase().replaceAll(' ', '_');
-    const switchable = {'SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'CONTRACTOR_MASTER', 'CONTRACTOR_ADMIN'};
+    const switchable = {'SUPER_ADMIN', 'ADMIN', 'RAILWAY_ADMIN', 'COMPANY_MASTER', 'RAILWAY_MASTER', 'CONTRACTOR_MASTER'};
     return switchable.contains(r);
   }
 
@@ -125,17 +111,21 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
     final r = role.toUpperCase().replaceAll(' ', '_');
     switch (r) {
       case 'RAILWAY_MASTER':
-        return {0, 1, 8, 9, 15, 16, 23, 24, 29, 30, 31};
+        return {0, 1, 8, 9, 15, 16, 23, 24, 29, 30, 31, 35};
       case 'RAILWAY_ADMIN':
-        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 35};
+      case 'RAILWAY_INSPECTOR':
+        return {15, 35};
       case 'RAILWAY_SUPERVISOR':
-        return {0, 1, 14, 15, 22, 28, 30, 31};
+        return {0, 1, 14, 15, 22, 28, 30, 31, 35};
+      case 'COMPANY_MASTER':
+        return {0, 1, 8, 9, 15, 18, 30, 31, 35};
       case 'CONTRACTOR_MASTER':
         return {0, 1, 8, 9, 15, 18, 30, 31};
       case 'CONTRACTOR_ADMIN':
-        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+        return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
       case 'CONTRACTOR_SUPERVISOR':
-        return {0, 1, 14, 20, 30, 32};
+        return {0, 1, 9, 30, 32, 33, 34};
       case 'WORKER':
       case 'RAILWAY_WORKER':
       case 'JANITOR':
@@ -185,6 +175,9 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
       _moduleCard(context, Icons.report_problem_outlined, 'Petty\nIssues', kWarningOrange, () => _openPettyIssues(context)), // 30
       _moduleCard(context, Icons.checklist, 'Task\nTypes', Colors.blue.shade700, () => _openTaskTypes(context)),            // 31
       _moduleCard(context, Icons.book, 'Daily\nLog', Colors.blue, () => _openDailyLog(context)),                    // 32
+      _moduleCard(context, Icons.groups, 'Workers', Colors.teal, () => _openWorkers(context)),                     // 33
+      _moduleCard(context, Icons.camera_alt, 'Field\nWork', Colors.deepOrange, () => _openFieldWork(context)),     // 34
+      _moduleCard(context, Icons.approval, 'Shift\nSummary', Colors.teal.shade700, () => _openShiftSummaryApproval(context)), // 35
     ];
 
     final cards = <Widget>[];
@@ -264,7 +257,7 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   void _openAttendance(BuildContext context) {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     final role = user?.role?.toUpperCase().replaceAll(' ', '_') ?? '';
-    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(role);
+    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT', 'CONTRACTOR_SUPERVISOR'].contains(role);
     if (isWorker) {
       _openWorkerAttendance(context, user!.uid, user.fullName ?? '');
     } else {
@@ -385,7 +378,8 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   }
 
   void _openReports(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => ReportListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
+    final role = Provider.of<AuthProvider>(context, listen: false).currentUser?.role ?? '';
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ReportListScreen(stationId: _selectedStationId, stationName: _selectedStationName, role: role)));
   }
 
   void _openAuditReports(BuildContext context) {
@@ -516,5 +510,17 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
 
   void _openTaskTypes(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => TaskTypeListScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
+  }
+
+  void _openWorkers(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerManagementScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
+  }
+
+  void _openFieldWork(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoSubmissionScreen(stationId: _selectedStationId, stationName: _selectedStationName)));
+  }
+
+  void _openShiftSummaryApproval(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ShiftSummaryApprovalScreen(stationId: _selectedStationId)));
   }
 }

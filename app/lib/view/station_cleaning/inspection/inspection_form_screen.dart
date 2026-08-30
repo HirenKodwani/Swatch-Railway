@@ -489,6 +489,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       'RAILWAY_MASTER': {'VIEW'},
       'ADMIN': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
       'RAILWAY_ADMIN': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
+      'RAILWAY_INSPECTOR': {'MANAGE', 'VIEW', 'APPROVE', 'SCORE'},
       'RAILWAY_SUPERVISOR': {'VIEW', 'SCORE'},
       'CONTRACTOR_MASTER': {'VIEW'},
       'CONTRACTOR_ADMIN': {'VIEW'},

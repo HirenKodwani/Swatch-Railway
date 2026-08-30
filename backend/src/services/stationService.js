@@ -23,11 +23,18 @@ class StationService {
         return { count: 0, stations: [] };
       }
     } else if (contractorRoles.includes(userRole) && user?.entityId) {
+      // OBHS contractors should not see stations
+      if (user.domain === 'obhs') {
+        return { count: 0, stations: [] };
+      }
       const mappings = await db.collection('stationContractorMappings')
         .where('contractorId', '==', user.entityId)
         .where('status', '==', 'active')
         .get();
-      const stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
+      let stationIds = mappings.docs.map(d => d.data().stationId).filter(Boolean);
+      if (stationIds.length === 0 && Array.isArray(user.stations) && user.stations.length > 0) {
+        stationIds = user.stations;
+      }
       if (stationIds.length > 0) {
         q = q.where('uid', 'in', stationIds);
       } else if (division || user.division) {

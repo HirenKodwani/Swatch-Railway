@@ -52,7 +52,12 @@ export const getWorkerStatistics = asyncHandler(async (req, res) => {
 });
 
 export const getWorkers = asyncHandler(async (req, res) => {
-  const result = await userService.getWorkers();
+  const result = await userService.getWorkers(req.user, req.query);
+  res.status(200).json(result);
+});
+
+export const getContractorSupervisors = asyncHandler(async (req, res) => {
+  const result = await userService.getContractorSupervisors(req.user, req.query);
   res.status(200).json(result);
 });
 
@@ -65,7 +70,7 @@ export const getRailwaySupervisors = asyncHandler(async (req, res) => {
   }
   
   const module = req.query.module || null;
-  const result = await userService.getRailwaySupervisors(zone, division, role, module);
+  const result = await userService.getRailwaySupervisors(zone, division, role, module, req.user);
   res.status(200).json(result);
 });
 
@@ -89,4 +94,4 @@ export const submitWorkerComplaint = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-export default { createUser, updateUser, approveUser, getPendingUsers, rejectUser, suspendUser, getUsers, getRailwayWorkers, getWorkerProfile, getWorkerStatistics, getWorkers, getRailwaySupervisors, getWorkersPerformance, getUserById, getWorkerTasks, submitWorkerComplaint };
+export default { createUser, updateUser, approveUser, getPendingUsers, rejectUser, suspendUser, getUsers, getRailwayWorkers, getWorkerProfile, getWorkerStatistics, getWorkers, getRailwaySupervisors, getContractorSupervisors, getWorkersPerformance, getUserById, getWorkerTasks, submitWorkerComplaint };

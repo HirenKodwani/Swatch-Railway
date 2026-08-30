@@ -325,6 +325,7 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
                                 final t = _filteredTasks[i];
                                 final status = t['status'] ?? 'pending';
                                 final areaName = t['areaName'] ?? '';
+                                final activityName = t['activityType'] ?? t['taskTypeName'] ?? 'Cleaning';
                                 final time = t['scheduledTime'] ?? '--:--';
                                 final rejectionReason = t['rejectionReason'];
 
@@ -332,9 +333,9 @@ class _WorkerTaskViewScreenState extends State<WorkerTaskViewScreen> {
                                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                   child: ExpansionTile(
                                     leading: Icon(_statusIcon(status), color: _statusColor(status), size: 28),
-                                    title: Text('$time - ${areaName.isNotEmpty ? areaName : 'Area'}',
+                                    title: Text('$time - $activityName',
                                         style: const TextStyle(fontWeight: FontWeight.w500)),
-                                    subtitle: Text('Status: ${status.replaceAll('_', ' ')}'),
+                                    subtitle: Text('${areaName.isNotEmpty ? areaName : 'Area'} | Status: ${status.replaceAll('_', ' ')}'),
                                     children: [
                                       if (rejectionReason != null)
                                         Padding(
@@ -672,9 +673,9 @@ class _TaskExecutionSheetState extends State<_TaskExecutionSheet> {
                 ],
               ),
               const SizedBox(height: 12),
-              _summaryItem('Before Photo', 'Captured ✓'),
+              _summaryItem('Before Photo', beforePhoto != null ? 'Captured ✓' : 'Optional / not captured'),
               _summaryItem('Comments', commentController.text.isEmpty ? 'None' : commentController.text),
-              _summaryItem('After Photo', 'Captured ✓'),
+              _summaryItem('After Photo', afterPhoto != null ? 'Captured ✓' : 'Optional / not captured'),
             ],
           ),
         ),
@@ -698,9 +699,9 @@ class _TaskExecutionSheetState extends State<_TaskExecutionSheet> {
   }
 
   bool _canProceed() {
-    if (currentStep == 0) return beforePhoto != null;
+    if (currentStep == 0) return true;
     if (currentStep == 1) return commentController.text.isNotEmpty;
-    if (currentStep == 2) return afterPhoto != null;
+    if (currentStep == 2) return true;
     return true;
   }
 
@@ -729,8 +730,14 @@ class _TaskExecutionSheetState extends State<_TaskExecutionSheet> {
       final token = prefs.getString('token');
       if (token == null) throw Exception('AUTH_ERROR');
 
-      final beforeUrl = await WorkerRepository.uploadMedia(beforePhoto!.path);
-      final afterUrl = await WorkerRepository.uploadMedia(afterPhoto!.path);
+      String? beforeUrl;
+      String? afterUrl;
+      if (beforePhoto != null) {
+        beforeUrl = await WorkerRepository.uploadMedia(beforePhoto!.path);
+      }
+      if (afterPhoto != null) {
+        afterUrl = await WorkerRepository.uploadMedia(afterPhoto!.path);
+      }
 
       double? lat;
       double? lng;
@@ -743,10 +750,10 @@ class _TaskExecutionSheetState extends State<_TaskExecutionSheet> {
       } catch (_) {}
 
       final body = <String, dynamic>{
-        'beforePhoto': beforeUrl,
-        'afterPhoto': afterUrl,
         'remarks': commentController.text.trim(),
       };
+      if (beforeUrl != null) { body['beforePhoto'] = beforeUrl; }
+      if (afterUrl != null) { body['afterPhoto'] = afterUrl; }
       if (lat != null) { body['gpsLat'] = lat; body['gpsLng'] = lng; }
 
       final endpoint = widget.mode == 'complete' ? 'complete' : 'resubmit';

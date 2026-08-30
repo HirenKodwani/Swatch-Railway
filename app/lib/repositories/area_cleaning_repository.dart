@@ -200,12 +200,12 @@ class AreaCleaningRepository {
     );
   }
 
-  static Future<CleaningTask> completeTask(String taskId, {required String afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
+  static Future<CleaningTask> completeTask(String taskId, {String? afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/$taskId/complete',
       body: {
-        'afterPhoto': afterPhoto,
+        if (afterPhoto != null) 'afterPhoto': afterPhoto,
         if (gpsLat != null) 'gpsLat': gpsLat,
         if (gpsLng != null) 'gpsLng': gpsLng,
         if (remarks != null) 'remarks': remarks,
@@ -214,12 +214,12 @@ class AreaCleaningRepository {
     );
   }
 
-  static Future<CleaningTask> resubmitTask(String taskId, {required String afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
+  static Future<CleaningTask> resubmitTask(String taskId, {String? afterPhoto, double? gpsLat, double? gpsLng, String? remarks}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/$taskId/resubmit',
       body: {
-        'afterPhoto': afterPhoto,
+        if (afterPhoto != null) 'afterPhoto': afterPhoto,
         if (gpsLat != null) 'gpsLat': gpsLat,
         if (gpsLng != null) 'gpsLng': gpsLng,
         if (remarks != null) 'remarks': remarks,
@@ -278,7 +278,7 @@ class AreaCleaningRepository {
     return result;
   }
 
-  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds}) async {
+  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/generate',
@@ -286,6 +286,12 @@ class AreaCleaningRepository {
         if (areaIds != null) 'areaIds': areaIds,
         if (date != null) 'date': date,
         if (workerIds != null && workerIds.isNotEmpty) 'workerIds': workerIds,
+        if (supervisorId != null && supervisorId.isNotEmpty) 'supervisorId': supervisorId,
+        if (frequency != null && frequency.isNotEmpty) 'frequency': frequency,
+        if (activityType != null && activityType.isNotEmpty) 'activityType': activityType,
+        if (taskTypeId != null && taskTypeId.isNotEmpty) 'taskTypeId': taskTypeId,
+        if (taskTypeName != null && taskTypeName.isNotEmpty) 'taskTypeName': taskTypeName,
+        if (areaActivities != null && areaActivities.isNotEmpty) 'areaActivities': areaActivities,
       },
       parser: (data) => data,
     );

@@ -389,6 +389,8 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
                                   _buildPettyIssueSection(),
                                   _buildEvidenceSection(),
                                   _buildMachineSection(),
+                                  _buildExecutionSheetSection(),
+                                  _buildInspectionBillingSection(),
                                   _buildPenaltySection(),
                                   _buildFinancialSection(),
                                   _buildComplianceSection(),
@@ -563,6 +565,77 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
       _infoRow('Downtime Hours', '${s['downtime']?['totalHours'] ?? 0}'),
       _infoRow('Downtime Penalty', '₹${s['downtime']?['totalPenalty'] ?? 0}',
           valueColor: (s['downtime']?['totalPenalty'] ?? 0) > 0 ? kErrorRed : kSuccessGreen),
+    ]);
+  }
+
+  Widget _buildExecutionSheetSection() {
+    final s = _billingPack!.executionSheetSummary;
+    if (s.isEmpty || s['configured'] != true) return const SizedBox.shrink();
+    final score = s['executionScore'] ?? 0;
+    final shortfall = s['shortfallDeduction'] ?? 0;
+    final achieved = s['achievedAmount'] ?? 0;
+    final componentBase = s['executionComponentNetBase'] ?? 0;
+    final items = (s['itemScores'] as List<dynamic>?) ?? [];
+    return _summaryCard('Work Execution Sheet (50% Billing Component)', [
+      _infoRow('Execution Score', '$score%',
+          valueColor: score >= 80 ? kSuccessGreen : score >= 50 ? kWarningOrange : kErrorRed),
+      _infoRow('Items Configured', '${s['items'] ?? 0}'),
+      _infoRow('Days Logged', '${s['daysLogged'] ?? 0}'),
+      _infoRow('Days Area Executed', '${s['daysAreaExecuted'] ?? 0}'),
+      _divider(),
+      _infoRow('Component Base (50%)', '₹$componentBase'),
+      _infoRow('Achieved Amount', '₹$achieved', valueColor: kSuccessGreen),
+      if (shortfall > 0)
+        _infoRow('Shortfall Deduction', '₹$shortfall', valueColor: kErrorRed),
+      if (items.isNotEmpty) ...[
+        _divider(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Text('Item Breakdown', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[600])),
+        ),
+        ...items.take(10).map((item) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text('#${item['itemNo']} ${item['description'] ?? ''}',
+                    style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
+              ),
+              Text('${item['achievedRatio'] ?? 0}%',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: (item['achievedRatio'] ?? 0) >= 80 ? kSuccessGreen : kWarningOrange,
+                  )),
+            ],
+          ),
+        )),
+        if (items.length > 10)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            child: Text('...and ${items.length - 10} more', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+          ),
+      ],
+    ]);
+  }
+
+  Widget _buildInspectionBillingSection() {
+    final s = _billingPack!.inspectionBillingSummary;
+    if (s.isEmpty || s['configured'] != true) return const SizedBox.shrink();
+    final score = s['inspectionScore'] ?? 0;
+    final shortfall = s['shortfallDeduction'] ?? 0;
+    final achieved = s['achievedAmount'] ?? 0;
+    final componentBase = s['inspectionComponentNetBase'] ?? 0;
+    final totalInspected = s['totalScoredInspections'] ?? 0;
+    return _summaryCard('Inspection Score (20% Billing Component)', [
+      _infoRow('Inspection Score', '$score',
+          valueColor: score >= 80 ? kSuccessGreen : score >= 50 ? kWarningOrange : kErrorRed),
+      _infoRow('Scored Inspections', '$totalInspected'),
+      _divider(),
+      _infoRow('Component Base (20%)', '₹$componentBase'),
+      _infoRow('Achieved Amount', '₹$achieved', valueColor: kSuccessGreen),
+      if (shortfall > 0)
+        _infoRow('Shortfall Deduction', '₹$shortfall', valueColor: kErrorRed),
     ]);
   }
 

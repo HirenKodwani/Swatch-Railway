@@ -169,18 +169,13 @@ class StationReportService {
 
   async generateDailyAttendanceReport(stationId, date, user) {
     const stationName = await this._getStationName(stationId);
-    const [stationAttSnap, cleaningAttSnap] = await Promise.all([
-      db.collection('station_attendance').where('stationId', '==', stationId).get(),
-      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
-    ]);
+    // Attendance is captured only by the contractor supervisor via station_attendance.
+    // Workers do not self-mark station cleaning attendance (station_cleaning_attendance).
+    const stationAttSnap = await db.collection('station_attendance').where('stationId', '==', stationId).get();
     const records = []; stationAttSnap.forEach(d => { const r = d.data(); if (r.date === date) records.push(r); });
-    const dayCleaning = []; cleaningAttSnap.forEach(d => { const r = d.data(); const d2 = r.date || (r.createdAt || '').substring(0, 10); if (d2 === date) dayCleaning.push(r); });
-    const combinedRecords = [
-      ...records.map(r => ({ ...r, source: 'station_attendance' })),
-      ...dayCleaning.map(r => ({ ...r, source: 'station_cleaning_attendance' })),
-    ];
-    const present = records.filter(r => r.status === 'present').length + dayCleaning.filter(r => r.isStartMarked).length;
-    const late = records.filter(r => r.status === 'late').length + dayCleaning.filter(r => r.attendanceStatus === 'LATE').length;
+    const combinedRecords = records.map(r => ({ ...r, source: 'station_attendance' }));
+    const present = records.filter(r => r.status === 'present').length;
+    const late = records.filter(r => r.status === 'late').length;
     const absent = records.filter(r => r.status === 'absent').length;
     const onLeave = records.filter(r => r.status === 'on_leave').length;
     const report = await this._storeReport({
@@ -362,18 +357,14 @@ class StationReportService {
     const stationName = await this._getStationName(stationId);
     const monthPad = String(month).padStart(2, '0');
     const startDate = `${year}-${monthPad}-01`; const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
-    const [snap, cleaningSnap, overtimeSnap] = await Promise.all([
+    // Attendance is captured only by the contractor supervisor via station_attendance.
+    const [snap, overtimeSnap] = await Promise.all([
       db.collection('station_attendance').where('stationId', '==', stationId).get(),
-      db.collection('station_cleaning_attendance').where('stationId', '==', stationId).get(),
       db.collection('overtime_records').where('stationId', '==', stationId).get(),
     ]);
     const records = []; snap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) records.push(r); });
-    const dayCleaning = []; cleaningSnap.forEach(d => { const r = d.data(); if (r.date && r.date >= startDate && r.date <= endDate) dayCleaning.push(r); });
     const overtime = []; overtimeSnap.forEach(d => { const r = d.data(); if (r.date >= startDate && r.date <= endDate) overtime.push(r); });
-    const combinedRecords = [
-      ...records.map(r => ({ ...r, source: 'station_attendance' })),
-      ...dayCleaning.map(r => ({ ...r, source: 'station_cleaning_attendance', status: r.attendanceStatus === 'LATE' ? 'late' : 'present' })),
-    ];
+    const combinedRecords = records.map(r => ({ ...r, source: 'station_attendance' }));
     const daysPresent = new Set(combinedRecords.filter(r => r.status === 'present').map(r => r.date)).size;
     const totalDays = new Set(combinedRecords.map(r => r.date)).size;
     const workerMap = {}; combinedRecords.forEach(r => { const w = r.workerId || r.userId; if (!w) return; if (!workerMap[w]) workerMap[w] = { present: 0, late: 0, absent: 0, leave: 0, total: 0 }; workerMap[w][r.status === 'present' ? 'present' : r.status === 'late' ? 'late' : r.status === 'absent' ? 'absent' : r.status === 'on_leave' ? 'leave' : 'total']++; workerMap[w].total++; });
@@ -460,7 +451,8 @@ class StationReportService {
     const startDate = `${year}-${monthPad}-01`;
     const snap = await db.collection('station_feedback').where('stationId', '==', stationId).get();
     const records = []; snap.forEach(d => records.push(d.data()));
-    const inMonth = records.filter(r => { const c = r.createdAt || ''; return c.startsWith(monthPad) && c.startsWith(String(year).substring(0, 4)); });
+    const endDate = `${year}-${monthPad}-${this._getMonthEnd(year, month)}`;
+    const inMonth = records.filter(r => { const c = r.createdAt || ''; return c >= startDate && c <= endDate + 'T23:59:59'; });
     const ratings = inMonth.filter(r => r.rating).map(r => r.rating);
     const avgRating = ratings.length > 0 ? (ratings.reduce((s, v) => s + v, 0) / ratings.length).toFixed(1) : 'N/A';
     const catBreakdown = inMonth.reduce((acc, r) => { const c = r.category || 'General'; acc[c] = (acc[c] || 0) + 1; return acc; }, {});
@@ -536,7 +528,7 @@ class StationReportService {
     const compRecords = []; compSnap.forEach(d => compRecords.push(d.data()));
     const feedRecords = []; feedSnap.forEach(d => feedRecords.push(d.data()));
     const inMonthComps = compRecords.filter(r => { const c = r.createdAt || ''; return c >= startDate && c <= endDate + 'T23:59:59'; });
-    const inMonthFeed = feedRecords.filter(r => { const c = r.createdAt || ''; return c.startsWith(year) && c.includes(monthPad); });
+    const inMonthFeed = feedRecords.filter(r => { const c = r.createdAt || ''; return c >= startDate && c <= endDate + 'T23:59:59'; });
     const presentLate = attRecords.filter(r => r.status === 'present' || r.status === 'late').length;
     const attPct = attRecords.length > 0 ? Math.round(presentLate / attRecords.length * 100) : 0;
     const completedActs = actRecords.filter(a => a.status === 'COMPLETED' || a.status === 'APPROVED').length;
@@ -565,13 +557,13 @@ class StationReportService {
     const snap = await q.get();
     const records = []; snap.forEach(d => records.push({ id: d.id, ...d.data() }));
     const now = new Date().toISOString();
-    const report = {
-      uid: db.collection('station_reports').doc().id,
-      reportType: 'audit_user_activity',
+    const report = await this._storeReport({
+      stationId: 'all', stationName: 'All Stations',
+      reportType: 'audit_user_activity', date: now.split('T')[0], month: new Date().getMonth() + 1, year: new Date().getFullYear(),
       query: { startDate, endDate, userId, action },
-      summary: { totalRecords: records.length, records, generatedAt: now },
-      generatedBy: user.uid, generatedByName: user.fullName || '', createdAt: now,
-    };
+      summary: { totalRecords: records.length, records },
+      generatedBy: user.uid, generatedByName: user.fullName || '',
+    });
     return report;
   }
 
@@ -586,13 +578,13 @@ class StationReportService {
     if (endDate) records = records.filter(r => r.uploadedAt <= endDate + 'T23:59:59');
     const totalSize = records.reduce((s, r) => s + (r.compressedSize || r.originalSize || 0), 0);
     const now = new Date().toISOString();
-    const report = {
-      uid: db.collection('station_reports').doc().id,
-      reportType: 'audit_image_archive',
+    const report = await this._storeReport({
+      stationId: stationId || 'all', stationName: stationId ? await this._getStationName(stationId) : 'All Stations',
+      reportType: 'audit_image_archive', date: now.split('T')[0], month: new Date().getMonth() + 1, year: new Date().getFullYear(),
       query: { startDate, endDate, stationId, evidenceType },
-      summary: { totalImages: records.length, totalStorageMB: (totalSize / (1024 * 1024)).toFixed(2), images: records.map(r => ({ id: r.uid, stationId: r.stationId, evidenceType: r.evidenceType, uploadedAt: r.uploadedAt, fileSize: r.compressedSize || r.originalSize, url: r.url })), generatedAt: now },
-      generatedBy: user.uid, generatedByName: user.fullName || '', createdAt: now,
-    };
+      summary: { totalImages: records.length, totalStorageMB: (totalSize / (1024 * 1024)).toFixed(2), images: records.map(r => ({ id: r.uid, stationId: r.stationId, evidenceType: r.evidenceType, uploadedAt: r.uploadedAt, fileSize: r.compressedSize || r.originalSize, url: r.url })) },
+      generatedBy: user.uid, generatedByName: user.fullName || '',
+    });
     return report;
   }
 
@@ -605,16 +597,16 @@ class StationReportService {
       snap.forEach(d => allRejected.push({ collection: collName, id: d.id, ...d.data() }));
     }
     let filtered = allRejected;
-    if (startDate) filtered = filtered.filter(r => r.updatedAt >= startDate || r.updatedAt >= startDate);
+    if (startDate) filtered = filtered.filter(r => r.updatedAt >= startDate);
     if (endDate) filtered = filtered.filter(r => r.updatedAt <= endDate + 'T23:59:59');
     const now = new Date().toISOString();
-    const report = {
-      uid: db.collection('station_reports').doc().id,
-      reportType: 'audit_rejected_forms',
+    const report = await this._storeReport({
+      stationId: 'all', stationName: 'All Stations',
+      reportType: 'audit_rejected_forms', date: now.split('T')[0], month: new Date().getMonth() + 1, year: new Date().getFullYear(),
       query: { startDate, endDate },
-      summary: { totalRejected: filtered.length, forms: filtered.map(r => ({ collection: r.collection, formId: r.id, stationId: r.stationId, reason: r.rejectionReason || r.reason || 'N/A', rejectedAt: r.updatedAt, rejectedBy: r.rejectedBy })), generatedAt: now },
-      generatedBy: user.uid, generatedByName: user.fullName || '', createdAt: now,
-    };
+      summary: { totalRejected: filtered.length, forms: filtered.map(r => ({ collection: r.collection, formId: r.id, stationId: r.stationId, reason: r.rejectionReason || r.reason || 'N/A', rejectedAt: r.updatedAt, rejectedBy: r.rejectedBy })) },
+      generatedBy: user.uid, generatedByName: user.fullName || '',
+    });
     return report;
   }
 
@@ -628,13 +620,13 @@ class StationReportService {
     if (startDate) records = records.filter(r => r.inspectionDate >= startDate || r.scheduledDate >= startDate);
     if (endDate) records = records.filter(r => r.inspectionDate <= endDate || r.scheduledDate <= endDate);
     const now = new Date().toISOString();
-    const report = {
-      uid: db.collection('station_reports').doc().id,
-      reportType: 'audit_inspection_history',
+    const report = await this._storeReport({
+      stationId: stationId || 'all', stationName: stationId ? await this._getStationName(stationId) : 'All Stations',
+      reportType: 'audit_inspection_history', date: now.split('T')[0], month: new Date().getMonth() + 1, year: new Date().getFullYear(),
       query: { stationId, startDate, endDate, inspectorId },
-      summary: { totalInspections: records.length, inspections: records.map(r => ({ id: r.id, stationId: r.stationId, inspectionType: r.inspectionType, inspector: r.inspectorName || r.inspectorId, date: r.inspectionDate || r.scheduledDate, status: r.status, score: r.overallScore, deficiencies: (r.deficiencies || []).length })), generatedAt: now },
-      generatedBy: user.uid, generatedByName: user.fullName || '', createdAt: now,
-    };
+      summary: { totalInspections: records.length, inspections: records.map(r => ({ id: r.id, stationId: r.stationId, inspectionType: r.inspectionType, inspector: r.inspectorName || r.inspectorId, date: r.inspectionDate || r.scheduledDate, status: r.status, score: r.overallScore, deficiencies: (r.deficiencies || []).length })) },
+      generatedBy: user.uid, generatedByName: user.fullName || '',
+    });
     return report;
   }
 
@@ -647,13 +639,13 @@ class StationReportService {
     const snap = await q.get();
     const records = []; snap.forEach(d => records.push({ id: d.id, ...d.data() }));
     const now = new Date().toISOString();
-    const report = {
-      uid: db.collection('station_reports').doc().id,
-      reportType: 'audit_data_modification',
+    const report = await this._storeReport({
+      stationId: 'all', stationName: 'All Stations',
+      reportType: 'audit_data_modification', date: now.split('T')[0], month: new Date().getMonth() + 1, year: new Date().getFullYear(),
       query: { startDate, endDate, userId },
-      summary: { totalModifications: records.length, modifications: records.map(r => ({ id: r.id, userId: r.userId, userName: r.userName, action: r.action, details: r.details, timestamp: r.timestamp })), generatedAt: now },
-      generatedBy: user.uid, generatedByName: user.fullName || '', createdAt: now,
-    };
+      summary: { totalModifications: records.length, modifications: records.map(r => ({ id: r.id, userId: r.userId, userName: r.userName, action: r.action, details: r.details, timestamp: r.timestamp })) },
+      generatedBy: user.uid, generatedByName: user.fullName || '',
+    });
     return report;
   }
 
@@ -767,7 +759,15 @@ class StationReportService {
           await this[fnMap[schedule.reportType]](params.stationId, params.month, params.year, user);
           await autoEmailService.dispatchMonthlyReport(schedule.reportType, params.stationId, params.month, params.year);
         } else if (schedule.reportType.startsWith('audit_')) {
-          await this['generate' + schedule.reportType.replace('audit_', '').replace(/_/g, ' ').replace(/ (.)/g, c => c.toUpperCase()).replace(/ /g, '') + 'Report']?.(params, user);
+          const auditFnMap = {
+            audit_user_activity: 'generateUserActivityAudit',
+            audit_image_archive: 'generateImageArchiveReport',
+            audit_rejected_forms: 'generateRejectedFormsReport',
+            audit_inspection_history: 'generateInspectionHistoryReport',
+            audit_data_modification: 'generateDataModificationReport',
+          };
+          const fnName = auditFnMap[schedule.reportType];
+          if (fnName) await this[fnName](params, user);
         }
 
         if (schedule.recipients) {

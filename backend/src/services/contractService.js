@@ -1,5 +1,5 @@
 import { db } from '../database/index.js';
-import { NotFoundError, ConflictError, ValidationError } from '../errors/index.js';
+import { NotFoundError, ConflictError, ValidationError, ForbiddenError } from '../errors/index.js';
 
 class ContractService {
   async createContract(creatorData, body) {
@@ -202,8 +202,8 @@ class ContractService {
   }
 
   async getContracts(requesterData, query) {
-    const { status, stationId, entityId, contractType } = query;
-    const { userType, zone: userZone, division: userDivision, role } = requesterData;
+    const { status, stationId, entityId, contractType: queryContractType } = query;
+    const { userType, zone: userZone, division: userDivision, role, domain } = requesterData;
     const userRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
 
     let firestoreQuery = db.collection('contracts');
@@ -214,11 +214,18 @@ class ContractService {
       const contractorEntityId = requesterData.entityId;
       if (!contractorEntityId) throw new ValidationError("Entity linkage missing.");
       firestoreQuery = firestoreQuery.where('entityId', '==', contractorEntityId);
+      const restrictedRoles = ['contractor supervisor', 'contractor worker', 'worker'];
+      if (restrictedRoles.includes(userRole) && requesterData.contractId) {
+        firestoreQuery = firestoreQuery.where('uid', '==', requesterData.contractId);
+      }
     }
 
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
     if (entityId && userType !== 'contractor') firestoreQuery = firestoreQuery.where('entityId', '==', entityId);
-    if (contractType) firestoreQuery = firestoreQuery.where('contractType', '==', contractType);
+
+    // Auto-filter by contractType/domain for contractor users
+    const effectiveContractType = queryContractType || (userType === 'contractor' ? domain : null);
+    if (effectiveContractType) firestoreQuery = firestoreQuery.where('contractType', '==', effectiveContractType);
 
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
@@ -260,12 +267,23 @@ class ContractService {
     return { message: 'Contract rejected successfully', uid, status: 'REJECTED' };
   }
 
-  async getContractByUid(uid) {
+  async getContractByUid(uid, requesterData) {
     if (!uid) throw new ValidationError("Contract ID (UID) is required.");
     const docRef = db.collection('contracts').doc(uid);
     const doc = await docRef.get();
     if (!doc.exists) throw new NotFoundError("Contract not found.");
-    return doc.data();
+    const data = doc.data();
+    if (requesterData?.userType === 'contractor') {
+      if (requesterData?.entityId && data.entityId !== requesterData.entityId) {
+        throw new ForbiddenError('You can only access your own company contracts');
+      }
+      const role = (requesterData?.role || '').toUpperCase().replace(/\s+/g, '_');
+      const restrictedRoles = ['CONTRACTOR_SUPERVISOR', 'CONTRACTOR_WORKER', 'WORKER'];
+      if (restrictedRoles.includes(role) && requesterData?.contractId && data.uid !== requesterData.contractId) {
+        throw new ForbiddenError('You can only access your assigned contract');
+      }
+    }
+    return data;
   }
 
   async getContractByNumber(contractNumber) {
@@ -276,15 +294,25 @@ class ContractService {
   }
 
   async getContractsForDropdown(requesterData, queryParams) {
-    const { userType, zone: userZone, division: userDivision, entityId, role } = requesterData;
-    const { entityId: queryEntityId } = queryParams || {};
+    const { userType, zone: userZone, division: userDivision, entityId, role, domain } = requesterData;
+    const { entityId: queryEntityId, contractType: queryContractType } = queryParams || {};
     const userRole = (role || '').trim().toLowerCase().replace(/_/g, ' ');
 
     let query = db.collection('contracts').where('status', '==', 'Active');
 
-    const effectiveEntityId = queryEntityId || entityId;
-    if (effectiveEntityId) {
-      query = query.where('entityId', '==', effectiveEntityId);
+    const restrictedRoles = ['contractor supervisor', 'contractor worker', 'worker'];
+    if (restrictedRoles.includes(userRole) && requesterData.contractId) {
+      query = query.where('uid', '==', requesterData.contractId);
+    } else {
+      const effectiveEntityId = queryEntityId || entityId;
+      if (effectiveEntityId) {
+        query = query.where('entityId', '==', effectiveEntityId);
+      }
+    }
+
+    const effectiveContractType = queryContractType || (userType === 'contractor' ? domain : null);
+    if (effectiveContractType) {
+      query = query.where('contractType', '==', effectiveContractType);
     }
 
     const snapshot = await query.limit(200).get();
@@ -312,9 +340,10 @@ class ContractService {
 
   async getContractsByEntity(entityId, query) {
     if (!entityId) throw new ValidationError("Entity ID is required.");
-    const { status, stationId, category } = query || {};
+    const { status, stationId, category, contractType } = query || {};
     let firestoreQuery = db.collection('contracts').where('entityId', '==', entityId);
     if (status) firestoreQuery = firestoreQuery.where('status', '==', status);
+    if (contractType) firestoreQuery = firestoreQuery.where('contractType', '==', contractType);
     const snapshot = await firestoreQuery.limit(200).get();
     if (snapshot.empty) return { count: 0, contracts: [] };
     const contracts = [];

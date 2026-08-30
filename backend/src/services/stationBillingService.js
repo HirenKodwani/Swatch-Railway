@@ -10,6 +10,7 @@ import { db, admin } from '../database/index.js';
 import { NotFoundError, ValidationError } from '../errors/index.js';
 import logger from '../logger/index.js';
 import { auditService } from './auditService.js';
+import { executionSheetService } from './executionSheetService.js';
 
 class StationBillingService {
   async generateBillingSupportPack(user, data) {
@@ -133,6 +134,68 @@ class StationBillingService {
       }
     }
 
+    // ── Annexure-AB Work Execution Sheet (50% billing component) ──
+    let executionSheetSummary = { configured: false, items: [], executionScore: null, shortfallDeduction: 0, daysLogged: 0, itemScores: [] };
+    try {
+      const summary = await executionSheetService.getMonthlySummary({ contractId, stationId, month, year });
+      executionSheetSummary = {
+        configured: summary.itemScores.length > 0,
+        items: summary.itemScores.length,
+        executionScore: summary.itemScores.length > 0 ? summary.executionScore : null,
+        shortfallDeduction: summary.itemScores.length > 0 ? summary.shortfallDeduction : 0,
+        daysLogged: summary.daysLogged,
+        monthlyBase,
+        executionComponentNetBase: summary.executionComponentNetBase,
+        achievedAmount: summary.achievedAmount,
+        itemScores: summary.itemScores,
+      };
+      if (executionSheetSummary.configured && summary.shortfallDeduction > 0) {
+        penalties.deductions.push({
+          reason: 'Work Execution Sheet Shortfall (50% billing component)',
+          percentage: Math.round((100 - summary.executionScore) * 100) / 100,
+          amount: summary.shortfallDeduction,
+        });
+        penalties.totalPenaltyAmount += summary.shortfallDeduction;
+      }
+    } catch (err) {
+      logger.warn(`Execution sheet summary skipped for ${stationId} ${month}/${year}: ${err.message}`);
+    }
+
+    // ── Inspection Score (20% billing component) ──
+    let inspectionBillingSummary = {
+      configured: false,
+      totalScoredInspections: 0,
+      inspectionScore: null,
+      monthlyBase,
+      inspectionComponentNetBase: Math.round(monthlyBase * 0.20),
+      achievedAmount: 0,
+      shortfallDeduction: 0,
+    };
+    const scoredInspections = inspections.filter(i => ['COMPLETED', 'APPROVED'].includes(i.status) && typeof i.overallScore === 'number');
+    if (scoredInspections.length > 0) {
+      const inspectionScore = Math.round((scoredInspections.reduce((s, i) => s + i.overallScore, 0) / scoredInspections.length) * 100) / 100;
+      const inspectionComponent = Math.round(monthlyBase * 0.20);
+      const achievedAmount = Math.round(inspectionComponent * (inspectionScore / 100));
+      const shortfallDeduction = inspectionComponent - achievedAmount;
+      inspectionBillingSummary = {
+        configured: true,
+        totalScoredInspections: scoredInspections.length,
+        inspectionScore,
+        monthlyBase,
+        inspectionComponentNetBase: inspectionComponent,
+        achievedAmount,
+        shortfallDeduction,
+      };
+      if (shortfallDeduction > 0) {
+        penalties.deductions.push({
+          reason: 'Inspection Score Shortfall (20% billing component)',
+          percentage: Math.round((100 - (inspectionScore > 100 ? 100 : inspectionScore)) * 100) / 100,
+          amount: shortfallDeduction,
+        });
+        penalties.totalPenaltyAmount += shortfallDeduction;
+      }
+    }
+
     const machines = []; machineSnap.forEach(d => machines.push(d.data()));
     const inMaintenanceCount = machines.filter(m => m.workingStatus === 'under_maintenance' || m.workingStatus === 'broken').length;
     const billableAmount = Math.max(0, (contractData.contractValue / 12) - penalties.totalPenaltyAmount);
@@ -152,6 +215,7 @@ class StationBillingService {
       scorecardSummary, complaintSummary: cmpSummary, feedbackSummary, inspectionSummary,
       pettyIssueSummary, evidenceSummary,
       machineSummary: { total: machines.length, inMaintenance: inMaintenanceCount, deployed: machines.length - inMaintenanceCount, downtime: machineDowntimeSummary },
+      executionSheetSummary, inspectionBillingSummary,
       penalties, billableAmount, status: 'DRAFT',
       paymentStatus: 'unpaid', paymentDate: null, paymentRef: null, paymentAmount: null,
       complianceChecklist: { attendanceSheetAttached: false, wagesheetAttached: false, bankStatementAttached: false, policeVerificationAttached: false, medicalCertificateAttached: false, biometricSheetAttached: false, scorecardAttached: scorecardSummary.daysWithScorecard > 0, gstInvoiceAttached: false },

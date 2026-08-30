@@ -16,6 +16,11 @@ export const list = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const getSummary = asyncHandler(async (req, res) => {
+  const result = await areaService.getAreaSummary(req.params.stationId);
+  res.status(200).json(result);
+});
+
 export const getById = asyncHandler(async (req, res) => {
   const result = await areaService.getAreaById(req.params.uid);
   res.status(200).json(result);
