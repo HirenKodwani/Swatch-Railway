@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:crm_train/repositories/worker_repo.dart';
 import 'package:crm_train/repositories/station_cleaning_repository.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
@@ -30,7 +29,6 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
   final picker = ImagePicker();
 
   File? _selfie;
-  String? _selfieUrl;
   Position? _gpsPosition;
   bool _submitting = false;
   String _livenessChallenge = '';
@@ -48,7 +46,7 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
     _livenessChallenge = 'SMILE';
   }
 
-  Future<Map<String, dynamic>?> _captureSelfie() async {
+  Future<File?> _captureSelfie() async {
     final picked = await picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 80,
@@ -56,18 +54,15 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
       preferredCameraDevice: CameraDevice.front,
     );
     if (picked == null) return null;
-
-    final file = File(picked.path);
-    String? url;
-    try {
-      url = await WorkerRepository.uploadMedia(picked.path);
-    } catch (_) {}
-
-    return {'url': url, 'file': file};
+    return File(picked.path);
   }
 
   Future<Position?> _captureGps() async {
+    // GPS fallback chain mirroring the OBHS worker attendance flow.
     try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -79,26 +74,31 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
       try {
         return await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 15),
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 20),
           ),
         );
       } catch (e) {
-        final lastKnown = await Geolocator.getLastKnownPosition();
-        if (lastKnown != null) return lastKnown;
-        return await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.low,
-            timeLimit: Duration(seconds: 15),
-          ),
-        );
-      } catch (e) {
-        return Position(
-          longitude: 0.0, latitude: 0.0,
-          timestamp: DateTime.now(),
-          accuracy: 0.0, altitude: 0.0, heading: 0.0, speed: 0.0,
-          speedAccuracy: 0.0, altitudeAccuracy: 0.0, headingAccuracy: 0.0,
-        );
+        try {
+          final lastKnown = await Geolocator.getLastKnownPosition();
+          if (lastKnown != null) return lastKnown;
+        } catch (_) {}
+
+        try {
+          return await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              timeLimit: Duration(seconds: 15),
+            ),
+          );
+        } catch (e2) {
+          return Position(
+            longitude: 0.0, latitude: 0.0,
+            timestamp: DateTime.now(),
+            accuracy: 0.0, altitude: 0.0, heading: 0.0, speed: 0.0,
+            speedAccuracy: 0.0, altitudeAccuracy: 0.0, headingAccuracy: 0.0,
+          );
+        }
       }
     } catch (_) {
       return null;
@@ -106,9 +106,9 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
   }
 
   Future<void> _submitAttendance() async {
-    if (_selfieUrl == null && _selfie == null) {
+    if (_selfie == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selfie is required'), backgroundColor: kWarningOrange),
+        const SnackBar(content: Text('Please capture your selfie first.'), backgroundColor: kWarningOrange),
       );
       return;
     }
@@ -121,31 +121,52 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
 
     setState(() => _submitting = true);
     try {
-      await StationCleaningRepository.markStationAttendance(
+      final response = await StationCleaningRepository.markStationAttendance(
         type: widget.attendanceType,
         runInstanceId: widget.runInstanceId ?? '',
         stationId: widget.stationId ?? '',
-        imageUrl: _selfieUrl ?? 'captured',
+        imageUrl: '',
         latitude: _gpsPosition!.latitude,
         longitude: _gpsPosition!.longitude,
         livenessChallenge: _livenessChallenge,
+      ).timeout(
+        const Duration(seconds: 40),
+        onTimeout: () => throw Exception('Attendance server timeout. Please check your internet and try again.'),
       );
 
-      if (mounted) {
+      final responseMessage =
+          response['message']?.toString() ?? response['error']?.toString() ?? '';
+      final isAlreadySubmitted = responseMessage.toLowerCase().contains('already') &&
+          responseMessage.toLowerCase().contains('submitted');
+      final isSuccess = response['success'] == true || responseMessage.isNotEmpty;
+
+      if (isSuccess && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${widget.attendanceType.toUpperCase()} attendance marked successfully'),
-            backgroundColor: kSuccessGreen,
+            content: Text(isAlreadySubmitted
+                ? responseMessage
+                : '${widget.attendanceType.toUpperCase()} attendance marked successfully'),
+            backgroundColor: isAlreadySubmitted ? kWarningOrange : kSuccessGreen,
           ),
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
+      final msg = e.toString().replaceAll('Exception: ', '');
+      final isAlreadySubmitted =
+          msg.toLowerCase().contains('already') && msg.toLowerCase().contains('submitted');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: kErrorRed),
+          SnackBar(
+            content: Text(isAlreadySubmitted ? msg : 'Error: $msg'),
+            backgroundColor: isAlreadySubmitted ? kWarningOrange : kErrorRed,
+          ),
         );
-        setState(() => _submitting = false);
+        if (isAlreadySubmitted) {
+          Navigator.pop(context, true);
+        } else {
+          setState(() => _submitting = false);
+        }
       }
     }
   }
@@ -194,16 +215,23 @@ class _StationWorkerAttendanceScreenState extends State<StationWorkerAttendanceS
                     isVerifying: _isCapturingSelfie,
                     onVerify: () async {
                       setState(() => _isCapturingSelfie = true);
-                      final result = await _captureSelfie();
-                      if (result != null) {
-                        setState(() {
-                          _selfie = result['file'];
-                          if (result['url'] != null) _selfieUrl = result['url'];
-                        });
+                      try {
+                        final result = await _captureSelfie();
+                        if (result != null) {
+                          setState(() {
+                            _selfie = result;
+                          });
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$e'), backgroundColor: kErrorRed),
+                          );
+                        }
                       }
                       if (mounted) setState(() => _isCapturingSelfie = false);
                     },
-                    onRemove: _selfie != null ? () => setState(() { _selfie = null; _selfieUrl = null; _generateChallenge(); }) : null,
+                    onRemove: _selfie != null ? () => setState(() { _selfie = null; _generateChallenge(); }) : null,
                   ),
                   const SizedBox(height: 24),
 

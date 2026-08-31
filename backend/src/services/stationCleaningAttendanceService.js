@@ -19,6 +19,7 @@ class StationCleaningAttendanceService {
     }
     const { uid: workerId, fullName: workerName } = userData;
     const finalWorkerName = workerName || 'Unknown Worker';
+    const isContractor = (userData.userType || '').toLowerCase() === 'contractor';
     let isLateAttendance = false;
     let lateByMinutes = 0;
     let firstAttendanceTime = null;
@@ -59,23 +60,27 @@ class StationCleaningAttendanceService {
 
     const getTaskCompletion = async () => {
       try {
-        const taskSnap = await db.collection('cleaningTasks')
-          .where('workerId', '==', workerId)
-          .where('date', '==', todayIST)
-          .get();
+        let query = db.collection('cleaningTasks');
+        if (isContractor) {
+          query = query.where('supervisorId', '==', workerId);
+        } else {
+          query = query.where('workerId', '==', workerId);
+        }
+        const taskSnap = await query.limit(1000).get();
         const tasks = [];
-        taskSnap.forEach(doc => tasks.push(doc.data()));
+        taskSnap.forEach(doc => {
+          if (doc.data().date === todayIST) tasks.push(doc.data());
+        });
         const doneStatuses = ['completed', 'approved'];
         const completedCount = tasks.filter(t => doneStatuses.includes(t.status)).length;
-        const total = tasks.length;
-        return { total, completedCount };
+        return { total: tasks.length, completedCount };
       } catch (e) {
         logger.error('StationCleaning', '(Attendance Task Completion) Error:', e);
         return { total: 0, completedCount: 0 };
       }
     };
 
-    if (attendanceType !== 'start') {
+    if (isContractor || attendanceType !== 'start') {
       const { total, completedCount } = await getTaskCompletion();
       if (total === 0) {
         throw new ValidationError(`You have no cleaning tasks scheduled today. Mark 'start' attendance only.`);

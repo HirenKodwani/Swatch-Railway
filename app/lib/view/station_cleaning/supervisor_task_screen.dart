@@ -246,8 +246,6 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
     setState(() => _attendanceLoading = true);
     try {
-      final photoUrl = await WorkerRepository.uploadMedia(photo.path);
-
       final pos = await _captureGps();
       if (pos == null) {
         if (mounted) {
@@ -262,9 +260,9 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
         type: type,
         runInstanceId: widget.supervisorId,
         stationId: widget.stationId,
-        imageUrl: photoUrl,
-        latitude: pos?.latitude,
-        longitude: pos?.longitude,
+        imageUrl: '',
+        latitude: pos.latitude,
+        longitude: pos.longitude,
         livenessChallenge: challenge,
       );
 

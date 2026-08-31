@@ -8,6 +8,7 @@ import 'package:crm_train/view/common_railways/station_management/station_feedba
 import 'dashboard/station_dashboard_kpi_screen.dart';
 import 'dashboard/supervisor_dashboard_screen.dart';
 import 'attendance/station_attendance_screen.dart';
+import 'attendance/supervisor_attendance_screen.dart';
 import 'activities/daily_activity_list_screen.dart';
 import 'billing/billing_support_pack_screen.dart';
 import 'pest_control/pest_control_list_screen.dart';
@@ -257,7 +258,16 @@ class _StationCleaningHubScreenState extends State<StationCleaningHubScreen> {
   void _openAttendance(BuildContext context) {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     final role = user?.role?.toUpperCase().replaceAll(' ', '_') ?? '';
-    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT', 'CONTRACTOR_SUPERVISOR'].contains(role);
+    if (role == 'CONTRACTOR_SUPERVISOR') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => SupervisorAttendanceScreen(
+        stationId: _selectedStationId,
+        stationName: _selectedStationName,
+        supervisorId: user!.uid,
+        supervisorName: user.fullName ?? '',
+      )));
+      return;
+    }
+    final isWorker = ['WORKER', 'RAILWAY_WORKER', 'JANITOR', 'ATTENDANT'].contains(role);
     if (isWorker) {
       _openWorkerAttendance(context, user!.uid, user.fullName ?? '');
     } else {
