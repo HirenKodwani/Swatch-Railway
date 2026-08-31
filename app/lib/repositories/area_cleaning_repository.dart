@@ -278,7 +278,7 @@ class AreaCleaningRepository {
     return result;
   }
 
-  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities}) async {
+  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities, Map<String, int>? areaFrequencies}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/generate',
@@ -292,6 +292,7 @@ class AreaCleaningRepository {
         if (taskTypeId != null && taskTypeId.isNotEmpty) 'taskTypeId': taskTypeId,
         if (taskTypeName != null && taskTypeName.isNotEmpty) 'taskTypeName': taskTypeName,
         if (areaActivities != null && areaActivities.isNotEmpty) 'areaActivities': areaActivities,
+        if (areaFrequencies != null && areaFrequencies.isNotEmpty) 'areaFrequencies': areaFrequencies,
       },
       parser: (data) => data,
     );

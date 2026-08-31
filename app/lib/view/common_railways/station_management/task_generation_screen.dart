@@ -73,6 +73,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   // Selected areas and per-area activities
   final Set<String> _selectedAreaIds = {};
   final Map<String, List<TaskType>> _areaActivities = {};
+  final Map<String, int> _areaFrequencies = {};
 
   String? _loadError;
   bool _areaLoadFailed = false;
@@ -198,6 +199,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           }
           _selectedAreaIds.clear();
           _areaActivities.clear();
+          _areaFrequencies.clear();
         });
       }
     } catch (e) {
@@ -221,6 +223,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = false;
           _selectedAreaIds.clear();
           _areaActivities.clear();
+          _areaFrequencies.clear();
         });
       }
     } catch (e) {
@@ -231,6 +234,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = true;
           _selectedAreaIds.clear();
           _areaActivities.clear();
+          _areaFrequencies.clear();
         });
       }
     }
@@ -259,6 +263,30 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     }
   }
 
+  // Default per-day cleanings required for an area, from its configured frequency.
+  int _defaultFrequencyForArea(StationArea area) {
+    final boq = area.boqTimesPerPeriod;
+    if (boq != null && boq > 0) return boq;
+    switch ((area.cleaningFrequency ?? 'daily').toLowerCase()) {
+      case 'twice_daily':
+      case 'twice_daily_shift':
+      case 'two_times_daily':
+        return 2;
+      case 'shift_wise':
+      case 'three_times_daily':
+        return 3;
+      case 'four_times_daily':
+        return 4;
+      case '4hrs':
+      case 'once_every_4h':
+        return 5;
+      case 'hourly':
+        return 12;
+      default:
+        return 1;
+    }
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -275,12 +303,14 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       setState(() {
         _selectedAreaIds.remove(areaId);
         _areaActivities.remove(areaId);
+        _areaFrequencies.remove(areaId);
       });
       return;
     }
     setState(() {
       _selectedAreaIds.add(areaId);
       _areaActivities[areaId] = [];
+      _areaFrequencies[areaId] = _defaultFrequencyForArea(area);
     });
   }
 
@@ -411,6 +441,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         supervisorId: _selectedSupervisor?.uid,
         frequency: _selectedFrequency,
         areaActivities: areaActivities.isNotEmpty ? areaActivities : null,
+        areaFrequencies: _areaFrequencies,
       );
 
       if (mounted) {
@@ -488,6 +519,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                   _selectedStation = v;
                                   _selectedAreaIds.clear();
                                   _areaActivities.clear();
+          _areaFrequencies.clear();
                                 });
                                 await _loadStationData(v.uid!);
                               }
@@ -708,6 +740,21 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                                         ),
                                                       ],
                                                     ),
+                                                    if (isSelected) ...[
+                                                      const SizedBox(height: 6),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.orange[50],
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: Colors.orange[200]!),
+                                                        ),
+                                                        child: Text(
+                                                          '${_areaFrequencies[areaId] ?? 0}X need to clean today',
+                                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.orange[800]),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ],
                                                 ),
                                               ),
@@ -722,6 +769,39 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.repeat, size: 16, color: kRailwayBlue),
+                                                  const SizedBox(width: 6),
+                                                  const Expanded(
+                                                    child: Text(
+                                                      'Cleanings per day',
+                                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    visualDensity: VisualDensity.compact,
+                                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                                    onPressed: () => setState(() {
+                                                      final cur = _areaFrequencies[areaId] ?? 1;
+                                                      _areaFrequencies[areaId] = cur > 1 ? cur - 1 : 1;
+                                                    }),
+                                                  ),
+                                                  Text(
+                                                    '${_areaFrequencies[areaId] ?? 1}X',
+                                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                                  ),
+                                                  IconButton(
+                                                    visualDensity: VisualDensity.compact,
+                                                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                                                    onPressed: () => setState(() {
+                                                      final cur = _areaFrequencies[areaId] ?? 1;
+                                                      _areaFrequencies[areaId] = cur < 20 ? cur + 1 : 20;
+                                                    }),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
                                               InkWell(
                                                 onTap: () => _showActivitySelectionForArea(area),
                                                 borderRadius: BorderRadius.circular(8),

@@ -231,6 +231,30 @@ class ExecutionSheetService {
 
   /* ---------- Monthly score computation (50% billing component) ---------- */
 
+  _expectedTimesForDay(area) {
+    const boqTimes = parseInt(area?.boqTimesPerPeriod, 10) || 1;
+    const freq = String(area?.cleaningFrequency || '').toLowerCase();
+    switch (freq) {
+      case 'weekly':
+        // BoQ times per week, spread over 7 days.
+        return boqTimes / 7;
+      case 'monthly':
+        // BoQ times per month, spread over the month; per executed day use per-day share.
+        return boqTimes / 30;
+      case 'daily':
+      case 'twice_daily':
+      case 'twice_daily_shift':
+      case 'two_times_daily':
+      case 'three_times_daily':
+      case 'four_times_daily':
+      case 'six_times_daily':
+      case 'once_every_4h':
+      default:
+        // Times per day.
+        return boqTimes;
+    }
+  }
+
   _matchesMappedArea(mapped, mainArea, subArea) {
     if (!mapped || !mapped.mainArea || !mainArea) return false;
     if (String(mapped.mainArea).trim().toLowerCase() !== String(mainArea).trim().toLowerCase()) return false;
@@ -286,7 +310,6 @@ class ExecutionSheetService {
     let executionScore = 0;
 
     for (const item of items) {
-      const required = item.requiredFrequencyPerMonth || 0;
       const mappedAreas = item.mappedAreas || [];
       let manualActual = 0;
       let naCount = 0;
@@ -299,20 +322,27 @@ class ExecutionSheetService {
         }
       }
 
-      // Area-based execution: count matched area records in submitted shift summaries.
+      // Area-based execution against BOQ frequency.
+      // Expected (per mapped area, from cleaningFrequency x boqTimesPerPeriod) and
+      // actual (sum of times actually cleaned across submitted shift summaries).
       let areaActual = 0;
+      let areaExpected = 0;
       const daysExecuted = new Set();
       if (mappedAreas.length > 0) {
         for (const summary of shiftSummaries) {
           for (const a of summary.areas || []) {
-            if (mappedAreas.some((m) => this._matchesMappedArea(m, a.mainArea, a.areaName))) {
-              areaActual += 1;
-              daysExecuted.add(summary.date);
-            }
+            if (!mappedAreas.some((m) => this._matchesMappedArea(m, a.mainArea, a.areaName))) continue;
+            const times = parseInt(a.times, 10) || 0;
+            areaActual += times;
+            areaExpected += this._expectedTimesForDay(a);
+            daysExecuted.add(summary.date);
           }
         }
       }
 
+      const areaBased = mappedAreas.length > 0;
+      // Frequency-driven required (from area frequency x boqTimesPerPeriod).
+      const required = areaBased && areaExpected > 0 ? areaExpected : (item.requiredFrequencyPerMonth || 0);
       const actual = areaActual + manualActual;
       const notApplicable = naCount > 0;
       const achievedRatio = notApplicable || required <= 0
@@ -326,13 +356,15 @@ class ExecutionSheetService {
         areaDetails: item.areaDetails || [],
         mappedAreas,
         weightage: item.weightage,
-        requiredFrequencyPerMonth: required,
+        requiredFrequencyPerMonth: item.requiredFrequencyPerMonth || 0,
+        expectedFrequency: Math.round(areaExpected * 10) / 10,
         actualFrequency: Math.round(actual * 10) / 10,
         areaExecution: areaActual,
         manualExecution: Math.round(manualActual * 10) / 10,
+        frequencyShortfall: Math.round(Math.max(required - actual, 0) * 10) / 10,
         daysExecuted: daysExecuted.size,
         notApplicable,
-        source: mappedAreas.length > 0 ? 'areas' : 'manual',
+        source: areaBased ? 'areas' : 'manual',
         achievedRatio: Math.round(achievedRatio * 1000) / 10,
         weightageAchieved: achievedWeight,
       });

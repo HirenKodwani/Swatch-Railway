@@ -96,6 +96,26 @@ class TaskManagementService {
     }
   }
 
+  // Build a list of `count` evenly spaced time slots across the work window,
+  // used when the contractor admin overrides an area's per-day frequency.
+  _buildTimeslots(count, frequency) {
+    const n = parseInt(count, 10);
+    if (!n || n <= 0) return this._getDefaultFrequencyTimes(frequency);
+    const base = this._getDefaultFrequencyTimes(frequency);
+    if (base.length >= n) return base.slice(0, n);
+    const start = 6 * 60;  // 06:00
+    const end = 22 * 60;   // 22:00
+    const span = end - start;
+    const slots = [];
+    for (let i = 0; i < n; i++) {
+      const m = start + Math.round((span * (i + 0.5)) / n);
+      const hh = String(Math.floor(m / 60)).padStart(2, '0');
+      const mm = String(m % 60).padStart(2, '0');
+      slots.push(`${hh}:${mm}`);
+    }
+    return slots;
+  }
+
   async generateTasksForDate(targetDate, user) {
     return this.generateFrequencyBasedTasks(targetDate);
   }
@@ -455,7 +475,7 @@ class TaskManagementService {
   }
 
   async bulkGenerate(data, user) {
-    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency } = data;
+    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency, areaFrequencies } = data;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
@@ -523,7 +543,13 @@ class TaskManagementService {
       const activities = this._resolveActivitiesForArea(areaId, areaData, data);
       const taskActivities = activities.length > 0 ? activities : [null];
       const cleaningFrequency = frequency || areaData.cleaningFrequency || areaData.frequency || 'daily';
-      const frequencyTimes = areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency);
+      // Per-area override: contractor admin assigns how many times per day.
+      const areaFreq = (areaFrequencies && areaFrequencies[areaId] !== undefined)
+        ? parseInt(areaFrequencies[areaId], 10)
+        : null;
+      const frequencyTimes = areaFreq
+        ? this._buildTimeslots(areaFreq, cleaningFrequency)
+        : (areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency));
       const baseAreaName = areaData.areaName || areaData.name || '';
       const areaCode = areaData.areaCode || '';
       const mainArea = areaData.mainArea || '';
