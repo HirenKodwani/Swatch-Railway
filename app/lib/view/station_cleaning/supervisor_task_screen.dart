@@ -156,14 +156,6 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
   final _picker = ImagePicker();
 
-  String _generateLivenessChallenge() {
-    return 'SMILE';
-  }
-
-  String _livenessChallengeText(String challenge) {
-    return 'wide Smile';
-  }
-
   Future<Position?> _captureGps() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -197,9 +189,6 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
   }
 
   Future<void> _markAttendance(String type) async {
-    final challenge = _generateLivenessChallenge();
-    final challengeText = _livenessChallengeText(challenge);
-
     bool proceed = false;
     await showDialog(
       context: context,
@@ -211,10 +200,10 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
           children: [
             const Icon(Icons.camera_front, size: 50, color: kRailwayBlue),
             const SizedBox(height: 10),
-            Text(
-              'Please take a selfie showing a:\n\n$challengeText\n\n(Keep your face clearly visible!)',
+            const Text(
+              'Please take a clear selfie with your face visibly shown.\n\n(Identity is verified by face detection.)',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -246,6 +235,21 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
     setState(() => _attendanceLoading = true);
     try {
+      String? imageUrl;
+      try {
+        imageUrl = await WorkerRepository.uploadMedia(photo.path);
+      } catch (_) {
+        imageUrl = null;
+      }
+      if (imageUrl == null || imageUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Photo upload failed. Please try again.'), backgroundColor: kErrorRed),
+          );
+        }
+        return;
+      }
+
       final pos = await _captureGps();
       if (pos == null) {
         if (mounted) {
@@ -260,10 +264,9 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
         type: type,
         runInstanceId: widget.supervisorId,
         stationId: widget.stationId,
-        imageUrl: '',
+        imageUrl: imageUrl,
         latitude: pos.latitude,
         longitude: pos.longitude,
-        livenessChallenge: challenge,
       );
 
       setState(() {
@@ -309,18 +312,24 @@ class _SupervisorTaskScreenState extends State<SupervisorTaskScreen>
 
   void _promptShiftSummary() {
     if (_tasks.isEmpty) return;
+    final doneStatuses = {'completed', 'approved'};
     final areaMap = <String, Map<String, dynamic>>{};
     for (final t in _tasks) {
-      final areaId = (t['areaId'] ?? t['areaName'] ?? '') as String;
+      if (!doneStatuses.contains((t['status'] ?? '').toString().toLowerCase())) continue;
+      final areaId = (t['areaId'] ?? '').toString();
       if (areaId.isEmpty) continue;
-      final key = areaId;
-      if (!areaMap.containsKey(key)) {
-        areaMap[key] = {
+      final existing = areaMap[areaId];
+      if (existing != null) {
+        existing['times'] = ((existing['times'] as int) + 1);
+      } else {
+        areaMap[areaId] = {
           'uid': t['uid'],
-          'areaId': t['areaId'],
-          'areaName': t['areaName'],
-          'scheduledTime': t['scheduledTime'],
+          'key': areaId,
+          'areaId': areaId,
+          'areaName': t['areaName'] ?? '',
+          'scheduledTime': t['scheduledTime'] ?? '',
           'taskId': t['uid'],
+          'times': 1,
         };
       }
     }

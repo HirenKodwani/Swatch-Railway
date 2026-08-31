@@ -360,7 +360,7 @@ class _ShiftSummaryDetailScreenState extends State<ShiftSummaryDetailScreen> {
                     ],
                     const SizedBox(height: 6),
                     Text(
-                      'Basic ${(m['basicAreaSqFt'] ?? 0).toStringAsFixed(0)} sqft × ${m['boqTimesPerPeriod'] ?? 1}x = ${(m['workDone'] ?? 0).toStringAsFixed(0)} sqft',
+                      'Basic ${(m['basicAreaSqFt'] ?? 0).toStringAsFixed(0)} sqft × ${m['times'] ?? m['boqTimesPerPeriod'] ?? 1}X = ${(m['workDone'] ?? 0).toStringAsFixed(0)} sqft',
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
@@ -434,7 +434,7 @@ class _ShiftSummaryDetailScreenState extends State<ShiftSummaryDetailScreen> {
     for (final a in areas) {
       final m = Map<String, dynamic>.from(a as Map);
       final sqft = (m['basicAreaSqFt'] ?? 0).toDouble();
-      final freq = (m['boqTimesPerPeriod'] ?? 1).toInt();
+      final freq = (m['times'] ?? m['boqTimesPerPeriod'] ?? 1).toInt();
       totalSqft += sqft * freq;
     }
     return Container(
@@ -453,7 +453,7 @@ class _ShiftSummaryDetailScreenState extends State<ShiftSummaryDetailScreen> {
           ...areas.map((a) {
             final m = Map<String, dynamic>.from(a as Map);
             final sqft = (m['basicAreaSqFt'] ?? 0).toDouble();
-            final freq = (m['boqTimesPerPeriod'] ?? 1).toInt();
+            final freq = (m['times'] ?? m['boqTimesPerPeriod'] ?? 1).toInt();
             final cleaned = sqft * freq;
             return Padding(
               padding: const EdgeInsets.only(bottom: 4),

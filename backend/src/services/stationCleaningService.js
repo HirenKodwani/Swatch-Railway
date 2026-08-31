@@ -1706,6 +1706,9 @@ class StationCleaningService {
     for (const a of areas) {
       if (!a.photoUrl) throw new ValidationError(`Photo is required for area ${a.areaName || a.areaId || ''}`);
       if (!a.remark || !String(a.remark).trim()) throw new ValidationError(`Remark is required for area ${a.areaName || a.areaId || ''}`);
+      if (a.latitude === undefined || a.latitude === null || a.longitude === undefined || a.longitude === null) {
+        throw new ValidationError(`Live location (latitude/longitude) is required for area ${a.areaName || a.areaId || ''}`);
+      }
     }
 
     const now = new Date().toISOString();
@@ -1713,6 +1716,7 @@ class StationCleaningService {
     const enriched = await Promise.all(areas.map(async (a) => {
       let areaBasicAreaSqFt = parseFloat(a.basicAreaSqFt) || 0;
       let areaTimesPerPeriod = parseInt(a.boqTimesPerPeriod, 10) || 1;
+      let timesCleaned = parseInt(a.times, 10) || 0;
       let frequency = a.cleaningFrequency || a.frequency || 'daily';
       let mainArea = a.mainArea || '';
       let areaName = a.areaName || '';
@@ -1731,7 +1735,8 @@ class StationCleaningService {
           }
         } catch (_) { /* keep provided values */ }
       }
-      const workDone = Math.round(areaBasicAreaSqFt * areaTimesPerPeriod);
+      if (!timesCleaned) timesCleaned = areaTimesPerPeriod;
+      const workDone = Math.round(areaBasicAreaSqFt * timesCleaned);
       return {
         areaId: a.areaId || '',
         areaName: areaName,
@@ -1739,11 +1744,14 @@ class StationCleaningService {
         basicAreaSqFt: areaBasicAreaSqFt,
         cleaningFrequency: frequency || 'daily',
         boqTimesPerPeriod: areaTimesPerPeriod,
+        times: timesCleaned,
         workDone,
         tenderedAreaPerDay: tenderedAreaPerDay || workDone,
         photoUrl: a.photoUrl || '',
         scheduledTime: a.scheduledTime || '',
         taskId: a.taskId || null,
+        latitude: a.latitude,
+        longitude: a.longitude,
         remark: String(a.remark || '').trim(),
       };
     }));

@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:crm_train/model/station_run_model.dart';
 import 'package:crm_train/repositories/station_attendance_repository.dart';
 import 'package:crm_train/repositories/station_cleaning_repository.dart';
+import 'package:crm_train/repositories/worker_repo.dart';
 import 'package:crm_train/utills/app_colors.dart';
 
 class SupervisorAttendanceScreen extends StatefulWidget {
@@ -41,7 +42,6 @@ class _SupervisorAttendanceScreenState extends State<SupervisorAttendanceScreen>
   String _identityAuditStatus = '';
 
   bool _selfSubmitting = false;
-  String _livenessChallenge = '';
 
   List<Map<String, dynamic>> _workers = [];
   bool _workersLoading = false;
@@ -53,7 +53,6 @@ class _SupervisorAttendanceScreenState extends State<SupervisorAttendanceScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
-    _generateChallenge();
     _resolveRunAndStatus();
   }
 
@@ -61,24 +60,6 @@ class _SupervisorAttendanceScreenState extends State<SupervisorAttendanceScreen>
   void dispose() {
     _tabCtrl.dispose();
     super.dispose();
-  }
-
-  void _generateChallenge() {
-    final challenges = ['THUMBS_UP', 'FIST', 'SMILE'];
-    _livenessChallenge = challenges[DateTime.now().millisecond % challenges.length];
-  }
-
-  String _challengeDisplayText() {
-    switch (_livenessChallenge) {
-      case 'THUMBS_UP':
-        return 'Thumbs Up gesture';
-      case 'FIST':
-        return 'Fist gesture';
-      case 'SMILE':
-        return 'wide Smile';
-      default:
-        return _livenessChallenge;
-    }
   }
 
   Future<void> _resolveRunAndStatus() async {
@@ -199,7 +180,7 @@ class _SupervisorAttendanceScreenState extends State<SupervisorAttendanceScreen>
             const Icon(Icons.camera_front, size: 50, color: kRailwayBlue),
             const SizedBox(height: 10),
             Text(
-              'Please take a selfie showing a:\n\n${_challengeDisplayText()}\n\n(Keep your face clearly visible!)',
+              'Please take a clear selfie with your face visibly shown.\n\n(Identity is verified by face detection.)',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
@@ -256,14 +237,31 @@ class _SupervisorAttendanceScreenState extends State<SupervisorAttendanceScreen>
 
     setState(() => _selfSubmitting = true);
     try {
+      String? imageUrl;
+      try {
+        imageUrl = await WorkerRepository.uploadMedia(photo.path);
+      } catch (_) {
+        imageUrl = null;
+      }
+      if (imageUrl == null || imageUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Photo upload failed. Please try again.'),
+              backgroundColor: kErrorRed,
+            ),
+          );
+        }
+        return false;
+      }
+
       final response = await StationCleaningRepository.markStationAttendance(
         type: type,
         runInstanceId: _runInstanceId ?? '',
         stationId: widget.stationId,
-        imageUrl: '',
+        imageUrl: imageUrl,
         latitude: position.latitude,
         longitude: position.longitude,
-        livenessChallenge: _livenessChallenge,
       ).timeout(
         const Duration(seconds: 40),
         onTimeout: () => throw Exception(
@@ -285,7 +283,6 @@ class _SupervisorAttendanceScreenState extends State<SupervisorAttendanceScreen>
             backgroundColor: isAlready ? kWarningOrange : kSuccessGreen,
           ),
         );
-        _generateChallenge();
         await _refreshStatus();
         return true;
       }

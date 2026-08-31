@@ -13,6 +13,9 @@ class StationCleaningAttendanceService {
     if (!attendanceType || !deviceTimestamp) {
       throw new ValidationError('attendanceType and deviceTimestamp are required.');
     }
+    if (!imageUrl) {
+      throw new ValidationError('imageUrl is required for identity verification.');
+    }
     const effectiveRunId = runInstanceId || `self_${userData.uid}_${new Date().toISOString().split('T')[0]}`;
     if (!['start', 'mid', 'end'].includes(attendanceType)) {
       throw new ValidationError("attendanceType must be 'start', 'mid', or 'end'");
@@ -24,12 +27,12 @@ class StationCleaningAttendanceService {
     let lateByMinutes = 0;
     let firstAttendanceTime = null;
 
-    // Liveness (biometric) verification — mirrors OBHS attendance flow
-    if (livenessChallenge) {
-      const { verifyFaceLiveness } = await import('./rekognitionService.js');
-      const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
-      if (!livenessResult.matched && !livenessResult.error) {
-        throw new ValidationError(`Liveness Verification Failed: ${livenessResult.reason}`);
+    // Liveness (biometric) verification — mirrors OBHS attendance flow (face-detect only, no gesture)
+    if (attendanceType === 'start') {
+      const { verifyFacePresent } = await import('./rekognitionService.js');
+      const faceResult = await verifyFacePresent(imageUrl);
+      if (!faceResult.matched && !faceResult.error) {
+        throw new ValidationError(`Liveness Verification Failed: ${faceResult.reason}`);
       }
     }
 
@@ -92,6 +95,19 @@ class StationCleaningAttendanceService {
       }
       if (attendanceType === 'end' && completedCount < total) {
         throw new ValidationError(`END attendance requires all ${total} tasks completed. Currently ${completedCount} completed.`);
+      }
+    }
+
+    if (isContractor && attendanceType === 'end') {
+      const summarySnap = await db.collection('stationShiftSummaries')
+        .where('supervisorId', '==', workerId)
+        .where('date', '==', todayIST)
+        .limit(1)
+        .get();
+      if (summarySnap.empty) {
+        throw new ValidationError(
+          'Shift summary must be submitted before marking END attendance. Please submit at least 5 areas with photos and remarks first.'
+        );
       }
     }
 

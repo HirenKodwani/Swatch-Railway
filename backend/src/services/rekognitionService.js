@@ -130,3 +130,26 @@ export async function verifyFaceLiveness(imageUrl, expectedChallenge) {
     return { matched: false, reason: 'Liveness verification failed due to internal error.', error: true };
   }
 }
+
+export async function verifyFacePresent(imageUrl) {
+  try {
+    if (!imageUrl || imageUrl.includes('undefined')) {
+      return { matched: false, reason: 'Invalid image URL.', error: true };
+    }
+
+    const rekognition = getRekognitionClient();
+    const fileBuffer = await downloadImage(imageUrl);
+
+    const command = new DetectFacesCommand({ Image: { Bytes: fileBuffer } });
+    const data = await rekognition.send(command);
+
+    if (!data.FaceDetails || data.FaceDetails.length === 0) {
+      return { matched: false, reason: 'No face detected in the photo. Please ensure the photo is clear, well-lit, and contains a visible human face.' };
+    }
+
+    return { matched: true, faceCount: data.FaceDetails.length };
+  } catch (err) {
+    console.error('[Rekognition FacePresent] Error:', err.message);
+    return { matched: false, reason: 'Face verification failed due to internal error.', error: true };
+  }
+}

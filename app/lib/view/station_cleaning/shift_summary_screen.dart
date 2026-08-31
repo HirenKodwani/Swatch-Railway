@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:crm_train/services/api_services.dart';
 import 'package:crm_train/model/station_models.dart';
 import 'package:crm_train/repositories/worker_repo.dart';
@@ -37,14 +38,18 @@ class _AreaEntry {
   String mainArea;
   double basicAreaSqFt;
   int boqTimesPerPeriod;
+  int times;
   double tenderedAreaPerDay;
   String cleaningFrequency;
   final String scheduledTime;
   final String? taskId;
   XFile? photo;
   final TextEditingController remarkCtrl;
+  double? latitude;
+  double? longitude;
+  bool gpsCaptured = false;
 
-  double get workDone => basicAreaSqFt * boqTimesPerPeriod;
+  double get workDone => basicAreaSqFt * times;
 
   _AreaEntry({
     required this.key,
@@ -53,6 +58,7 @@ class _AreaEntry {
     this.mainArea = '',
     this.basicAreaSqFt = 0,
     this.boqTimesPerPeriod = 1,
+    this.times = 1,
     this.tenderedAreaPerDay = 0,
     this.cleaningFrequency = 'daily',
     this.scheduledTime = '',
@@ -85,6 +91,7 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
         mainArea: (a['mainArea'] ?? master?.mainArea ?? '').toString(),
         basicAreaSqFt: (a['basicAreaSqFt'] ?? master?.basicAreaSqFt ?? 0).toDouble(),
         boqTimesPerPeriod: (a['boqTimesPerPeriod'] ?? master?.boqTimesPerPeriod ?? 1).toInt(),
+        times: (a['times'] ?? 1).toInt(),
         tenderedAreaPerDay: (a['tenderedAreaPerDay'] ?? master?.tenderedAreaPerDay ?? 0).toDouble(),
         cleaningFrequency: (a['cleaningFrequency'] ?? master?.cleaningFrequency ?? 'daily').toString(),
         scheduledTime: (a['scheduledTime'] ?? '').toString(),
@@ -137,68 +144,67 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
     }
   }
 
-  List<StationArea> get _availableMasterAreas {
-    final selectedKeys = _entries.map((e) => e.areaId.isNotEmpty ? e.areaId : e.key).toSet();
-    return _masterAreas.where((m) => !selectedKeys.contains(m.uid)).toList();
-  }
-
-  int get _takenCount => _entries.where((e) => e.photo != null).length;
+  int get _takenCount => _entries.where((e) => e.photo != null && e.gpsCaptured).length;
   int get _remarkCount => _entries.where((e) => e.remarkCtrl.text.trim().isNotEmpty).length;
   double get _totalWorkDone => _entries.fold(0, (sum, e) => sum + e.workDone);
 
   bool get _canSubmit => _entries.length >= _minAreas && _takenCount == _entries.length && _remarkCount == _entries.length;
 
-  Future<void> _takePhoto(_AreaEntry entry) async {
-    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80, maxWidth: 1280);
-    if (photo != null) {
-      setState(() => entry.photo = photo);
+  Future<Position?> _captureGps() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (e) {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) return lastKnown;
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      }
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<void> _addArea() async {
-    final available = _availableMasterAreas;
-    if (available.isEmpty) {
+  Future<void> _takePhoto(_AreaEntry entry) async {
+    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80, maxWidth: 1280);
+    if (photo == null) return;
+
+    final position = await _captureGps();
+    if (position == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No additional areas available'), backgroundColor: Colors.orange),
+          const SnackBar(
+            content: Text('Live location could not be captured. Please enable location and retake the photo.'),
+            backgroundColor: kWarningOrange,
+          ),
         );
       }
       return;
     }
-    final selected = await showModalBottomSheet<StationArea>(
-      context: context,
-      builder: (ctx) => ListView(
-        shrinkWrap: true,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Select an area', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-          ),
-          ...available.map((m) => ListTile(
-            leading: const Icon(Icons.cleaning_services, color: kRailwayBlue),
-            title: Text(m.name),
-            subtitle: m.mainArea != null && m.mainArea!.isNotEmpty ? Text(m.mainArea!) : null,
-            trailing: m.basicAreaSqFt != null
-                ? Text('${m.basicAreaSqFt!.round()} sqft', style: TextStyle(color: Colors.grey[600]))
-                : null,
-            onTap: () => Navigator.pop(ctx, m),
-          )),
-        ],
-      ),
-    );
-    if (selected == null) return;
+
     setState(() {
-      _entries.add(_AreaEntry(
-        key: selected.uid ?? selected.name,
-        areaId: selected.uid ?? '',
-        areaName: selected.name,
-        mainArea: selected.mainArea ?? '',
-        basicAreaSqFt: selected.basicAreaSqFt ?? 0,
-        boqTimesPerPeriod: selected.boqTimesPerPeriod ?? 1,
-        tenderedAreaPerDay: selected.tenderedAreaPerDay ?? 0,
-        cleaningFrequency: selected.cleaningFrequency ?? 'daily',
-        remark: '',
-      ));
+      entry
+        ..photo = photo
+        ..latitude = position.latitude
+        ..longitude = position.longitude
+        ..gpsCaptured = true;
     });
   }
 
@@ -215,12 +221,15 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
           'mainArea': e.mainArea,
           'basicAreaSqFt': e.basicAreaSqFt,
           'boqTimesPerPeriod': e.boqTimesPerPeriod,
+          'times': e.times,
           'cleaningFrequency': e.cleaningFrequency,
           'tenderedAreaPerDay': e.tenderedAreaPerDay,
           'photoUrl': photoUrl,
           'remark': e.remarkCtrl.text.trim(),
           'scheduledTime': e.scheduledTime,
           'taskId': e.taskId,
+          'latitude': e.latitude ?? 0,
+          'longitude': e.longitude ?? 0,
         });
       }
 
@@ -271,7 +280,7 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
                 Text('${widget.shift} Shift — ${widget.date}',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text('${_entries.length} area(s) selected (min $_minAreas) — $_takenCount photos, $_remarkCount remarks',
+                Text('${_entries.length} area(s) — $_takenCount photo(s) with live location, $_remarkCount remarks',
                     style: TextStyle(color: Colors.grey[600])),
                 const SizedBox(height: 4),
                 Text('Total Work Done: ${_totalWorkDone.toStringAsFixed(0)} sqft',
@@ -298,15 +307,6 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_availableMasterAreas.isNotEmpty)
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Add Area'),
-                        onPressed: _isSubmitting ? null : _addArea,
-                      ),
-                    ),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
@@ -320,7 +320,7 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
                           : _entries.length < _minAreas
                               ? 'Select ${_minAreas - _entries.length} more area(s)'
                               : (_takenCount < _entries.length || _remarkCount < _entries.length)
-                                  ? 'Add ${(_entries.length - _takenCount) + (_entries.length - _remarkCount)} missing photo/remark(s)'
+                                  ? 'Take photo(s) with live location & add remark(s) ($_takenCount/${_entries.length} done)'
                                   : 'Submit Summary ($_takenCount areas)'),
                       onPressed: (_canSubmit && !_isSubmitting) ? _submit : null,
                       style: ElevatedButton.styleFrom(
@@ -375,9 +375,32 @@ class _ShiftSummaryScreenState extends State<ShiftSummaryScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'Work: ${entry.basicAreaSqFt.toStringAsFixed(0)} sqft × ${entry.boqTimesPerPeriod}x (${entry.cleaningFrequency}) = ${entry.workDone.toStringAsFixed(0)} sqft',
+                'Work: ${entry.basicAreaSqFt.toStringAsFixed(0)} sqft × ${entry.times}X = ${entry.workDone.toStringAsFixed(0)} sqft',
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  entry.gpsCaptured ? Icons.gps_fixed : Icons.gps_off,
+                  size: 14,
+                  color: entry.gpsCaptured ? Colors.green[700] : Colors.redAccent,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    entry.gpsCaptured && entry.latitude != null && entry.longitude != null
+                        ? 'Lat: ${entry.latitude!.toStringAsFixed(5)}, Lng: ${entry.longitude!.toStringAsFixed(5)}'
+                        : 'Live location required — take photo to capture',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: entry.gpsCaptured ? Colors.green[800] : Colors.redAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             if (photo != null)
