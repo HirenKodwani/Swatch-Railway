@@ -198,7 +198,31 @@ class StationBillingService {
 
     const machines = []; machineSnap.forEach(d => machines.push(d.data()));
     const inMaintenanceCount = machines.filter(m => m.workingStatus === 'under_maintenance' || m.workingStatus === 'broken').length;
-    const billableAmount = Math.max(0, (contractData.contractValue / 12) - penalties.totalPenaltyAmount);
+
+    // ── OBHS-aligned overall score: 50% cleaning + 20% inspection + 30% passenger feedback ──
+    const feedbackScore = feedbackRecords.length > 0
+      ? Math.round(((feedbackSummary.averageRating / 5) * 100) * 100) / 100
+      : null;
+    const scoreBreakdown = [];
+    if (executionSheetSummary.configured) scoreBreakdown.push({ component: 'Cleaning', weight: 50, score: executionSheetSummary.executionScore });
+    if (inspectionBillingSummary.configured) scoreBreakdown.push({ component: 'Inspection', weight: 20, score: inspectionBillingSummary.inspectionScore });
+    if (feedbackScore !== null) scoreBreakdown.push({ component: 'Passenger Feedback', weight: 30, score: feedbackScore });
+
+    let weightedScore = 0;
+    let weightedAmount = 0;
+    scoreBreakdown.forEach(c => { weightedScore += c.score * c.weight; weightedAmount += c.weight; });
+    // Scores are 0-100 and weights are percentages; missing components are treated
+    // as fully achieved (neutral), mirroring OBHS default when no data.
+    const overallScore = Math.round(((weightedScore + (100 - weightedAmount) * 100) / 100) * 100) / 100;
+    const grade = overallScore >= 90 ? 'A' : overallScore >= 80 ? 'B' : overallScore >= 70 ? 'C' : 'D';
+    const deductionRate = billingRuleSnap.empty ? 100 : (billingRuleSnap.docs[0].data().deductionRate ?? 100);
+
+    // OBHS score-aligned bill: billable = monthlyBase × (1 − (deductionRate/100) × (1 − overallScore/100))
+    const billableAmount = Math.max(0, Math.round(monthlyBase * (1 - (deductionRate / 100) * ((100 - overallScore) / 100))));
+    penalties.totalPenaltyAmount = Math.round(Math.max(0, monthlyBase - billableAmount));
+    if (penalties.deductions.length === 0 && penalties.totalPenaltyAmount > 0) {
+      penalties.deductions.push({ reason: 'Score Based Deduction', percentage: Math.round((100 - overallScore) * 100) / 100, amount: penalties.totalPenaltyAmount });
+    }
 
     const ref = db.collection('station_billing_packs').doc();
     const now = new Date().toISOString();
@@ -216,6 +240,7 @@ class StationBillingService {
       pettyIssueSummary, evidenceSummary,
       machineSummary: { total: machines.length, inMaintenance: inMaintenanceCount, deployed: machines.length - inMaintenanceCount, downtime: machineDowntimeSummary },
       executionSheetSummary, inspectionBillingSummary,
+      overallScore, grade, deductionRate, scoreBreakdown, feedbackScore,
       penalties, billableAmount, status: 'DRAFT',
       paymentStatus: 'unpaid', paymentDate: null, paymentRef: null, paymentAmount: null,
       complianceChecklist: { attendanceSheetAttached: false, wagesheetAttached: false, bankStatementAttached: false, policeVerificationAttached: false, medicalCertificateAttached: false, biometricSheetAttached: false, scorecardAttached: scorecardSummary.daysWithScorecard > 0, gstInvoiceAttached: false },
@@ -305,7 +330,7 @@ class StationBillingService {
     const doc = await ref.get();
     if (!doc.exists) throw new NotFoundError('Billing pack not found');
     if (!['DRAFT', 'REJECTED'].includes(doc.data().status)) throw new ValidationError('Only DRAFT or REJECTED packs can be edited');
-    const allowed = ['complianceChecklist', 'attendanceSummary', 'activitySummary', 'scorecardSummary', 'complaintSummary', 'feedbackSummary', 'machineSummary', 'penalties', 'billableAmount'];
+    const allowed = ['complianceChecklist', 'attendanceSummary', 'activitySummary', 'scorecardSummary', 'complaintSummary', 'feedbackSummary', 'machineSummary', 'penalties', 'billableAmount', 'overallScore', 'grade', 'deductionRate', 'scoreBreakdown', 'feedbackScore'];
     const updates = { updatedAt: new Date().toISOString() };
     for (const key of allowed) { if (data[key] !== undefined) updates[key] = data[key]; }
     await ref.update(updates);

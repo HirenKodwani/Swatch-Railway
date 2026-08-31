@@ -391,6 +391,7 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
                                   _buildMachineSection(),
                                   _buildExecutionSheetSection(),
                                   _buildInspectionBillingSection(),
+                                  _buildObhsScoreSection(),
                                   _buildPenaltySection(),
                                   _buildFinancialSection(),
                                   _buildComplianceSection(),
@@ -520,12 +521,18 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
 
   Widget _buildFeedbackSection() {
     final s = _billingPack!.feedbackSummary;
-    return _summaryCard('Passenger Feedback Summary', [
+    final fs = _billingPack!.feedbackScore;
+    return _summaryCard('Passenger Feedback (30% Billing Component)', [
       _infoRow('Total Feedbacks', '${s['totalFeedbacks'] ?? 0}'),
       _infoRow('Average Rating', '${s['averageRating'] ?? 'N/A'}',
           valueColor: (s['averageRating'] ?? 5) >= 3.0 ? kSuccessGreen : kErrorRed),
       _infoRow('Negative Feedbacks', '${s['negativeFeedbacks'] ?? 0}',
           valueColor: (s['negativeFeedbacks'] ?? 0) > 0 ? kErrorRed : kSuccessGreen),
+      if (fs != null) ...[
+        _divider(),
+        _infoRow('Feedback Score', '${fs.toStringAsFixed(1)}%',
+            valueColor: fs >= 80 ? kSuccessGreen : fs >= 50 ? kWarningOrange : kErrorRed),
+      ],
     ]);
   }
 
@@ -639,6 +646,32 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
     ]);
   }
 
+  Widget _buildObhsScoreSection() {
+    final p = _billingPack!;
+    final os = p.overallScore;
+    if (os == null) return const SizedBox.shrink();
+    final components = p.scoreBreakdown as List<dynamic>? ?? [];
+    return _summaryCard('OBHS-Aligned Score (50% Cleaning + 20% Inspection + 30% Feedback)', [
+      _infoRow('Overall Score', '${os.toStringAsFixed(1)}%',
+          valueColor: os >= 80 ? kSuccessGreen : os >= 60 ? kWarningOrange : kErrorRed),
+      _infoRow('Grade', '${p.grade ?? 'N/A'}',
+          valueColor: os >= 80 ? kSuccessGreen : os >= 60 ? kWarningOrange : kErrorRed),
+      _infoRow('Deduction Rate', '${p.deductionRate ?? 100}%'),
+      _divider(),
+      if (components.isEmpty)
+        const Padding(
+          padding: EdgeInsets.all(14),
+          child: Text('No scored components available for this period.', style: TextStyle(color: Colors.grey)),
+        )
+      else
+        ...components.map((c) => _infoRow(
+          '${c['component'] ?? ''} (${c['weight'] ?? 0}%)',
+          '${((c['score'] ?? 0) as num).toStringAsFixed(1)}%',
+          valueColor: (c['score'] ?? 0) >= 80 ? kSuccessGreen : (c['score'] ?? 0) >= 50 ? kWarningOrange : kErrorRed,
+        )),
+    ]);
+  }
+
   Widget _buildPenaltySection() {
     final p = _billingPack!.penalties;
     final deductions = (p['deductions'] as List<dynamic>?) ?? [];
@@ -676,8 +709,11 @@ class _BillingSupportPackScreenState extends State<BillingSupportPackScreen> {
 
   Widget _buildFinancialSection() {
     final p = _billingPack!;
+    final os = p.overallScore;
     return _summaryCard('Financial Summary', [
       _infoRow('Monthly Contract Value', '₹${p.monthlyContractValue}'),
+      if (os != null)
+        _infoRow('Overall Score', '${os.toStringAsFixed(1)}%', valueColor: os >= 80 ? kSuccessGreen : kErrorRed),
       _infoRow('Total Deductions', '₹${p.penalties['totalPenaltyAmount'] ?? 0}', valueColor: kErrorRed),
       _divider(),
       _infoRow('Net Billable', '₹${p.billableAmount}', valueColor: kSuccessGreen, bold: true),

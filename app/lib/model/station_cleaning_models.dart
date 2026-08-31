@@ -224,6 +224,11 @@ class StationBillingPack {
   final Map<String, dynamic> inspectionBillingSummary;
   final Map<String, dynamic> penalties;
   final int billableAmount;
+  final double? overallScore;
+  final String? grade;
+  final double? deductionRate;
+  final List<dynamic> scoreBreakdown;
+  final double? feedbackScore;
   final String status;
   final String? rejectionReason;
   final Map<String, dynamic> complianceChecklist;
@@ -257,6 +262,11 @@ class StationBillingPack {
     this.inspectionBillingSummary = const {},
     required this.penalties,
     required this.billableAmount,
+    this.overallScore,
+    this.grade,
+    this.deductionRate,
+    this.scoreBreakdown = const [],
+    this.feedbackScore,
     required this.status,
     this.rejectionReason,
     required this.complianceChecklist,
@@ -291,6 +301,11 @@ class StationBillingPack {
     inspectionBillingSummary: json['inspectionBillingSummary'] ?? {},
     penalties: json['penalties'] ?? {},
     billableAmount: json['billableAmount'] ?? 0,
+    overallScore: (json['overallScore'] as num?)?.toDouble(),
+    grade: json['grade'],
+    deductionRate: (json['deductionRate'] as num?)?.toDouble(),
+    scoreBreakdown: (json['scoreBreakdown'] as List<dynamic>?) ?? [],
+    feedbackScore: (json['feedbackScore'] as num?)?.toDouble(),
     status: json['status'] ?? 'DRAFT',
     rejectionReason: json['rejectionReason'],
     complianceChecklist: json['complianceChecklist'] ?? {},
