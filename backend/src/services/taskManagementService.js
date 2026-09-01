@@ -435,6 +435,59 @@ class TaskManagementService {
     return { count: tasks.length, tasks };
   }
 
+  async getAreaFrequencyStatus(areaIds, date, areaFrequencies) {
+    if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
+      throw new ValidationError('areaIds array is required');
+    }
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const result = {};
+    const chunkSize = 10;
+    for (let i = 0; i < areaIds.length; i += chunkSize) {
+      const chunk = areaIds.slice(i, i + chunkSize);
+      const [existingTasksSnap, areaDocs] = await Promise.all([
+        db.collection('cleaningTasks')
+          .where('date', '==', targetDate)
+          .where('areaId', 'in', chunk)
+          .select('areaId', 'scheduledTime')
+          .get(),
+        Promise.all(chunk.map(id =>
+          db.collection('areas').doc(id).get()
+            .then(d => d.exists ? d : db.collection('stationAreas').doc(id).get())
+        )),
+      ]);
+      const usedTimesByArea = new Map();
+      existingTasksSnap.forEach(doc => {
+        const d = doc.data();
+        if (!d.scheduledTime) return;
+        if (!usedTimesByArea.has(d.areaId)) usedTimesByArea.set(d.areaId, new Set());
+        usedTimesByArea.get(d.areaId).add(d.scheduledTime);
+      });
+      areaDocs.forEach((doc, idx) => {
+        if (!doc.exists) return;
+        const areaId = chunk[idx];
+        const area = doc.data();
+        const frequency = area.cleaningFrequency || area.frequency || 'daily';
+        const areaFreq = (areaFrequencies && areaFrequencies[areaId] !== undefined)
+          ? parseInt(areaFrequencies[areaId], 10)
+          : null;
+        const frequencyTimes = areaFreq
+          ? this._buildTimeslots(areaFreq, frequency)
+          : (area.frequencyTimes || this._getDefaultFrequencyTimes(frequency));
+        const totalTimes = frequencyTimes.length;
+        const usedTimes = usedTimesByArea.get(areaId) ? usedTimesByArea.get(areaId).size : 0;
+        result[areaId] = {
+          areaId,
+          frequency,
+          totalTimes,
+          usedTimes,
+          remainingTimes: Math.max(0, totalTimes - usedTimes),
+          frequencyTimes
+        };
+      });
+    }
+    return { date: targetDate, areas: result };
+  }
+
   _resolveActivityForArea(areaId, areaData, data = {}) {
     const { areaActivities, activityType, taskTypeId, taskTypeName } = data;
     const perArea = areaActivities ? areaActivities[areaId] : null;
@@ -475,7 +528,10 @@ class TaskManagementService {
   }
 
   async bulkGenerate(data, user) {
-    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency, areaFrequencies } = data;
+    const { areaIds, date, workerId, workerIds, zoneIds, supervisorId, frequency } = data;
+    const areaFrequencies = data.areaFrequencies || null;
+    const areaTimes = data.areaTimes || null;
+    const timesCount = data.timesCount ? parseInt(data.timesCount, 10) || null : null;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
@@ -516,6 +572,7 @@ class TaskManagementService {
     }
 
     const existingTaskKeys = new Set();
+    const usedTimesByArea = new Map();
     const chunkSize = 10;
     for (let i = 0; i < areaIds.length; i += chunkSize) {
       const chunk = areaIds.slice(i, i + chunkSize);
@@ -527,6 +584,10 @@ class TaskManagementService {
       existingTasksSnap.forEach(doc => {
         const d = doc.data();
         existingTaskKeys.add(`${d.areaId}|${d.workerId}|${d.scheduledTime}|${d.taskTypeId || 'default'}`);
+        if (d.scheduledTime) {
+          if (!usedTimesByArea.has(d.areaId)) usedTimesByArea.set(d.areaId, new Set());
+          usedTimesByArea.get(d.areaId).add(d.scheduledTime);
+        }
       });
     }
 
@@ -550,6 +611,15 @@ class TaskManagementService {
       const frequencyTimes = areaFreq
         ? this._buildTimeslots(areaFreq, cleaningFrequency)
         : (areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency));
+      // Partial/frequency-based assignment: only create tasks for occurrences that
+      // have not already been generated for this area on this date. The admin picks
+      // how many of the remaining occurrences to assign (default: all remaining).
+      const alreadyUsed = usedTimesByArea.get(areaId) || new Set();
+      const availableTimes = frequencyTimes.filter(t => !alreadyUsed.has(t));
+      const requestedCount = areaTimes && areaTimes[areaId] != null
+        ? parseInt(areaTimes[areaId], 10) || 0
+        : (timesCount || availableTimes.length);
+      const timesToUse = availableTimes.slice(0, Math.max(0, Math.min(requestedCount, availableTimes.length)));
       const baseAreaName = areaData.areaName || areaData.name || '';
       const areaCode = areaData.areaCode || '';
       const mainArea = areaData.mainArea || '';
@@ -609,7 +679,7 @@ class TaskManagementService {
       };
 
       const processWorker = (workerInfo) => {
-        for (const scheduledTime of frequencyTimes) {
+        for (const scheduledTime of timesToUse) {
           for (const zoneInfo of targetZones) {
             for (const activity of taskActivities) {
               const dupKey = `${areaId}|${workerInfo.workerId}|${scheduledTime}|${activity ? (activity.id || 'default') : 'default'}`;
@@ -625,7 +695,7 @@ class TaskManagementService {
 
       if (assignedWorkers.length > 0) {
         let workerIdx = 0;
-        for (const scheduledTime of frequencyTimes) {
+        for (const scheduledTime of timesToUse) {
           for (const zoneInfo of targetZones) {
             const w = assignedWorkers[workerIdx % assignedWorkers.length];
             workerIdx++;
@@ -655,6 +725,22 @@ class TaskManagementService {
           platformId: areaData.platformId || null,
           supervisorId: assignedSupervisorId || areaData.supervisorId || null,
           supervisorName: assignedSupervisorName || areaData.supervisorName || '',
+          shift: data.shift || areaData.defaultShift || 'morning',
+        });
+      } else if (data.supervisorId) {
+        // When a (contract) supervisor is explicitly assigned and no specific
+        // worker is selected, generate all tasks for that supervisor themself.
+        // Do NOT fall back to every worker assigned to the area, otherwise the
+        // supervisor would see the whole team's tasks.
+        const supervisorWorkerId = assignedSupervisorId || data.supervisorId;
+        const supervisorWorkerName = assignedSupervisorName || 'Supervisor';
+        processWorker({
+          workerId: supervisorWorkerId,
+          workerName: supervisorWorkerName,
+          stationId: areaData.stationId || '',
+          platformId: areaData.platformId || null,
+          supervisorId: supervisorWorkerId,
+          supervisorName: supervisorWorkerName,
           shift: data.shift || areaData.defaultShift || 'morning',
         });
       } else if (workersSnap && workersSnap.size > 0) {

@@ -75,6 +75,11 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   final Map<String, List<TaskType>> _areaActivities = {};
   final Map<String, int> _areaFrequencies = {};
 
+  // Per-area frequency progress (total/used/remaining occurrences for the date)
+  final Map<String, Map<String, dynamic>> _areaFrequencyStatus = {};
+  final Map<String, int> _areaAssignTimes = {};
+  bool _frequencyStatusLoading = false;
+
   String? _loadError;
   bool _areaLoadFailed = false;
 
@@ -225,6 +230,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaActivities.clear();
           _areaFrequencies.clear();
         });
+        await _loadFrequencyStatus();
       }
     } catch (e) {
       debugPrint('Error loading areas: $e');
@@ -237,6 +243,42 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaFrequencies.clear();
         });
       }
+    }
+  }
+
+  Future<void> _loadFrequencyStatus() async {
+    final station = _selectedStation;
+    if (station == null || station.uid == null) return;
+    final areaIds = _allAreas
+        .where((a) => a.uid != null && a.uid!.isNotEmpty)
+        .map((a) => a.uid!)
+        .toList();
+    if (areaIds.isEmpty) return;
+    setState(() => _frequencyStatusLoading = true);
+    try {
+      final status = await AreaCleaningRepository.getFrequencyStatus(
+        date: DateFormat('yyyy-MM-dd').format(_selectedDate),
+        areaIds: areaIds,
+      );
+      if (mounted) {
+        setState(() {
+          final casted = status.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
+          _areaFrequencyStatus
+            ..clear()
+            ..addAll(casted);
+          for (final e in _areaFrequencyStatus.entries) {
+            final remaining = (e.value['remainingTimes'] as int?) ?? 0;
+            final current = _areaAssignTimes[e.key];
+            if (current == null || current > remaining) {
+              _areaAssignTimes[e.key] = remaining;
+            }
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading frequency status: $e');
+    } finally {
+      if (mounted) setState(() => _frequencyStatusLoading = false);
     }
   }
 
@@ -263,8 +305,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     }
   }
 
-  // Default per-day cleanings required for an area, from its configured frequency.
-  int _defaultFrequencyForArea(StationArea area) {
+int _defaultFrequencyForArea(StationArea area) {
     final boq = area.boqTimesPerPeriod;
     if (boq != null && boq > 0) return boq;
     switch ((area.cleaningFrequency ?? 'daily').toLowerCase()) {
@@ -287,6 +328,79 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     }
   }
 
+  Widget _buildFrequencyAssignRow(StationArea area) {
+    final areaId = area.uid ?? area.name;
+    final status = _areaFrequencyStatus[areaId];
+    final total = (status?['totalTimes'] as int?) ?? 0;
+    final used = (status?['usedTimes'] as int?) ?? 0;
+    final remaining = (status?['remainingTimes'] as int?) ?? total;
+    final current = _areaAssignTimes[areaId] ?? remaining;
+    final hasSupervisor = _selectedSupervisor != null;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: kRailwayBlue.withOpacity(0.04),
+        border: Border.all(color: kRailwayBlue.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.repeat, size: 16, color: kRailwayBlue),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Frequency: ${_frequencyLabel(area.cleaningFrequency ?? 'daily')} · Used: $used · Remaining: $remaining',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                ),
+              ),
+              if (_frequencyStatusLoading)
+                const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(Icons.supervisor_account, size: 16, color: hasSupervisor ? kRailwayBlue : Colors.grey[400]),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  hasSupervisor
+                      ? 'Times to assign to ${_selectedSupervisor!.fullName}: $current of $remaining'
+                      : remaining == 0
+                          ? 'All daily occurrences already assigned'
+                          : 'Select a supervisor to assign times',
+                  style: TextStyle(fontSize: 12, color: hasSupervisor ? Colors.grey[700] : Colors.grey[500]),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                visualDensity: VisualDensity.compact,
+                color: kRailwayBlue,
+                onPressed: hasSupervisor && remaining > 0 && current > 1
+                    ? () => setState(() => _areaAssignTimes[areaId] = (current - 1).clamp(1, remaining))
+                    : null,
+              ),
+              Text('$current', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                visualDensity: VisualDensity.compact,
+                color: kRailwayBlue,
+                onPressed: hasSupervisor && remaining > 0 && current < remaining
+                    ? () => setState(() => _areaAssignTimes[areaId] = (current + 1).clamp(1, remaining))
+                    : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -294,7 +408,10 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       firstDate: DateTime.now().subtract(const Duration(days: 30)),
       lastDate: DateTime.now().add(const Duration(days: 30)),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+      await _loadFrequencyStatus();
+    }
   }
 
   void _toggleAreaSelection(StationArea area) {
@@ -435,6 +552,30 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
             .toList();
       }
 
+      // Per-area occurrence count: how many of the remaining daily times this
+      // generation should cover (only relevant when a supervisor is selected).
+      final areaTimes = <String, int>{};
+      if (_selectedSupervisor != null) {
+        for (final areaId in _selectedAreaIds) {
+          final status = _areaFrequencyStatus[areaId];
+          final remaining = (status?['remainingTimes'] as int?) ?? 0;
+          final chosen = _areaAssignTimes[areaId] ?? remaining;
+          if (remaining > 0 && chosen > 0) areaTimes[areaId] = chosen > remaining ? remaining : chosen;
+        }
+        if (areaTimes.isEmpty) {
+          if (mounted) {
+            setState(() => _isSubmitting = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No remaining frequency left for the selected areas on this date.'),
+                backgroundColor: kWarningOrange,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
       await AreaCleaningRepository.generateTasks(
         areaIds: _selectedAreaIds.toList(),
         date: todayStr,
@@ -442,13 +583,17 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
         frequency: _selectedFrequency,
         areaActivities: areaActivities.isNotEmpty ? areaActivities : null,
         areaFrequencies: _areaFrequencies,
+        areaTimes: areaTimes.isNotEmpty ? areaTimes : null,
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tasks generated successfully!'), backgroundColor: kSuccessGreen),
+          SnackBar(
+            content: Text('Tasks generated successfully! Remaining frequency refreshed.'),
+            backgroundColor: kSuccessGreen,
+          ),
         );
-        Navigator.pop(context, true);
+        await _loadFrequencyStatus();
       }
     } catch (e) {
       if (mounted) {
@@ -599,7 +744,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                           DropdownButtonFormField<RailwayWorkerModel>(
                             value: _selectedSupervisor,
                             decoration: const InputDecoration(
-                              labelText: 'Assign to Supervisor (optional)',
+                              labelText: 'Assign to Supervisor (uses the per-area Times set below)',
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.supervisor_account),
                             ),
@@ -769,7 +914,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Row(
+Row(
                                                 children: [
                                                   const Icon(Icons.repeat, size: 16, color: kRailwayBlue),
                                                   const SizedBox(width: 6),
@@ -802,6 +947,8 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
                                                 ],
                                               ),
                                               const SizedBox(height: 8),
+                                              _buildFrequencyAssignRow(area),
+                                              const SizedBox(height: 12),
                                               InkWell(
                                                 onTap: () => _showActivitySelectionForArea(area),
                                                 borderRadius: BorderRadius.circular(8),

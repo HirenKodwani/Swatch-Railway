@@ -76,6 +76,20 @@ export const getDailyTasks = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+export const getFrequencyStatus = asyncHandler(async (req, res) => {
+  const areaIds = String(req.query.areaIds || '').split(',').map(s => s.trim()).filter(Boolean);
+  let areaFrequencies = null;
+  if (req.query.areaFrequencies) {
+    try {
+      areaFrequencies = typeof req.query.areaFrequencies === 'string'
+        ? JSON.parse(req.query.areaFrequencies)
+        : req.query.areaFrequencies;
+    } catch (_) { areaFrequencies = null; }
+  }
+  const result = await taskManagementService.getAreaFrequencyStatus(areaIds, req.query.date, areaFrequencies);
+  res.status(200).json(result);
+});
+
 export const bulkGenerate = asyncHandler(async (req, res) => {
   const result = await taskManagementService.bulkGenerate(req.body, req.user);
   res.status(201).json(result);

@@ -278,7 +278,22 @@ class AreaCleaningRepository {
     return result;
   }
 
-  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities, Map<String, int>? areaFrequencies}) async {
+static Future<Map<String, dynamic>> getFrequencyStatus({required String date, required List<String> areaIds}) async {
+    if (areaIds.isEmpty) return {};
+    return await _apiCall(
+      method: 'GET',
+      path: '/api/tasks-v2/frequency-status',
+      queryParams: {
+        'date': date,
+        'areaIds': areaIds.join(','),
+      },
+      parser: (data) {
+        return data['areas'] as Map<String, dynamic>? ?? {};
+      },
+    );
+  }
+
+  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities, Map<String, int>? areaFrequencies, Map<String, int>? areaTimes}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/generate',
@@ -293,6 +308,7 @@ class AreaCleaningRepository {
         if (taskTypeName != null && taskTypeName.isNotEmpty) 'taskTypeName': taskTypeName,
         if (areaActivities != null && areaActivities.isNotEmpty) 'areaActivities': areaActivities,
         if (areaFrequencies != null && areaFrequencies.isNotEmpty) 'areaFrequencies': areaFrequencies,
+        if (areaTimes != null && areaTimes.isNotEmpty) 'areaTimes': areaTimes,
       },
       parser: (data) => data,
     );
