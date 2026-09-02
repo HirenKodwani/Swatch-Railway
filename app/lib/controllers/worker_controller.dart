@@ -818,15 +818,33 @@ class WorkerController extends GetxController {
 
       final photo = await _captureAttendancePhoto();
       final position = await _getAttendanceLocation();
-      final imageUrl = await WorkerRepository.uploadMedia(photo.path);
+
+      // Try to upload photo — if Firebase Storage is unavailable, proceed without it
+      String? imageUrl;
+      try {
+        imageUrl = await WorkerRepository.uploadMedia(photo.path);
+      } catch (uploadErr) {
+        final errMsg = uploadErr.toString();
+        // Don't block attendance if upload fails due to storage issues
+        debugPrint('[Attendance] Photo upload failed: $errMsg — proceeding without photo');
+        Get.snackbar(
+          'Photo Upload Warning',
+          'Could not upload photo (storage unavailable). Attendance will be recorded without photo.',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.orange.shade700,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+        imageUrl = null; // Backend now accepts null imageUrl
+      }
 
       final response = await WorkerRepository.markAttendance(
         type: type,
         runInstanceId: runInstanceId,
-        imageUrl: imageUrl,
+        imageUrl: imageUrl ?? '',
         latitude: position.latitude,
         longitude: position.longitude,
-        livenessChallenge: challenge,
+        livenessChallenge: imageUrl != null ? challenge : null,
       ).timeout(
         const Duration(seconds: 40),
         onTimeout: () => throw Exception('Attendance server timeout. Please check your internet and try again.'),
