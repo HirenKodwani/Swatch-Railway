@@ -22,12 +22,20 @@ class ObhsService {
     let firstAttendanceTime = null;
 
     if (livenessChallenge) {
-      const { verifyFaceLiveness } = await import('./rekognitionService.js');
-      const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
-      if (!livenessResult.matched && !livenessResult.error) {
-        throw new ValidationError(`Liveness Verification Failed: ${livenessResult.reason}`);
-      } else if (livenessResult.error) {
-        throw new ValidationError(`Liveness Verification Failed: ${livenessResult.reason}`);
+      try {
+        const { verifyFaceLiveness } = await import('./rekognitionService.js');
+        const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
+        if (!livenessResult.matched && !livenessResult.error) {
+          // Deliberate mismatch — gesture was wrong
+          throw new ValidationError(`Liveness Verification Failed: ${livenessResult.reason}`);
+        } else if (livenessResult.error) {
+          // AWS/network error — log and allow attendance, do not block worker
+          logger.error('OBHS', '(Liveness Check) AWS error, allowing attendance:', livenessResult.reason);
+        }
+      } catch (livenessErr) {
+        if (livenessErr instanceof ValidationError) throw livenessErr;
+        // Module import or unexpected error — log and continue
+        logger.error('OBHS', '(Liveness Check) Unexpected error:', livenessErr.message);
       }
     }
 
@@ -65,40 +73,55 @@ class ObhsService {
     };
     const todayIST = getISTDateString(new Date());
 
-    const snapshot = await db.collection('obhs_attendance').where('workerId', '==', workerId).get();
-    let latestDoc = null;
-    let latestTime = 0;
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      let time = 0;
-      if (data.createdAt) {
-        if (typeof data.createdAt.toDate === 'function') {
-          time = data.createdAt.toDate().getTime();
-        } else {
-          time = new Date(data.createdAt).getTime();
-        }
-      }
-      if (!isNaN(time) && time > latestTime) {
-        latestTime = time;
-        latestDoc = doc;
-      }
-    });
-
+    // Use the deterministic doc ID (runInstanceId_workerId) as the primary lookup.
+    // This avoids a full collection scan that can hit Firestore limits or index issues.
     let attendanceDocId = `${runInstanceId}_${workerId}`;
     let attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
     let attendanceDoc = await attendanceRef.get();
-    
-    let latestCreatedAtDate = latestDoc ? latestDoc.data().createdAt : null;
-    if (latestCreatedAtDate && typeof latestCreatedAtDate.toDate === 'function') {
-      latestCreatedAtDate = latestCreatedAtDate.toDate();
-    } else if (latestCreatedAtDate) {
-      latestCreatedAtDate = new Date(latestCreatedAtDate);
-    }
-    
-    if (latestDoc && getISTDateString(latestCreatedAtDate) === todayIST) {
-        attendanceDoc = latestDoc;
-        attendanceDocId = latestDoc.id;
-        attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
+
+    // Fallback: if the deterministic doc doesn't exist, scan for a today's record
+    // (handles legacy docs that may have been created with a different ID scheme)
+    if (!attendanceDoc.exists) {
+      try {
+        const snapshot = await db.collection('obhs_attendance')
+          .where('workerId', '==', workerId)
+          .where('runInstanceId', '==', runInstanceId)
+          .limit(5)
+          .get();
+        let latestDoc = null;
+        let latestTime = 0;
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          let time = 0;
+          if (data.createdAt) {
+            if (typeof data.createdAt.toDate === 'function') {
+              time = data.createdAt.toDate().getTime();
+            } else {
+              time = new Date(data.createdAt).getTime();
+            }
+          }
+          if (!isNaN(time) && time > latestTime) {
+            latestTime = time;
+            latestDoc = doc;
+          }
+        });
+        if (latestDoc) {
+          let latestCreatedAt = latestDoc.data().createdAt;
+          if (latestCreatedAt && typeof latestCreatedAt.toDate === 'function') {
+            latestCreatedAt = latestCreatedAt.toDate();
+          } else if (latestCreatedAt) {
+            latestCreatedAt = new Date(latestCreatedAt);
+          }
+          if (getISTDateString(latestCreatedAt) === todayIST) {
+            attendanceDoc = latestDoc;
+            attendanceDocId = latestDoc.id;
+            attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
+          }
+        }
+      } catch (scanErr) {
+        logger.error('OBHS', '(Attendance fallback scan) Error:', scanErr.message);
+        // Non-fatal: proceed with the deterministic doc (it doesn't exist, so we'll create it)
+      }
     }
     const attendanceEntry = {
       photoUrl: imageUrl, deviceTimestamp, serverTimestamp: new Date().toISOString(),
@@ -143,10 +166,17 @@ class ObhsService {
       const baseStartPhoto = currentData.startAttendance?.photoUrl;
       if (!baseStartPhoto) throw new ValidationError('Baseline image missing from DB.');
 
-      const { compareFaces } = await import('./rekognitionService.js');
-      const faceVerification = await compareFaces(baseStartPhoto, imageUrl);
+      let faceVerification = { matched: true, similarity: 100, reason: 'Skipped (AWS unavailable)' };
+      try {
+        const { compareFaces } = await import('./rekognitionService.js');
+        faceVerification = await compareFaces(baseStartPhoto, imageUrl);
+      } catch (importErr) {
+        logger.error('OBHS', '(compareFaces import) Error:', importErr.message);
+        // If rekognition module fails to load, allow attendance but flag for review
+        faceVerification = { matched: true, similarity: 0, reason: 'Rekognition unavailable - flagged for manual review', error: true };
+      }
 
-      if (!faceVerification.matched) {
+      if (!faceVerification.matched && !faceVerification.error) {
         await attendanceRef.update({
           identityAuditStatus: 'MISMATCH_ALERT',
           lastMismatchReason: faceVerification.reason,
@@ -157,6 +187,14 @@ class ObhsService {
         throw new ValidationError(
           `Identity Verification Failed. Face match score (${faceVerification.similarity}%) below threshold. ${faceVerification.reason}`
         );
+      } else if (faceVerification.error) {
+        // AWS error: log it but allow attendance - flag for manual audit
+        logger.error('OBHS', '(Face Comparison) AWS error - allowing with flag:', faceVerification.reason);
+        await attendanceRef.update({
+          identityAuditStatus: 'MANUAL_REVIEW_REQUIRED',
+          lastMismatchReason: faceVerification.reason,
+          updatedAt: new Date().toISOString()
+        }).catch(e => logger.error('OBHS', 'Could not update audit status', e.message));
       }
 
       if (attendanceType === 'mid') {
@@ -199,26 +237,70 @@ class ObhsService {
     if (!workerId) {
       throw new ValidationError('workerId is required.');
     }
-    
+
     const getISTDateString = (date) => {
+      if (!date || isNaN(date.getTime())) return null;
       const ist = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
       return ist.toISOString().split('T')[0];
     };
     const todayIST = getISTDateString(new Date());
 
-    const snapshot = await db.collection('obhs_attendance').where('workerId', '==', workerId).get();
-    let latestData = null;
-    let latestTime = 0;
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const time = new Date(data.createdAt).getTime();
-      if (time > latestTime) {
-        latestTime = time;
-        latestData = data;
-      }
-    });
+    // Primary: look up deterministic doc ID
+    const resolveDate = (createdAt) => {
+      if (!createdAt) return null;
+      if (typeof createdAt.toDate === 'function') return createdAt.toDate();
+      return new Date(createdAt);
+    };
 
-    if (!latestData || getISTDateString(new Date(latestData.createdAt)) !== todayIST) {
+    // Try the deterministic doc ID first (fast, no index required)
+    if (runInstanceId) {
+      const docId = `${runInstanceId}_${workerId}`;
+      const directDoc = await db.collection('obhs_attendance').doc(docId).get();
+      if (directDoc.exists) {
+        const data = directDoc.data();
+        const docDate = getISTDateString(resolveDate(data.createdAt));
+        if (docDate === todayIST) {
+          return {
+            exists: true,
+            isStartMarked: data.isStartMarked || false,
+            isMidMarked: data.isMidMarked || false,
+            isEndMarked: data.isEndMarked || false,
+            identityAuditStatus: data.identityAuditStatus || null
+          };
+        }
+      }
+    }
+
+    // Fallback: scan by workerId + runInstanceId (handles legacy doc IDs)
+    try {
+      let query = db.collection('obhs_attendance').where('workerId', '==', workerId);
+      if (runInstanceId) query = query.where('runInstanceId', '==', runInstanceId);
+      const snapshot = await query.limit(10).get();
+      let latestData = null;
+      let latestTime = 0;
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const dateObj = resolveDate(data.createdAt);
+        const time = dateObj ? dateObj.getTime() : 0;
+        if (!isNaN(time) && time > latestTime) {
+          latestTime = time;
+          latestData = data;
+        }
+      });
+
+      if (!latestData || getISTDateString(resolveDate(latestData.createdAt)) !== todayIST) {
+        return { exists: false, isStartMarked: false, isMidMarked: false, isEndMarked: false, identityAuditStatus: null };
+      }
+      const data = latestData;
+      return {
+        exists: true,
+        isStartMarked: data.isStartMarked || false,
+        isMidMarked: data.isMidMarked || false,
+        isEndMarked: data.isEndMarked || false,
+        identityAuditStatus: data.identityAuditStatus || null
+      };
+    } catch (scanErr) {
+      logger.error('OBHS', '(getAttendanceStatus scan) Error:', scanErr.message);
       return { exists: false, isStartMarked: false, isMidMarked: false, isEndMarked: false, identityAuditStatus: null };
     }
     
