@@ -77,7 +77,13 @@ class ObhsService {
     // This avoids a full collection scan that can hit Firestore limits or index issues.
     let attendanceDocId = `${runInstanceId}_${workerId}`;
     let attendanceRef = db.collection('obhs_attendance').doc(attendanceDocId);
-    let attendanceDoc = await attendanceRef.get();
+    let attendanceDoc;
+    try {
+      attendanceDoc = await attendanceRef.get();
+    } catch (dbErr) {
+      logger.error('OBHS', '(Attendance Doc Fetch) Firestore error:', dbErr.message);
+      throw new FirestoreError(`Failed to fetch attendance record: ${dbErr.message}`);
+    }
 
     // Fallback: if the deterministic doc doesn't exist, scan for a today's record
     // (handles legacy docs that may have been created with a different ID scheme)
@@ -134,16 +140,21 @@ class ObhsService {
 
     if (!attendanceDoc.exists) {
       if (attendanceType !== 'start') throw new ValidationError("You must submit 'start' attendance first.");
-      await attendanceRef.set({
-        uid: attendanceDocId, runInstanceId, workerId, workerName: finalWorkerName,
-        mobileNumber: mobileNumber || null, deviceId: deviceId || null,
-        isStartMarked: true, isMidMarked: false, isEndMarked: false,
-        attendanceStatus: isLateAttendance ? 'LATE' : 'PRESENT',
-        lateByMinutes, firstAttendanceReference: firstAttendanceTime,
-        identityAuditStatus: 'PENDING_VERIFICATION',
-        startAttendance: attendanceEntry, midAttendance: null, endAttendance: null,
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-      });
+      try {
+        await attendanceRef.set({
+          uid: attendanceDocId, runInstanceId, workerId, workerName: finalWorkerName,
+          mobileNumber: mobileNumber || null, deviceId: deviceId || null,
+          isStartMarked: true, isMidMarked: false, isEndMarked: false,
+          attendanceStatus: isLateAttendance ? 'LATE' : 'PRESENT',
+          lateByMinutes, firstAttendanceReference: firstAttendanceTime,
+          identityAuditStatus: 'PENDING_VERIFICATION',
+          startAttendance: attendanceEntry, midAttendance: null, endAttendance: null,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+      } catch (dbErr) {
+        logger.error('OBHS', '(Attendance Set) Firestore error:', dbErr.message);
+        throw new FirestoreError(`Failed to save attendance record: ${dbErr.message}`);
+      }
       try {
         if (runInstanceId && attendanceType === 'start') {
           const runSnap2 = await db.collection('RunInstance').doc(runInstanceId).get();
@@ -215,7 +226,12 @@ class ObhsService {
         firstAttendanceReference: firstAttendanceTime,
         recordedAt: new Date().toISOString()
       };
-      await attendanceRef.update(updateData);
+      try {
+        await attendanceRef.update(updateData);
+      } catch (dbErr) {
+        logger.error('OBHS', '(Attendance Update) Firestore error:', dbErr.message);
+        throw new FirestoreError(`Failed to update attendance record: ${dbErr.message}`);
+      }
     }
     return { success: true, message: `${attendanceType.toUpperCase()} attendance processed successfully.`, uid: attendanceDocId, isLate: isLateAttendance };
   }
@@ -254,20 +270,31 @@ class ObhsService {
 
     // Try the deterministic doc ID first (fast, no index required)
     if (runInstanceId) {
-      const docId = `${runInstanceId}_${workerId}`;
-      const directDoc = await db.collection('obhs_attendance').doc(docId).get();
-      if (directDoc.exists) {
-        const data = directDoc.data();
-        const docDate = getISTDateString(resolveDate(data.createdAt));
-        if (docDate === todayIST) {
-          return {
-            exists: true,
-            isStartMarked: data.isStartMarked || false,
-            isMidMarked: data.isMidMarked || false,
-            isEndMarked: data.isEndMarked || false,
-            identityAuditStatus: data.identityAuditStatus || null
-          };
+      try {
+        const docId = `${runInstanceId}_${workerId}`;
+        const directDoc = await db.collection('obhs_attendance').doc(docId).get();
+        if (directDoc.exists) {
+          const data = directDoc.data();
+          const docDate = getISTDateString(resolveDate(data.createdAt));
+          if (docDate === todayIST) {
+            return {
+              exists: true,
+              isStartMarked: data.isStartMarked || false,
+              isMidMarked: data.isMidMarked || false,
+              isEndMarked: data.isEndMarked || false,
+              identityAuditStatus: data.identityAuditStatus || null,
+              attendanceStatus: data.attendanceStatus || null,
+              startAttendance: data.startAttendance || null,
+              midAttendance: data.midAttendance || null,
+              endAttendance: data.endAttendance || null,
+              uid: data.uid,
+              runInstanceId: data.runInstanceId
+            };
+          }
         }
+      } catch (directErr) {
+        logger.error('OBHS', '(getAttendanceStatus direct lookup) Error:', directErr.message);
+        // Fall through to fallback scan
       }
     }
 
@@ -291,34 +318,23 @@ class ObhsService {
       if (!latestData || getISTDateString(resolveDate(latestData.createdAt)) !== todayIST) {
         return { exists: false, isStartMarked: false, isMidMarked: false, isEndMarked: false, identityAuditStatus: null };
       }
-      const data = latestData;
       return {
         exists: true,
-        isStartMarked: data.isStartMarked || false,
-        isMidMarked: data.isMidMarked || false,
-        isEndMarked: data.isEndMarked || false,
-        identityAuditStatus: data.identityAuditStatus || null
+        isStartMarked: latestData.isStartMarked || false,
+        isMidMarked: latestData.isMidMarked || false,
+        isEndMarked: latestData.isEndMarked || false,
+        identityAuditStatus: latestData.identityAuditStatus || null,
+        attendanceStatus: latestData.attendanceStatus || null,
+        startAttendance: latestData.startAttendance || null,
+        midAttendance: latestData.midAttendance || null,
+        endAttendance: latestData.endAttendance || null,
+        uid: latestData.uid,
+        runInstanceId: latestData.runInstanceId
       };
     } catch (scanErr) {
       logger.error('OBHS', '(getAttendanceStatus scan) Error:', scanErr.message);
       return { exists: false, isStartMarked: false, isMidMarked: false, isEndMarked: false, identityAuditStatus: null };
     }
-    
-    const data = latestData;
-    return {
-      exists: true,
-      isStartMarked: data.isStartMarked || false,
-      isMidMarked: data.isMidMarked || false,
-      isEndMarked: data.isEndMarked || false,
-      identityAuditStatus: data.identityAuditStatus || null,
-      attendanceStatus: data.attendanceStatus || null,
-      startAttendance: data.startAttendance || null,
-      midAttendance: data.midAttendance || null,
-      endAttendance: data.endAttendance || null,
-      uid: data.uid,
-      createdAt: data.createdAt,
-      runInstanceId: data.runInstanceId
-    };
   }
 
   async getAttendanceExceptions(filters = {}) {
