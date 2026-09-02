@@ -9,8 +9,8 @@ class ObhsService {
       if (!allowedFields.includes(key)) throw new ValidationError(`Invalid field: '${key}'`);
     }
     const { runInstanceId, attendanceType, imageUrl, latitude, longitude, deviceTimestamp, mobileNumber, deviceId, livenessChallenge } = body;
-    if (!runInstanceId || !attendanceType || !deviceTimestamp) {
-      throw new ValidationError('runInstanceId, attendanceType, and deviceTimestamp are required.');
+    if (!runInstanceId || !attendanceType || !imageUrl || !deviceTimestamp) {
+      throw new ValidationError('runInstanceId, attendanceType, imageUrl, and deviceTimestamp are required.');
     }
     if (!['start', 'mid', 'end'].includes(attendanceType)) {
       throw new ValidationError("attendanceType must be 'start', 'mid', or 'end'");
@@ -21,8 +21,7 @@ class ObhsService {
     let lateByMinutes = 0;
     let firstAttendanceTime = null;
 
-    // Only run liveness check if an image was provided and a challenge was set
-    if (imageUrl && livenessChallenge) {
+    if (livenessChallenge) {
       try {
         const { verifyFaceLiveness } = await import('./rekognitionService.js');
         const livenessResult = await verifyFaceLiveness(imageUrl, livenessChallenge);
@@ -38,8 +37,6 @@ class ObhsService {
         // Module import or unexpected error — log and continue
         logger.error('OBHS', '(Liveness Check) Unexpected error:', livenessErr.message);
       }
-    } else if (!imageUrl) {
-      logger.warn('OBHS', `(Attendance) No image provided for ${attendanceType} by worker ${workerId} - proceeding without photo verification`);
     }
 
     try {
@@ -178,40 +175,37 @@ class ObhsService {
       const updateData = { updatedAt: new Date().toISOString() };
       if (attendanceType === 'start') throw new ValidationError('Start attendance already submitted.');
       const baseStartPhoto = currentData.startAttendance?.photoUrl;
+      if (!baseStartPhoto) throw new ValidationError('Baseline image missing from DB.');
 
-      // Only run face comparison if both the baseline and current photos exist
-      let faceVerification = { matched: true, similarity: 100, reason: 'Skipped - no image available' };
-      if (imageUrl && baseStartPhoto) {
-        try {
-          const { compareFaces } = await import('./rekognitionService.js');
-          faceVerification = await compareFaces(baseStartPhoto, imageUrl);
-        } catch (importErr) {
-          logger.error('OBHS', '(compareFaces import) Error:', importErr.message);
-          faceVerification = { matched: true, similarity: 0, reason: 'Rekognition unavailable - flagged for manual review', error: true };
-        }
+      let faceVerification = { matched: true, similarity: 100, reason: 'Skipped (AWS unavailable)' };
+      try {
+        const { compareFaces } = await import('./rekognitionService.js');
+        faceVerification = await compareFaces(baseStartPhoto, imageUrl);
+      } catch (importErr) {
+        logger.error('OBHS', '(compareFaces import) Error:', importErr.message);
+        // If rekognition module fails to load, allow attendance but flag for review
+        faceVerification = { matched: true, similarity: 0, reason: 'Rekognition unavailable - flagged for manual review', error: true };
+      }
 
-        if (!faceVerification.matched && !faceVerification.error) {
-          await attendanceRef.update({
-            identityAuditStatus: 'MISMATCH_ALERT',
-            lastMismatchReason: faceVerification.reason,
-            lastMismatchSimilarity: faceVerification.similarity,
-            lastMismatchAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          });
-          throw new ValidationError(
-            `Identity Verification Failed. Face match score (${faceVerification.similarity}%) below threshold. ${faceVerification.reason}`
-          );
-        } else if (faceVerification.error) {
-          logger.error('OBHS', '(Face Comparison) AWS error - allowing with flag:', faceVerification.reason);
-          await attendanceRef.update({
-            identityAuditStatus: 'MANUAL_REVIEW_REQUIRED',
-            lastMismatchReason: faceVerification.reason,
-            updatedAt: new Date().toISOString()
-          }).catch(e => logger.error('OBHS', 'Could not update audit status', e.message));
-        }
-      } else if (!imageUrl) {
-        logger.warn('OBHS', `(Attendance) No image for ${attendanceType} - skipping face check`);
-        updateData.identityAuditStatus = 'NO_PHOTO_PROVIDED';
+      if (!faceVerification.matched && !faceVerification.error) {
+        await attendanceRef.update({
+          identityAuditStatus: 'MISMATCH_ALERT',
+          lastMismatchReason: faceVerification.reason,
+          lastMismatchSimilarity: faceVerification.similarity,
+          lastMismatchAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        throw new ValidationError(
+          `Identity Verification Failed. Face match score (${faceVerification.similarity}%) below threshold. ${faceVerification.reason}`
+        );
+      } else if (faceVerification.error) {
+        // AWS error: log it but allow attendance - flag for manual audit
+        logger.error('OBHS', '(Face Comparison) AWS error - allowing with flag:', faceVerification.reason);
+        await attendanceRef.update({
+          identityAuditStatus: 'MANUAL_REVIEW_REQUIRED',
+          lastMismatchReason: faceVerification.reason,
+          updatedAt: new Date().toISOString()
+        }).catch(e => logger.error('OBHS', 'Could not update audit status', e.message));
       }
 
       if (attendanceType === 'mid') {

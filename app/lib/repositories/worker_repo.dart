@@ -240,7 +240,7 @@ class WorkerRepository {
       final body = <String, dynamic>{
         'runInstanceId': runInstanceId,
         'attendanceType': type,
-        if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+        'imageUrl': imageUrl,
         'latitude': latitude?.toString() ?? '',
         'longitude': longitude?.toString() ?? '',
         'deviceTimestamp': DateTime.now().toUtc().toIso8601String(),
