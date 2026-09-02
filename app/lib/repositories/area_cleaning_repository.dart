@@ -278,7 +278,7 @@ class AreaCleaningRepository {
     return result;
   }
 
-static Future<Map<String, dynamic>> getFrequencyStatus({required String date, required List<String> areaIds}) async {
+static Future<Map<String, dynamic>> getFrequencyStatus({required String date, required List<String> areaIds, Map<String, int>? areaFrequencies}) async {
     if (areaIds.isEmpty) return {};
     return await _apiCall(
       method: 'GET',
@@ -286,6 +286,8 @@ static Future<Map<String, dynamic>> getFrequencyStatus({required String date, re
       queryParams: {
         'date': date,
         'areaIds': areaIds.join(','),
+        if (areaFrequencies != null && areaFrequencies.isNotEmpty)
+          'areaFrequencies': jsonEncode(areaFrequencies),
       },
       parser: (data) {
         return data['areas'] as Map<String, dynamic>? ?? {};
@@ -293,7 +295,7 @@ static Future<Map<String, dynamic>> getFrequencyStatus({required String date, re
     );
   }
 
-  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities, Map<String, int>? areaFrequencies, Map<String, int>? areaTimes}) async {
+  static Future<Map<String, dynamic>> generateTasks({List<String>? areaIds, String? date, List<String>? workerIds, String? supervisorId, String? frequency, String? activityType, String? taskTypeId, String? taskTypeName, Map<String, dynamic>? areaActivities, Map<String, int>? areaFrequencies, Map<String, int>? areaTimes, bool normalize = false}) async {
     return await _apiCall(
       method: 'POST',
       path: '/api/tasks-v2/generate',
@@ -309,6 +311,7 @@ static Future<Map<String, dynamic>> getFrequencyStatus({required String date, re
         if (areaActivities != null && areaActivities.isNotEmpty) 'areaActivities': areaActivities,
         if (areaFrequencies != null && areaFrequencies.isNotEmpty) 'areaFrequencies': areaFrequencies,
         if (areaTimes != null && areaTimes.isNotEmpty) 'areaTimes': areaTimes,
+        if (normalize) 'normalize': true,
       },
       parser: (data) => data,
     );

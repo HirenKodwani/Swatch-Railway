@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:crm_train/providers/auth_provider.dart';
 import 'package:crm_train/model/station_models.dart';
-import 'package:crm_train/model/platform_model.dart';
-import 'package:crm_train/repositories/platform_repository.dart';
 import 'package:crm_train/model/station_run_model.dart';
 import 'package:crm_train/repositories/station_run_repository.dart';
 import 'package:crm_train/repositories/obhs_repository.dart';
@@ -54,30 +52,25 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
   bool _isSubmitting = false;
 
   List<Station> _stations = [];
-  List<Platform> _platforms = [];
   List<StationArea> _allAreas = [];
   List<RailwayWorkerModel> _supervisors = [];
   List<TaskType> _taskTypes = [];
 
   Station? _selectedStation;
-  Platform? _selectedPlatform; // Null means "All Platforms"
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'Morning';
-  String _selectedFrequency = 'daily';
   RailwayWorkerModel? _selectedSupervisor;
 
-  String? _assignedPlatformId;
   bool _isStationLocked = false;
-  bool _isPlatformLocked = false;
 
   // Selected areas and per-area activities
   final Set<String> _selectedAreaIds = {};
   final Map<String, List<TaskType>> _areaActivities = {};
-  final Map<String, int> _areaFrequencies = {};
+  // Per-area "how many occurrences to schedule today" (1..area daily total)
+  final Map<String, int> _areaTodayCount = {};
 
   // Per-area frequency progress (total/used/remaining occurrences for the date)
   final Map<String, Map<String, dynamic>> _areaFrequencyStatus = {};
-  final Map<String, int> _areaAssignTimes = {};
   bool _frequencyStatusLoading = false;
 
   String? _loadError;
@@ -97,10 +90,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final role = user?.role ?? '';
-      
-      final assignedPlatformId = (user?.areaId != null && user!.areaId!.isNotEmpty)
-          ? user.areaId
-          : user?.platformId;
 
       List<Station> filtered = [];
       bool stationLocked = false;
@@ -164,8 +153,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _stations = filtered;
           _supervisors = supList;
           _taskTypes = taskTypes;
-          _assignedPlatformId = assignedPlatformId;
-          _isPlatformLocked = false;
           _isStationLocked = stationLocked;
           if (_stations.isNotEmpty) {
             if (widget.stationId != null) {
@@ -177,45 +164,13 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           }
         });
         if (_selectedStation != null) {
-          await _loadStationData(_selectedStation!.uid!);
+          await _loadAreas(_selectedStation!.uid!);
         }
       }
     } catch (e) {
       debugPrint('Error loading data: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _loadStationData(String stationId) async {
-    await Future.wait([_loadPlatforms(stationId), _loadAreas(stationId)]);
-  }
-
-  Future<void> _loadPlatforms(String stationId) async {
-    try {
-      final platforms = await PlatformRepository.getByStation(stationId);
-      if (mounted) {
-        setState(() {
-          _platforms = platforms;
-          if (_isPlatformLocked && _assignedPlatformId != null && _assignedPlatformId!.isNotEmpty) {
-            _selectedPlatform = _platforms.where((p) => p.uid == _assignedPlatformId).firstOrNull;
-          } else {
-            _selectedPlatform = null;
-          }
-          _selectedAreaIds.clear();
-          _areaActivities.clear();
-          _areaFrequencies.clear();
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading platforms: $e');
-      if (mounted) {
-        setState(() {
-          _platforms = [];
-          _selectedPlatform = null;
-          _isPlatformLocked = false;
-        });
-      }
     }
   }
 
@@ -228,7 +183,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = false;
           _selectedAreaIds.clear();
           _areaActivities.clear();
-          _areaFrequencies.clear();
+          _areaTodayCount.clear();
         });
         await _loadFrequencyStatus();
       }
@@ -240,7 +195,7 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
           _areaLoadFailed = true;
           _selectedAreaIds.clear();
           _areaActivities.clear();
-          _areaFrequencies.clear();
+          _areaTodayCount.clear();
         });
       }
     }
@@ -263,16 +218,29 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
       if (mounted) {
         setState(() {
           final casted = status.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
-          _areaFrequencyStatus
-            ..clear()
-            ..addAll(casted);
-          for (final e in _areaFrequencyStatus.entries) {
-            final remaining = (e.value['remainingTimes'] as int?) ?? 0;
-            final current = _areaAssignTimes[e.key];
-            if (current == null || current > remaining) {
-              _areaAssignTimes[e.key] = remaining;
+          final seeded = <String, Map<String, dynamic>>{};
+          for (final a in _allAreas) {
+            final id = a.uid;
+            if (id == null || id.isEmpty) continue;
+            final existing = casted[id];
+            if (existing != null) {
+              seeded[id] = existing;
+            } else {
+              final def = _defaultFrequencyForArea(a);
+              seeded[id] = {
+                'areaId': id,
+                'frequency': a.cleaningFrequency ?? 'daily',
+                'totalTimes': def,
+                'usedTimes': 0,
+                'remainingTimes': def,
+                'frequencyTimes': <String>[],
+                'scheduledTimes': <String>[],
+              };
             }
           }
+          _areaFrequencyStatus
+            ..clear()
+            ..addAll(seeded);
         });
       }
     } catch (e) {
@@ -280,13 +248,6 @@ class _TaskGenerationScreenState extends State<TaskGenerationScreen> {
     } finally {
       if (mounted) setState(() => _frequencyStatusLoading = false);
     }
-  }
-
-  List<StationArea> get _filteredAreas {
-    if (_selectedPlatform == null) {
-      return _allAreas;
-    }
-    return _allAreas.where((a) => a.platformId == _selectedPlatform!.uid).toList();
   }
 
   String _frequencyLabel(String f) {
@@ -328,14 +289,34 @@ int _defaultFrequencyForArea(StationArea area) {
     }
   }
 
+  List<String> _usedSlotsFor(String areaId) {
+    final status = _areaFrequencyStatus[areaId];
+    final times = status?['scheduledTimes'];
+    if (times is List) return times.map((t) => t.toString()).toList();
+    return const [];
+  }
+
+  int _todayCountForArea(StationArea area) {
+    final areaId = area.uid ?? area.name;
+    final stored = _areaTodayCount[areaId];
+    if (stored != null) return stored;
+    final status = _areaFrequencyStatus[areaId];
+    final used = (status?['usedTimes'] as int?) ?? 0;
+    final def = _defaultFrequencyForArea(area);
+    return (used > 0 ? used : 1).clamp(1, def);
+  }
+
   Widget _buildFrequencyAssignRow(StationArea area) {
     final areaId = area.uid ?? area.name;
     final status = _areaFrequencyStatus[areaId];
     final total = (status?['totalTimes'] as int?) ?? 0;
+    final effectiveTotal = total > 0 ? total : _defaultFrequencyForArea(area);
     final used = (status?['usedTimes'] as int?) ?? 0;
-    final remaining = (status?['remainingTimes'] as int?) ?? total;
-    final current = _areaAssignTimes[areaId] ?? remaining;
+    final remaining = status == null
+        ? effectiveTotal
+        : ((status['remainingTimes'] as int?) ?? (effectiveTotal - used));
     final hasSupervisor = _selectedSupervisor != null;
+    final todayCount = _todayCountForArea(area);
 
     return Container(
       width: double.infinity,
@@ -354,7 +335,7 @@ int _defaultFrequencyForArea(StationArea area) {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Frequency: ${_frequencyLabel(area.cleaningFrequency ?? 'daily')} · Used: $used · Remaining: $remaining',
+                  'Total/day: $effectiveTotal · Used: $used · Remaining: $remaining',
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
                 ),
               ),
@@ -363,6 +344,53 @@ int _defaultFrequencyForArea(StationArea area) {
             ],
           ),
           const SizedBox(height: 6),
+          if (used > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Used slots: ${_usedSlotsFor(areaId).join(' · ')}',
+                      style: const TextStyle(fontSize: 11, color: Colors.green),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Row(
+            children: [
+              Icon(Icons.event, size: 16, color: kRailwayBlue),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'Occurrences today',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                visualDensity: VisualDensity.compact,
+                color: kRailwayBlue,
+                onPressed: todayCount > 1
+                    ? () => setState(() => _areaTodayCount[areaId] = todayCount - 1)
+                    : null,
+              ),
+              Text('$todayCount', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                visualDensity: VisualDensity.compact,
+                color: kRailwayBlue,
+                onPressed: todayCount < effectiveTotal
+                    ? () => setState(() => _areaTodayCount[areaId] = todayCount + 1)
+                    : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               Icon(Icons.supervisor_account, size: 16, color: hasSupervisor ? kRailwayBlue : Colors.grey[400]),
@@ -370,29 +398,10 @@ int _defaultFrequencyForArea(StationArea area) {
               Expanded(
                 child: Text(
                   hasSupervisor
-                      ? 'Times to assign to ${_selectedSupervisor!.fullName}: $current of $remaining'
-                      : remaining == 0
-                          ? 'All daily occurrences already assigned'
-                          : 'Select a supervisor to assign times',
+                      ? 'Generate will set $todayCount of $effectiveTotal for ${_selectedSupervisor!.fullName} today'
+                      : 'Select a supervisor',
                   style: TextStyle(fontSize: 12, color: hasSupervisor ? Colors.grey[700] : Colors.grey[500]),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                visualDensity: VisualDensity.compact,
-                color: kRailwayBlue,
-                onPressed: hasSupervisor && remaining > 0 && current > 1
-                    ? () => setState(() => _areaAssignTimes[areaId] = (current - 1).clamp(1, remaining))
-                    : null,
-              ),
-              Text('$current', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                visualDensity: VisualDensity.compact,
-                color: kRailwayBlue,
-                onPressed: hasSupervisor && remaining > 0 && current < remaining
-                    ? () => setState(() => _areaAssignTimes[areaId] = (current + 1).clamp(1, remaining))
-                    : null,
               ),
             ],
           ),
@@ -409,7 +418,10 @@ int _defaultFrequencyForArea(StationArea area) {
       lastDate: DateTime.now().add(const Duration(days: 30)),
     );
     if (picked != null) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _selectedDate = picked;
+        _areaTodayCount.clear();
+      });
       await _loadFrequencyStatus();
     }
   }
@@ -420,15 +432,15 @@ int _defaultFrequencyForArea(StationArea area) {
       setState(() {
         _selectedAreaIds.remove(areaId);
         _areaActivities.remove(areaId);
-        _areaFrequencies.remove(areaId);
+        _areaTodayCount.remove(areaId);
       });
       return;
     }
     setState(() {
       _selectedAreaIds.add(areaId);
       _areaActivities[areaId] = [];
-      _areaFrequencies[areaId] = _defaultFrequencyForArea(area);
     });
+    _loadFrequencyStatus();
   }
 
   Future<void> _showActivitySelectionForArea(StationArea area) async {
@@ -552,22 +564,22 @@ int _defaultFrequencyForArea(StationArea area) {
             .toList();
       }
 
-      // Per-area occurrence count: how many of the remaining daily times this
-      // generation should cover (only relevant when a supervisor is selected).
+      // Per-area "Occurrences today" count is authoritative: the backend
+      // normalizes today's tasks to exactly this many occurrences.
       final areaTimes = <String, int>{};
       if (_selectedSupervisor != null) {
         for (final areaId in _selectedAreaIds) {
-          final status = _areaFrequencyStatus[areaId];
-          final remaining = (status?['remainingTimes'] as int?) ?? 0;
-          final chosen = _areaAssignTimes[areaId] ?? remaining;
-          if (remaining > 0 && chosen > 0) areaTimes[areaId] = chosen > remaining ? remaining : chosen;
+          final area = _allAreas.where((a) => (a.uid ?? a.name) == areaId).firstOrNull;
+          if (area == null) continue;
+          final desired = _todayCountForArea(area);
+          if (desired > 0) areaTimes[areaId] = desired;
         }
         if (areaTimes.isEmpty) {
           if (mounted) {
             setState(() => _isSubmitting = false);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('No remaining frequency left for the selected areas on this date.'),
+                content: Text('Set the occurrences for at least one selected area.'),
                 backgroundColor: kWarningOrange,
               ),
             );
@@ -576,20 +588,24 @@ int _defaultFrequencyForArea(StationArea area) {
         }
       }
 
-      await AreaCleaningRepository.generateTasks(
+      final result = await AreaCleaningRepository.generateTasks(
         areaIds: _selectedAreaIds.toList(),
         date: todayStr,
         supervisorId: _selectedSupervisor?.uid,
-        frequency: _selectedFrequency,
         areaActivities: areaActivities.isNotEmpty ? areaActivities : null,
-        areaFrequencies: _areaFrequencies,
         areaTimes: areaTimes.isNotEmpty ? areaTimes : null,
+        normalize: true,
       );
 
       if (mounted) {
+        final created = ((result['count'] as num?) ?? 0).toInt();
+        final cancelled = ((result['cancelled'] as num?) ?? 0).toInt();
+        final msg = created > 0
+            ? 'Tasks generated successfully! $created created'
+            : (cancelled > 0 ? 'Frequency adjusted: $cancelled extra task(s) cancelled' : 'Already up to date');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Tasks generated successfully! Remaining frequency refreshed.'),
+            content: Text(msg),
             backgroundColor: kSuccessGreen,
           ),
         );
@@ -608,7 +624,7 @@ int _defaultFrequencyForArea(StationArea area) {
 
   @override
   Widget build(BuildContext context) {
-    final areas = _filteredAreas;
+    final areas = _allAreas;
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -664,9 +680,9 @@ int _defaultFrequencyForArea(StationArea area) {
                                   _selectedStation = v;
                                   _selectedAreaIds.clear();
                                   _areaActivities.clear();
-          _areaFrequencies.clear();
+          _areaTodayCount.clear();
                                 });
-                                await _loadStationData(v.uid!);
+                                await _loadAreas(v.uid!);
                               }
                             },
                           ),
@@ -722,29 +738,11 @@ int _defaultFrequencyForArea(StationArea area) {
                           ),
                           const SizedBox(height: 16),
 
-                          // Frequency Dropdown
-                          DropdownButtonFormField<String>(
-                            value: _selectedFrequency,
-                            decoration: const InputDecoration(labelText: 'Frequency', border: OutlineInputBorder(), prefixIcon: Icon(Icons.repeat)),
-                            items: const [
-                              DropdownMenuItem(value: 'daily', child: Text('Daily (1x)')),
-                              DropdownMenuItem(value: 'twice_daily', child: Text('Twice Daily (2x)')),
-                              DropdownMenuItem(value: 'shift_wise', child: Text('Shift Wise (3x)')),
-                              DropdownMenuItem(value: 'four_times_daily', child: Text('Four Times (4x)')),
-                              DropdownMenuItem(value: '4hrs', child: Text('Every 4hrs (5x)')),
-                              DropdownMenuItem(value: 'hourly', child: Text('Hourly (17x)')),
-                            ],
-                            onChanged: (v) {
-                              if (v != null) setState(() => _selectedFrequency = v);
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
                           // Supervisor Assignment
                           DropdownButtonFormField<RailwayWorkerModel>(
                             value: _selectedSupervisor,
                             decoration: const InputDecoration(
-                              labelText: 'Assign to Supervisor (uses the per-area Times set below)',
+                              labelText: 'Assign to Supervisor',
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.supervisor_account),
                             ),
@@ -885,21 +883,6 @@ int _defaultFrequencyForArea(StationArea area) {
                                                         ),
                                                       ],
                                                     ),
-                                                    if (isSelected) ...[
-                                                      const SizedBox(height: 6),
-                                                      Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.orange[50],
-                                                          borderRadius: BorderRadius.circular(6),
-                                                          border: Border.all(color: Colors.orange[200]!),
-                                                        ),
-                                                        child: Text(
-                                                          '${_areaFrequencies[areaId] ?? 0}X need to clean today',
-                                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.orange[800]),
-                                                        ),
-                                                      ),
-                                                    ],
                                                   ],
                                                 ),
                                               ),
@@ -914,39 +897,7 @@ int _defaultFrequencyForArea(StationArea area) {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-Row(
-                                                children: [
-                                                  const Icon(Icons.repeat, size: 16, color: kRailwayBlue),
-                                                  const SizedBox(width: 6),
-                                                  const Expanded(
-                                                    child: Text(
-                                                      'Cleanings per day',
-                                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
-                                                    ),
-                                                  ),
-                                                  IconButton(
-                                                    visualDensity: VisualDensity.compact,
-                                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                                                    onPressed: () => setState(() {
-                                                      final cur = _areaFrequencies[areaId] ?? 1;
-                                                      _areaFrequencies[areaId] = cur > 1 ? cur - 1 : 1;
-                                                    }),
-                                                  ),
-                                                  Text(
-                                                    '${_areaFrequencies[areaId] ?? 1}X',
-                                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                                                  ),
-                                                  IconButton(
-                                                    visualDensity: VisualDensity.compact,
-                                                    icon: const Icon(Icons.add_circle_outline, size: 20),
-                                                    onPressed: () => setState(() {
-                                                      final cur = _areaFrequencies[areaId] ?? 1;
-                                                      _areaFrequencies[areaId] = cur < 20 ? cur + 1 : 20;
-                                                    }),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
+                                              const SizedBox(height: 4),
                                               _buildFrequencyAssignRow(area),
                                               const SizedBox(height: 12),
                                               InkWell(

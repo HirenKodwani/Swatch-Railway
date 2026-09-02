@@ -448,7 +448,7 @@ class TaskManagementService {
         db.collection('cleaningTasks')
           .where('date', '==', targetDate)
           .where('areaId', 'in', chunk)
-          .select('areaId', 'scheduledTime')
+          .select('areaId', 'scheduledTime', 'status')
           .get(),
         Promise.all(chunk.map(id =>
           db.collection('areas').doc(id).get()
@@ -458,6 +458,7 @@ class TaskManagementService {
       const usedTimesByArea = new Map();
       existingTasksSnap.forEach(doc => {
         const d = doc.data();
+        if (d.status === 'cancelled') return;
         if (!d.scheduledTime) return;
         if (!usedTimesByArea.has(d.areaId)) usedTimesByArea.set(d.areaId, new Set());
         usedTimesByArea.get(d.areaId).add(d.scheduledTime);
@@ -470,18 +471,28 @@ class TaskManagementService {
         const areaFreq = (areaFrequencies && areaFrequencies[areaId] !== undefined)
           ? parseInt(areaFrequencies[areaId], 10)
           : null;
-        const frequencyTimes = areaFreq
+        let frequencyTimes = areaFreq
           ? this._buildTimeslots(areaFreq, frequency)
           : (area.frequencyTimes || this._getDefaultFrequencyTimes(frequency));
-        const totalTimes = frequencyTimes.length;
-        const usedTimes = usedTimesByArea.get(areaId) ? usedTimesByArea.get(areaId).size : 0;
+        // Daily total = the area's required count (boq) when set, else the slot list length.
+        // When the required total exceeds the default slot list, expand the list to that
+        // many evenly spaced slots so every requirement can be scheduled distinctly.
+        const totalTimes = areaFreq
+          ? frequencyTimes.length
+          : ((area.boqTimesPerPeriod && area.boqTimesPerPeriod > 0) ? area.boqTimesPerPeriod : frequencyTimes.length);
+        if (!areaFreq && frequencyTimes.length < totalTimes) {
+          frequencyTimes = this._buildTimeslots(totalTimes, frequency);
+        }
+        const usedSet = usedTimesByArea.get(areaId);
+        const usedTimes = usedSet ? usedSet.size : 0;
         result[areaId] = {
           areaId,
           frequency,
           totalTimes,
           usedTimes,
           remainingTimes: Math.max(0, totalTimes - usedTimes),
-          frequencyTimes
+          frequencyTimes,
+          scheduledTimes: usedSet ? Array.from(usedSet).sort() : []
         };
       });
     }
@@ -532,11 +543,13 @@ class TaskManagementService {
     const areaFrequencies = data.areaFrequencies || null;
     const areaTimes = data.areaTimes || null;
     const timesCount = data.timesCount ? parseInt(data.timesCount, 10) || null : null;
+    const normalize = data.normalize === true;
     if (!areaIds || !Array.isArray(areaIds) || areaIds.length === 0) {
       throw new ValidationError('areaIds array is required');
     }
     const targetDate = date || new Date().toISOString().split('T')[0];
     let total = 0;
+    let cancelledTotal = 0;
     const allTaskIds = [];
 
     // Resolve the supervisor if provided
@@ -573,20 +586,24 @@ class TaskManagementService {
 
     const existingTaskKeys = new Set();
     const usedTimesByArea = new Map();
+    const tasksByArea = new Map();
     const chunkSize = 10;
     for (let i = 0; i < areaIds.length; i += chunkSize) {
       const chunk = areaIds.slice(i, i + chunkSize);
       const existingTasksSnap = await db.collection('cleaningTasks')
         .where('date', '==', targetDate)
         .where('areaId', 'in', chunk)
-        .select('workerId', 'areaId', 'scheduledTime', 'taskTypeId')
+        .select('workerId', 'areaId', 'scheduledTime', 'taskTypeId', 'status')
         .get();
       existingTasksSnap.forEach(doc => {
         const d = doc.data();
+        if (d.status === 'cancelled') return;
         existingTaskKeys.add(`${d.areaId}|${d.workerId}|${d.scheduledTime}|${d.taskTypeId || 'default'}`);
         if (d.scheduledTime) {
           if (!usedTimesByArea.has(d.areaId)) usedTimesByArea.set(d.areaId, new Set());
           usedTimesByArea.get(d.areaId).add(d.scheduledTime);
+          if (!tasksByArea.has(d.areaId)) tasksByArea.set(d.areaId, []);
+          tasksByArea.get(d.areaId).push({ id: doc.id, scheduledTime: d.scheduledTime });
         }
       });
     }
@@ -608,9 +625,18 @@ class TaskManagementService {
       const areaFreq = (areaFrequencies && areaFrequencies[areaId] !== undefined)
         ? parseInt(areaFrequencies[areaId], 10)
         : null;
-      const frequencyTimes = areaFreq
+      let frequencyTimes = areaFreq
         ? this._buildTimeslots(areaFreq, cleaningFrequency)
         : (areaData.frequencyTimes || this._getDefaultFrequencyTimes(cleaningFrequency));
+      const normalizeDesired = (normalize && areaTimes && areaTimes[areaId] != null)
+        ? parseInt(areaTimes[areaId], 10) || 0
+        : null;
+      // In normalize mode the daily count is authoritative, so the slot pool must be
+      // wide enough to hold that many distinct occurrences. Expand it when needed.
+      if (normalizeDesired != null && frequencyTimes.length < normalizeDesired) {
+        frequencyTimes = this._buildTimeslots(normalizeDesired, cleaningFrequency);
+      }
+      const batch = db.batch();
       // Partial/frequency-based assignment: only create tasks for occurrences that
       // have not already been generated for this area on this date. The admin picks
       // how many of the remaining occurrences to assign (default: all remaining).
@@ -619,13 +645,41 @@ class TaskManagementService {
       const requestedCount = areaTimes && areaTimes[areaId] != null
         ? parseInt(areaTimes[areaId], 10) || 0
         : (timesCount || availableTimes.length);
-      const timesToUse = availableTimes.slice(0, Math.max(0, Math.min(requestedCount, availableTimes.length)));
+      let batchCount = 0;
+      let batchCancelled = 0;
+
+      // In "normalize" mode (daily-count is authoritative), reconcile today's
+      // active tasks for this area to EXACTLY the requested count:
+      //   - more tasks exist  -> cancel the extras (prefer ones outside the slot list)
+      //   - fewer             -> create the missing occurrences at the next free slots
+      let timesToUse = [];
+      if (normalizeDesired != null) {
+        const areaTasks = tasksByArea.get(areaId) || [];
+        const activeCount = areaTasks.length;
+        if (activeCount > normalizeDesired) {
+          const slotSet = new Set(frequencyTimes);
+          const sortable = areaTasks.slice().sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+          const candidates = [
+            ...sortable.filter(t => !slotSet.has(t.scheduledTime)),
+            ...sortable.filter(t => slotSet.has(t.scheduledTime)),
+          ];
+          candidates.slice(0, activeCount - normalizeDesired).forEach(t => {
+            batch.update(db.collection('cleaningTasks').doc(t.id), {
+              status: 'cancelled',
+              updatedAt: new Date().toISOString(),
+            });
+            batchCount++;
+            batchCancelled++;
+          });
+        }
+        const need = normalizeDesired - activeCount;
+        timesToUse = need > 0 ? availableTimes.slice(0, need) : [];
+      } else {
+        timesToUse = availableTimes.slice(0, Math.max(0, Math.min(requestedCount, availableTimes.length)));
+      }
       const baseAreaName = areaData.areaName || areaData.name || '';
       const areaCode = areaData.areaCode || '';
       const mainArea = areaData.mainArea || '';
-
-      const batch = db.batch();
-      let batchCount = 0;
 
       // Determine the list of target zones for this area
       let targetZones = [null];
@@ -771,11 +825,13 @@ class TaskManagementService {
 
       if (batchCount > 0) {
         await batch.commit();
-        total += batchCount;
+        total += batchCount - batchCancelled;
+        cancelledTotal += batchCancelled;
       }
     }
 
-    return { message: `Generated ${total} tasks across ${areaIds.length} areas for ${targetDate}`, count: total, taskIds: allTaskIds };
+    const normMsg = cancelledTotal > 0 ? `, cancelled ${cancelledTotal} extra` : '';
+    return { message: `Generated ${total} tasks across ${areaIds.length} areas for ${targetDate}${normMsg}`, count: total, cancelled: cancelledTotal, taskIds: allTaskIds };
   }
 
   async generateTasksForDateRange(data, user) {
