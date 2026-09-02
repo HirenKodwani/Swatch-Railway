@@ -24,7 +24,19 @@ class Database {
 
     this.db = firebaseAdmin.firestore();
     this.db.settings({ ignoreUndefinedProperties: true });
-    this.bucket = firebaseAdmin.storage().bucket(appConfig.firebase.storageBucket);
+
+    const bucketName = appConfig.firebase.storageBucket;
+    if (!bucketName) {
+      console.error('[Database] WARNING: FIREBASE_STORAGE_BUCKET env var is not set. File uploads will fail!');
+    } else {
+      console.info('[Database] Firebase Storage bucket:', bucketName);
+    }
+    try {
+      this.bucket = firebaseAdmin.storage().bucket(bucketName);
+    } catch (bucketErr) {
+      console.error('[Database] Firebase Storage bucket initialization failed:', bucketErr.message);
+      this.bucket = null;
+    }
 
     return this;
   }
@@ -36,6 +48,9 @@ class Database {
 
   getBucket() {
     if (!this.bucket) this.initialize();
+    if (!this.bucket) {
+      throw new Error('Firebase Storage bucket is not initialized. Check FIREBASE_STORAGE_BUCKET environment variable on Render.');
+    }
     return this.bucket;
   }
 

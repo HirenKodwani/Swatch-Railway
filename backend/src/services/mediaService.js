@@ -15,12 +15,22 @@ class MediaService {
   async uploadFile(file, user) {
     if (!file) throw new ValidationError('No file uploaded.');
     const originalExt = file.originalname.split('.').pop() || 'jpg';
-    const uniqueToken = uuidv4();
     const fileName = `obhs_tasks/${uuidv4()}_${Date.now()}.${originalExt}`;
 
-    const result = await storageService.uploadFile(file.buffer, fileName, {
-      contentType: file.mimetype
-    });
+    let result;
+    try {
+      result = await storageService.uploadFile(file.buffer, fileName, {
+        contentType: file.mimetype
+      });
+    } catch (storageErr) {
+      // Log the full error for debugging on Render
+      console.error('[MediaService] Firebase Storage upload error:', storageErr.message);
+      throw new ValidationError(`Image upload failed. Please try again. (${storageErr.message})`);
+    }
+
+    if (!result || !result.url) {
+      throw new ValidationError('Image upload succeeded but no URL was returned. Check Firebase Storage configuration.');
+    }
 
     return { success: true, message: 'Image uploaded successfully.', imageUrl: result.url };
   }

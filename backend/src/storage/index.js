@@ -22,18 +22,24 @@ export class StorageService {
     const uniqueToken = uuidv4();
     const file = this.bucket.file(destination);
 
-    await file.save(buffer, {
-      metadata: {
-        contentType,
-        metadata: { firebaseStorageDownloadTokens: uniqueToken }
-      }
-    });
+    try {
+      await file.save(buffer, {
+        metadata: {
+          contentType,
+          metadata: { firebaseStorageDownloadTokens: uniqueToken }
+        }
+      });
+    } catch (storageErr) {
+      logger.error('StorageService', `Firebase Storage upload failed for '${destination}': ${storageErr.message}`);
+      // Re-throw with a clearer message
+      throw new Error(`Firebase Storage upload failed: ${storageErr.message}`);
+    }
 
     const publicUrl = isPublic
       ? `https://firebasestorage.googleapis.com/v0/b/${this.bucket.name}/o/${encodeURIComponent(destination)}?alt=media&token=${uniqueToken}`
       : null;
 
-    logger.info('StorageService', `File uploaded: ${destination}`);
+    logger.info('StorageService', `File uploaded: ${destination} | Bucket: ${this.bucket.name}`);
 
     return { path: destination, url: publicUrl, token: uniqueToken };
   }
